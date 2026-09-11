@@ -112,6 +112,7 @@ pub struct CameraView {
 
 impl CameraView {
     /// Convert original DAT coordinates into this aperture's screen space.
+    #[must_use]
     pub fn to_screen(self, dat_x: f32, dat_y: f32) -> (f32, f32) {
         let sx = (dat_x - self.cam_x) * self.zoom + self.viewport_x + self.viewport_width / 2.0;
         let sy = (dat_y - self.cam_y) * self.zoom + self.viewport_y + self.viewport_height / 2.0;
@@ -119,6 +120,7 @@ impl CameraView {
     }
 
     /// Whether a screen-space point is inside the recovered map aperture.
+    #[must_use]
     pub fn contains(self, x: f32, y: f32) -> bool {
         x >= self.viewport_x
             && x < self.viewport_x + self.viewport_width
@@ -127,6 +129,7 @@ impl CameraView {
     }
 
     /// Whether a point lies in or just outside the aperture for draw culling.
+    #[must_use]
     pub fn contains_with_margin(self, x: f32, y: f32, margin: f32) -> bool {
         x >= self.viewport_x - margin
             && x <= self.viewport_x + self.viewport_width + margin
@@ -135,11 +138,13 @@ impl CameraView {
     }
 
     /// Convert a fixed original-interface pixel measurement to screen pixels.
+    #[must_use]
     pub fn scale_pixels(self, logical_pixels: f32) -> f32 {
         logical_pixels * self.display_scale
     }
 
     /// Apply gameplay zoom and its original clamp before display scaling.
+    #[must_use]
     pub fn zoomed_pixels(self, base: f32, min: f32, max: f32) -> f32 {
         (base * self.logical_zoom).clamp(min, max) * self.display_scale
     }
@@ -160,7 +165,7 @@ pub struct GalaxyMapState {
     pub show_sector_labels: bool,
     pub show_grid: bool,
     /// Previous mouse position used for right-drag panning.
-    /// macroquad 0.4 has no mouse_delta_position(); we track it manually.
+    /// macroquad 0.4 has no `mouse_delta_position()`; we track it manually.
     pub drag_start: Option<(f32, f32)>,
     /// System context menu: system key + screen position of right-click.
     pub context_menu_system: Option<(SystemKey, f32, f32)>,
@@ -209,6 +214,10 @@ impl Default for GalaxyMapState {
 /// Handles all input (pan, zoom, click-to-select) and draws every system as a
 /// colored dot sized by selection state. Returns a `CameraView` so fog and fleet
 /// overlays can use matching coordinates.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep this existing ordered routine together; splitting its phases is a separate refactor."
+)]
 pub fn draw_galaxy_map(world: &GameWorld, state: &mut GalaxyMapState) -> CameraView {
     discard_stale_context_menus(world, state);
     state.activated_system = None;
@@ -285,7 +294,7 @@ pub fn draw_galaxy_map(world: &GameWorld, state: &mut GalaxyMapState) -> CameraV
     // ── Sector labels ─────────────────────────────────────────────────────────
     if state.show_sector_labels {
         for (_, sector) in &world.sectors {
-            let (sx, sy) = cam.to_screen(sector.x as f32, sector.y as f32);
+            let (sx, sy) = cam.to_screen(f32::from(sector.x), f32::from(sector.y));
             if cam.contains_with_margin(sx, sy, cam.scale_pixels(100.0)) {
                 let font_size = (16.0 * cam.logical_zoom).clamp(10.0, 32.0) * cam.display_scale;
                 draw_text(
@@ -311,7 +320,7 @@ pub fn draw_galaxy_map(world: &GameWorld, state: &mut GalaxyMapState) -> CameraV
     if in_viewport {
         let mut best_dist = hover_radius;
         for (key, system) in &world.systems {
-            let (sx, sy) = cam.to_screen(system.x as f32, system.y as f32);
+            let (sx, sy) = cam.to_screen(f32::from(system.x), f32::from(system.y));
             if !cam.contains_with_margin(sx, sy, cam.scale_pixels(20.0)) {
                 continue;
             }
@@ -325,7 +334,7 @@ pub fn draw_galaxy_map(world: &GameWorld, state: &mut GalaxyMapState) -> CameraV
 
     // Pass 2: draw all visible systems.
     for (key, system) in &world.systems {
-        let (sx, sy) = cam.to_screen(system.x as f32, system.y as f32);
+        let (sx, sy) = cam.to_screen(f32::from(system.x), f32::from(system.y));
         if !cam.contains_with_margin(sx, sy, cam.scale_pixels(20.0)) {
             continue;
         }
@@ -451,6 +460,10 @@ fn in_map_viewport(sx: f32, sy: f32, cam: &CameraView) -> bool {
 /// Scale with zoom up to a cap so they stay readable without dominating.
 ///
 /// Pass the `CameraView` returned by `draw_galaxy_map`.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+)]
 pub fn draw_facility_icons(world: &GameWorld, cam: &CameraView) {
     if cam.logical_zoom < 0.5 {
         return;
@@ -468,7 +481,7 @@ pub fn draw_facility_icons(world: &GameWorld, cam: &CameraView) {
             continue;
         }
 
-        let (sx, sy) = map_to_screen(system.x as f32, system.y as f32, cam);
+        let (sx, sy) = map_to_screen(f32::from(system.x), f32::from(system.y), cam);
         if !in_map_viewport(sx, sy, cam) {
             continue;
         }
@@ -569,7 +582,7 @@ fn convex_hull(mut pts: Vec<(f32, f32)>) -> Vec<(f32, f32)> {
     hull
 }
 
-/// Dim sector-specific color from the SectorGroup.
+/// Dim sector-specific color from the `SectorGroup`.
 fn sector_boundary_color(group: rebellion_core::dat::SectorGroup) -> Color {
     match group {
         rebellion_core::dat::SectorGroup::Core => Color::new(0.7, 0.6, 0.2, 0.25), // warm gold — galactic core
@@ -587,6 +600,10 @@ fn sector_boundary_color(group: rebellion_core::dat::SectorGroup) -> Color {
 /// labels are hidden, boundaries are also hidden.
 ///
 /// Pass the `CameraView` returned by `draw_galaxy_map`.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+)]
 pub fn draw_sector_boundaries(world: &GameWorld, cam: &CameraView, show: bool) {
     if !show {
         return;
@@ -604,7 +621,7 @@ pub fn draw_sector_boundaries(world: &GameWorld, cam: &CameraView, show: bool) {
             .systems
             .iter()
             .filter_map(|&sk| world.systems.get(sk))
-            .map(|sys| map_to_screen(sys.x as f32, sys.y as f32, cam))
+            .map(|sys| map_to_screen(f32::from(sys.x), f32::from(sys.y), cam))
             .filter(|&(sx, sy)| in_map_viewport(sx, sy, cam))
             .collect();
 
@@ -667,12 +684,11 @@ pub fn draw_blockade_indicators(world: &GameWorld, blockade: &BlockadeState, cam
     let ring_color = Color::new(0.9, 0.15, 0.15, 0.7);
 
     for &sys_key in blockaded {
-        let system = match world.systems.get(sys_key) {
-            Some(s) => s,
-            None => continue,
+        let Some(system) = world.systems.get(sys_key) else {
+            continue;
         };
 
-        let (sx, sy) = map_to_screen(system.x as f32, system.y as f32, cam);
+        let (sx, sy) = map_to_screen(f32::from(system.x), f32::from(system.y), cam);
         if !in_map_viewport(sx, sy, cam) {
             continue;
         }
@@ -693,6 +709,10 @@ pub fn draw_blockade_indicators(world: &GameWorld, blockade: &BlockadeState, cam
 ///
 /// Shows details for the currently selected system. Call inside
 /// `egui_macroquad::ui(|ctx| { ... })`.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep this existing ordered routine together; splitting its phases is a separate refactor."
+)]
 pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &GalaxyMapState) {
     if let Some(sys_key) = state.selected_system {
         if let Some(system) = world.systems.get(sys_key) {
@@ -785,14 +805,14 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
 
                         // Control status
                         let control_str = match system.control {
-                            rebellion_core::world::ControlKind::Uncontrolled => "Neutral",
                             rebellion_core::world::ControlKind::Controlled(
                                 rebellion_core::dat::Faction::Alliance,
                             ) => "Alliance Controlled",
                             rebellion_core::world::ControlKind::Controlled(
                                 rebellion_core::dat::Faction::Empire,
                             ) => "Empire Controlled",
-                            rebellion_core::world::ControlKind::Controlled(
+                            rebellion_core::world::ControlKind::Uncontrolled
+                            | rebellion_core::world::ControlKind::Controlled(
                                 rebellion_core::dat::Faction::Neutral,
                             ) => "Neutral",
                             rebellion_core::world::ControlKind::Contested => "Contested",
@@ -829,7 +849,7 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
 
                                     ui.horizontal(|ui| {
                                         ui.label(
-                                            egui::RichText::new(format!("[{}]", faction_tag))
+                                            egui::RichText::new(format!("[{faction_tag}]"))
                                                 .color(faction_color)
                                                 .size(11.0)
                                                 .strong(),
@@ -837,10 +857,10 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
 
                                         let mut parts = Vec::new();
                                         if ship_count > 0 {
-                                            parts.push(format!("{} ships", ship_count));
+                                            parts.push(format!("{ship_count} ships"));
                                         }
                                         if fighter_count > 0 {
-                                            parts.push(format!("{} sqns", fighter_count));
+                                            parts.push(format!("{fighter_count} sqns"));
                                         }
                                         if fleet.has_death_star {
                                             parts.push("Death Star".to_string());
@@ -888,13 +908,7 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
                             let alliance_troops = system
                                 .ground_units
                                 .iter()
-                                .filter(|k| {
-                                    world
-                                        .troops
-                                        .get(**k)
-                                        .map(|t| t.is_alliance)
-                                        .unwrap_or(false)
-                                })
+                                .filter(|k| world.troops.get(**k).is_some_and(|t| t.is_alliance))
                                 .count();
                             let empire_troops = system.ground_units.len() - alliance_troops;
 
@@ -910,8 +924,7 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
                             if alliance_troops > 0 {
                                 ui.label(
                                     egui::RichText::new(format!(
-                                        "  Alliance: {} regiments",
-                                        alliance_troops
+                                        "  Alliance: {alliance_troops} regiments"
                                     ))
                                     .color(theme::ALLIANCE_BLUE)
                                     .size(10.0),
@@ -920,8 +933,7 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
                             if empire_troops > 0 {
                                 ui.label(
                                     egui::RichText::new(format!(
-                                        "  Empire: {} regiments",
-                                        empire_troops
+                                        "  Empire: {empire_troops} regiments"
                                     ))
                                     .color(theme::EMPIRE_RED)
                                     .size(10.0),
@@ -936,7 +948,7 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
                             + system.production_facilities.len();
                         if total_fac > 0 {
                             ui.label(
-                                egui::RichText::new(format!("FACILITIES ({})", total_fac))
+                                egui::RichText::new(format!("FACILITIES ({total_fac})"))
                                     .color(theme::GOLD_DIM)
                                     .size(10.0)
                                     .strong(),
@@ -997,6 +1009,10 @@ pub fn draw_system_info_panel(ctx: &egui::Context, world: &GameWorld, state: &Ga
 /// Shows system summary (faction control, popularity, garrison) and quick
 /// action buttons (Send Diplomat, Move Fleet Here, Build Facility).
 /// Returns `Some(PanelAction)` when an action button is clicked.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep this existing ordered routine together; splitting its phases is a separate refactor."
+)]
 pub fn draw_system_context_menu(
     ctx: &egui::Context,
     world: &GameWorld,
@@ -1036,14 +1052,14 @@ pub fn draw_system_context_menu(
 
             // Control status
             let control_str = match system.control {
-                rebellion_core::world::ControlKind::Uncontrolled => "Neutral",
                 rebellion_core::world::ControlKind::Controlled(
                     rebellion_core::dat::Faction::Alliance,
                 ) => "Alliance",
                 rebellion_core::world::ControlKind::Controlled(
                     rebellion_core::dat::Faction::Empire,
                 ) => "Empire",
-                rebellion_core::world::ControlKind::Controlled(
+                rebellion_core::world::ControlKind::Uncontrolled
+                | rebellion_core::world::ControlKind::Controlled(
                     rebellion_core::dat::Faction::Neutral,
                 ) => "Neutral",
                 rebellion_core::world::ControlKind::Contested => "Contested",
@@ -1082,21 +1098,21 @@ pub fn draw_system_context_menu(
                 ui.horizontal(|ui| {
                     if fleet_count > 0 {
                         ui.label(
-                            egui::RichText::new(format!("{} fleets", fleet_count))
+                            egui::RichText::new(format!("{fleet_count} fleets"))
                                 .color(theme::TEXT_SECONDARY)
                                 .size(10.0),
                         );
                     }
                     if troop_count > 0 {
                         ui.label(
-                            egui::RichText::new(format!("{} troops", troop_count))
+                            egui::RichText::new(format!("{troop_count} troops"))
                                 .color(theme::TEXT_SECONDARY)
                                 .size(10.0),
                         );
                     }
                     if fac_count > 0 {
                         ui.label(
-                            egui::RichText::new(format!("{} facilities", fac_count))
+                            egui::RichText::new(format!("{fac_count} facilities"))
                                 .color(theme::TEXT_SECONDARY)
                                 .size(10.0),
                         );
@@ -1186,6 +1202,10 @@ pub fn draw_system_context_menu(
 ///
 /// Shows fleet composition, commander, faction, and quick actions
 /// (Move, View in Fleet Panel). Returns `Some(PanelAction)` on action.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep this existing ordered routine together; splitting its phases is a separate refactor."
+)]
 pub fn draw_fleet_context_menu(
     ctx: &egui::Context,
     world: &GameWorld,
@@ -1218,7 +1238,7 @@ pub fn draw_fleet_context_menu(
                 "Empire"
             };
             ui.label(
-                egui::RichText::new(format!("{} Fleet", faction_tag))
+                egui::RichText::new(format!("{faction_tag} Fleet"))
                     .color(faction_color)
                     .strong()
                     .size(13.0),
@@ -1256,14 +1276,14 @@ pub fn draw_fleet_context_menu(
 
             if ship_count > 0 {
                 ui.label(
-                    egui::RichText::new(format!("{} capital ships", ship_count))
+                    egui::RichText::new(format!("{ship_count} capital ships"))
                         .color(theme::TEXT_PRIMARY)
                         .size(11.0),
                 );
             }
             if fighter_count > 0 {
                 ui.label(
-                    egui::RichText::new(format!("{} fighter sqns", fighter_count))
+                    egui::RichText::new(format!("{fighter_count} fighter sqns"))
                         .color(theme::TEXT_PRIMARY)
                         .size(11.0),
                 );
@@ -1394,6 +1414,10 @@ mod interaction_tests {
     use super::*;
 
     #[test]
+    #[expect(
+        clippy::float_cmp,
+        reason = "These regression checks require exact copied values, endpoints, and pixel coordinates."
+    )]
     fn camera_transform_includes_aperture_offset() {
         let camera = CameraView {
             cam_x: 450.0,
@@ -1419,6 +1443,10 @@ mod interaction_tests {
     }
 
     #[test]
+    #[expect(
+        clippy::float_cmp,
+        reason = "These regression checks require exact copied values, endpoints, and pixel coordinates."
+    )]
     fn display_scale_does_not_change_logical_visibility_thresholds() {
         let baseline = CameraView {
             cam_x: 0.0,

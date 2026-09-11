@@ -145,6 +145,7 @@ impl SystemWindowState {
         true
     }
 
+    #[must_use]
     pub fn contains_screen_point(&self, layout: CockpitLayout, point: (f32, f32)) -> bool {
         self.windows.iter().any(|window| {
             let rect = window_screen_rect(*window, layout);
@@ -155,10 +156,12 @@ impl SystemWindowState {
         })
     }
 
+    #[must_use]
     pub fn window_count(&self) -> usize {
         self.windows.len()
     }
 
+    #[must_use]
     pub fn rail_count(&self) -> usize {
         self.rail.len()
     }
@@ -241,6 +244,10 @@ pub enum SystemWindowAction {
 }
 
 #[derive(Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "These independent flags preserve the existing state and serialization model."
+)]
 struct WindowDrawResult {
     focus: bool,
     close: bool,
@@ -355,6 +362,10 @@ fn draw_reference_rail(
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep this existing ordered routine together; splitting its phases is a separate refactor."
+)]
 fn draw_system_window(
     ctx: &egui::Context,
     world: &GameWorld,
@@ -701,6 +712,10 @@ fn cockpit_faction(faction: CockpitFaction) -> Faction {
     }
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+)]
 fn clamp_to_galaxy(position: (i16, i16), layout: CockpitLayout) -> (i16, i16) {
     let scale = layout.scale.max(f32::EPSILON);
     let min_x = ((layout.galaxy.x - layout.canvas.x) / scale).round();
@@ -787,7 +802,7 @@ fn paint_resource(
 ) {
     let Some(texture_id) = cache
         .get(ctx, DllSource::Strategy, resource_id)
-        .map(|texture| texture.id())
+        .map(egui_macroquad::egui::TextureHandle::id)
     else {
         return;
     };
@@ -829,6 +844,10 @@ mod tests {
         }
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+    )]
     fn fixture_world(count: usize) -> (GameWorld, Vec<SystemKey>) {
         let mut world = GameWorld::default();
         let sector = world.sectors.insert(Sector {

@@ -108,6 +108,7 @@ pub struct CockpitViewport {
 
 impl CockpitViewport {
     /// Viewport that fills the entire screen (no cockpit chrome).
+    #[must_use]
     pub fn fullscreen() -> Self {
         CockpitViewport {
             x: 0.0,
@@ -118,16 +119,19 @@ impl CockpitViewport {
     }
 
     /// Right edge in screen pixels.
+    #[must_use]
     pub fn right(self) -> f32 {
         self.x + self.width
     }
 
     /// Bottom edge in screen pixels.
+    #[must_use]
     pub fn bottom(self) -> f32 {
         self.y + self.height
     }
 
     /// Whether a screen-space point lies inside this viewport.
+    #[must_use]
     pub fn contains(self, x: f32, y: f32) -> bool {
         x >= self.x && x < self.right() && y >= self.y && y < self.bottom()
     }
@@ -284,6 +288,7 @@ const EMPIRE_PRIMARY_CONTROLS: [StrategicControlSpec; 6] = [
 ];
 
 /// Exact primary-control table created by `FUN_00427270` for a faction.
+#[must_use]
 pub fn strategic_primary_controls(faction: CockpitFaction) -> &'static [StrategicControlSpec; 6] {
     match faction {
         CockpitFaction::Alliance => &ALLIANCE_PRIMARY_CONTROLS,
@@ -326,6 +331,7 @@ impl Default for CockpitState {
 }
 
 impl CockpitState {
+    #[must_use]
     pub fn new(faction: CockpitFaction) -> Self {
         CockpitState {
             faction,
@@ -334,6 +340,7 @@ impl CockpitState {
     }
 
     /// Compute the recovered command-center layout for the current screen.
+    #[must_use]
     pub fn layout(&self) -> CockpitLayout {
         self.layout_for(screen_width(), screen_height())
     }
@@ -342,6 +349,7 @@ impl CockpitState {
     ///
     /// This pure variant keeps the 640×480 composition testable without a
     /// graphics context.
+    #[must_use]
     pub fn layout_for(&self, screen_width: f32, screen_height: f32) -> CockpitLayout {
         let scale = (screen_width / STRATEGIC_LOGICAL_WIDTH)
             .min(screen_height / STRATEGIC_LOGICAL_HEIGHT)
@@ -374,6 +382,7 @@ impl CockpitState {
     }
 
     /// Compute the galaxy map viewport for the current screen.
+    #[must_use]
     pub fn galaxy_viewport(&self) -> CockpitViewport {
         self.layout().galaxy
     }
@@ -387,6 +396,7 @@ impl CockpitState {
 ///
 /// Call before the macroquad galaxy layers. The authentic shell is painted in
 /// egui later in the same frame, above the clipped map and below other windows.
+#[must_use]
 pub fn draw_cockpit_chrome(state: &CockpitState) -> CockpitLayout {
     clear_background(BLACK);
     state.layout()
@@ -396,6 +406,10 @@ pub fn draw_cockpit_chrome(state: &CockpitState) -> CockpitLayout {
 ///
 /// All strategic map layers use this one clip, preventing synthetic map pixels
 /// from leaking into advisor and command-control apertures in the shell.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+)]
 pub fn set_cockpit_viewport_clip(viewport: Option<CockpitViewport>) {
     let clip = viewport.map(|viewport| {
         (
@@ -443,6 +457,10 @@ pub fn draw_cockpit_background(ctx: &egui::Context, state: &CockpitState, cache:
     );
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+)]
 fn cockpit_source_uv_max_y(texture_size: [usize; 2]) -> f32 {
     let visible_source_height = (texture_size[0] as f32 * STRATEGIC_LOGICAL_HEIGHT
         / STRATEGIC_LOGICAL_WIDTH)
@@ -455,6 +473,10 @@ fn cockpit_source_uv_max_y(texture_size: [usize; 2]) -> f32 {
 /// `FUN_00602d30` paints the first resource in each pair at rest and the
 /// second only while a valid primary press is captured. The original control
 /// has no separate hover or persistent-selected bitmap state.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+)]
 pub fn draw_cockpit_egui_layer(ctx: &egui::Context, state: &CockpitState, cache: &mut BmpCache) {
     let layout = state.layout();
     let controls = strategic_primary_controls(state.faction);
@@ -471,7 +493,7 @@ pub fn draw_cockpit_egui_layer(ctx: &egui::Context, state: &CockpitState, cache:
         };
         let Some(texture_id) = cache
             .get(ctx, DllSource::Strategy, resource_id)
-            .map(|texture| texture.id())
+            .map(egui_macroquad::egui::TextureHandle::id)
         else {
             continue;
         };
@@ -569,6 +591,11 @@ fn logical_rect_to_screen(layout: CockpitLayout, rect: CockpitViewport) -> egui:
     )
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Rendering uses floating pixel coordinates and fixed-width resource IDs; retain existing rounding and narrowing."
+)]
 fn resource_pixel_at_pointer(
     screen_rect: egui::Rect,
     scale: f32,
