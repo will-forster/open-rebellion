@@ -5,6 +5,7 @@ pub mod audio;
 pub mod bmp_cache;
 pub mod cockpit;
 pub mod encyclopedia;
+pub mod encyclopedia_assets;
 pub mod event_screen;
 pub mod fleet_movement;
 pub mod fog;
@@ -58,6 +59,7 @@ pub use encyclopedia::draw_encyclopedia_artwork_fixture;
 #[cfg(target_arch = "wasm32")]
 pub use encyclopedia::set_encyclopedia_asset_cache;
 pub use encyclopedia::{draw_encyclopedia, EncyclopediaState, EncyclopediaTab};
+pub use encyclopedia_assets::{inspect_encyclopedia_bytes, InspectedBytes};
 pub use event_screen::{
     draw_event_screen, show_event_screen, show_event_screen_raw, update_event_screen,
     EventScreenState,
