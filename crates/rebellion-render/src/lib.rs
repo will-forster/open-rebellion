@@ -5,6 +5,7 @@ pub mod audio;
 pub mod bmp_cache;
 pub mod cockpit;
 pub mod encyclopedia;
+pub mod encyclopedia_assets;
 pub mod event_screen;
 pub mod fleet_movement;
 pub mod fog;
@@ -62,6 +63,7 @@ pub use encyclopedia::{
 };
 #[cfg(feature = "interface-test-fixtures")]
 pub use encyclopedia::{draw_encyclopedia_artwork_fixture, draw_encyclopedia_index_fixture};
+pub use encyclopedia_assets::{inspect_encyclopedia_bytes, InspectedBytes};
 pub use event_screen::{
     draw_event_screen, show_event_screen, show_event_screen_raw, update_event_screen,
     EventScreenState,
