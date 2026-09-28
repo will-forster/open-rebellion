@@ -20,6 +20,8 @@ func runCLIWithMedia(args []string, stdout, stderr io.Writer, targets []dllTarge
 	mdata := flags.String("mdata", "", "original MDATA directory (default: source/MDATA)")
 	stringsOutput := flags.String("strings-output", "data/base/textstra.json", "runtime text string JSON file")
 	cutsceneOutput := flags.String("cutscene-output", "assets/references", "parent of ref-videos and cutscene-frames outputs")
+	encyclopediaReportOnly := flags.Bool("encyclopedia-report-only", false, "stage or verify only the encyclopedia research report")
+	encyclopediaOutput := flags.String("encyclopedia-output", "data/base/encyclopedia-research", "encyclopedia report output directory")
 	force := flags.Bool("force", false, "replace staged assets whose contents differ")
 	verifyOnly := flags.Bool("verify", false, "verify staged assets without reading source files")
 	tactical3D := flags.Bool("tactical-3d", false, "also stage and verify original type-301/type-303 tactical resources")
@@ -32,6 +34,15 @@ func runCLIWithMedia(args []string, stdout, stderr io.Writer, targets []dllTarge
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %v", flags.Args())
 	}
+	encyclopediaOutputSet := false
+	flags.Visit(func(selected *flag.Flag) {
+		if selected.Name == "encyclopedia-output" {
+			encyclopediaOutputSet = true
+		}
+	})
+	if encyclopediaOutputSet && !*encyclopediaReportOnly {
+		return fmt.Errorf("--encyclopedia-output requires --encyclopedia-report-only")
+	}
 	selectedTacticalModes := 0
 	for _, selected := range []bool{*tactical3D, *tactical3DOnly, *tactical3DConvert, *tactical3DAssimpOracle != ""} {
 		if selected {
@@ -40,6 +51,17 @@ func runCLIWithMedia(args []string, stdout, stderr io.Writer, targets []dllTarge
 	}
 	if selectedTacticalModes > 1 {
 		return fmt.Errorf("--tactical-3d, --tactical-3d-only, --tactical-3d-convert, and --tactical-3d-assimp-oracle are mutually exclusive")
+	}
+	if *encyclopediaReportOnly && selectedTacticalModes != 0 {
+		return fmt.Errorf("--encyclopedia-report-only and tactical focused modes are mutually exclusive")
+	}
+	if *encyclopediaReportOnly {
+		if !*verifyOnly {
+			if err := stageEncyclopediaReport(*sourceDir, "", *encyclopediaOutput, *force, stdout); err != nil {
+				return err
+			}
+		}
+		return verifyEncyclopediaReport(*encyclopediaOutput, stdout)
 	}
 	if *tactical3DAssimpOracle != "" {
 		return verifyTactical3DWithAssimp(*outputDir, *tactical3DAssimpOracle, stdout)
