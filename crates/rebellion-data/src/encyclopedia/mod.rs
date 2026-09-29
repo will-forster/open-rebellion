@@ -1,10 +1,16 @@
 mod model;
+mod resolve;
 
 pub use model::{
     AssetFacts, BaseImage, BaseImageId, BaseImageIdField, BindingKey, BindingSource,
     CatalogBinding, CatalogCategory, CatalogIndex, EncyclopediaCatalog, EncyclopediaManifest,
     ImageFacts, ImageSelector, LocalizedContent, NullableBaseImageId, ResourceIdentifier,
     SourceRecord, Topic, TopicId, TopicSort,
+};
+pub use resolve::{
+    resolve_admitted_topics, resolve_localized, resolve_localized_label, resolve_topic,
+    AdmissionFact, AdmissionSnapshot, AdmittedBinding, ResolvedTopic, ResolvedTopicView,
+    SystemSourceAncestry, TopicResolutionDiagnostic, ViewerFaction,
 };
 
 use std::collections::HashSet;
