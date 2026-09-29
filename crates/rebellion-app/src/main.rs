@@ -1,5 +1,14 @@
 mod audio;
 pub mod encyclopedia_session;
+#[cfg(any(target_arch = "wasm32", test))]
+#[cfg_attr(
+    any(target_arch = "wasm32", test),
+    expect(
+        dead_code,
+        reason = "E15 defines the bridge before catalog/session integration consumes it."
+    )
+)]
+mod encyclopedia_fetch;
 #[cfg(any(test, all(target_arch = "wasm32", feature = "interface-test-fixtures")))]
 #[cfg_attr(
     all(test, not(target_arch = "wasm32")),
