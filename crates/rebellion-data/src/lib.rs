@@ -31,6 +31,7 @@ use rebellion_core::world::{
 };
 
 pub mod encyclopedia_catalog;
+pub mod encyclopedia;
 pub mod integrator;
 pub mod mods;
 pub mod replay;
