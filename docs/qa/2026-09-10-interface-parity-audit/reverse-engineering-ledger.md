@@ -156,7 +156,7 @@ and a next proof in the [machine-readable ledger](reverse-engineering-ledger.jso
 | RE-GID-01 | Filters, legends, marker rules, pan, zoom, and selection | static-partial; default GID and source frame runtime-corroborated | Recover menu interior and geometry, expanded legend, remaining filter predicates and overlays, and exact map input |
 | RE-OVR-01 | Galaxy Overview | untriaged | Recover geometry, category formulas, resources, and destinations |
 | RE-MSG-01 | Messages, Agent menus, alerts, and reports | static-partial; rail and empty index shell runtime-corroborated | Continue from the corrected [P63 Message Index mapping](../../../ghidra/notes/message-index-window.md): populate rows, selection, navigation, clear/delete, Advice slowdown, chat, production routing, and A0 comparison |
-| RE-ENC-01 | Encyclopedia index and topics | static-partial; exact empty index shells and source-derived English catalog runtime-corroborated | Continue from the [P65 catalog checkpoint](evidence/2026-09-30-encyclopedia-index-catalog.md): bind catalog objects to ENCYTEXT and EDATA, compose topics, recover navigation and contextual entry, integrate the production route, and complete A0 comparison using the [Encyclopedia mapping](../../../ghidra/notes/encyclopedia-window.md) |
+| RE-ENC-01 | Encyclopedia index and topics | in-scope static semantic recovery complete; exact empty index shells, ten control pairs, and source-derived English catalog runtime-corroborated; original captures pending; unproven alternate art deferred to `orlocal-2kq` | Continue from the [P65 catalog checkpoint](evidence/2026-09-30-encyclopedia-index-catalog.md) and preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md): bind 356 catalog objects to ENCYTEXT and EDATA, compose topics, integrate production routing, and collect named A0 faction, cache, context, ancestry, proven-selector and endpoint references |
 | RE-OBJ-01 | System, sector, and object-window constructors | static-partial; sector and system shells runtime-corroborated | Complete system item compositions and commands, then map the remaining object families |
 | RE-ADV-01 | Type-302 advisor and briefing frame decoding | runtime-corroborated | Extend the verified advisor decoder/transport to briefings and compare with A0 captures |
 | RE-ADV-02 | SPT/BIN/FDT action semantics, cadence, and sound | static-partial | Replace inferred priority thirds with authored action mappings |
@@ -175,6 +175,61 @@ and a next proof in the [machine-readable ledger](reverse-engineering-ledger.jso
 | RE-NET-02 | Two-peer sync, chat, pause, saves, departure, and errors | runtime-needed | Run an original two-peer fixture and compare protocol traces |
 | RE-EXT-01 | Remove visible replacement dashboards | implementation-needed | Preserve every action inside original paths with zero replacement pixels |
 | RE-A0-01 | Lossless original-executable baselines | runtime-needed | Capture every required surface-state cell at native 640×480 |
+
+### RE-ENC-01 semantic checkpoint
+
+The [source contract](../../reference/asset-library/encyclopedia-source-contract.md#semantic-research-checkpoint)
+records the profile-bounded decision table and the machine-readable ledger holds
+the same testable scenario IDs. Static recovery now proves:
+
+- selector order `0x6f`, `0x70`, `0x71`, `0x72`, `0x73`, `0x74`, `0x75`
+  from `FUN_0045ddc0` and the exact `FUN_0045f100` early-return/forced
+  transitions; `0x6f` binds shell `+0x474`, it does not clear a list;
+- shell `+0x474` is an if-null, once-per-shell master cache built by
+  `FUN_00422620` from registry definitions and a viewer-side system iterator;
+  category changes filter that retained cache rather than reading a fresh
+  campaign snapshot;
+- both master and filtered collections use `FUN_0060a790(..., 2)` and
+  `FUN_005f59f0`, so `FUN_0060a890`/`FUN_00626ad0` impose case-insensitive
+  narrow-byte order with stable source-order ties;
+- class and entity contexts route through definition `+0x30` low12 + `0x1000`,
+  including the connected `FUN_0045fd90` entity fallback, rather than treating
+  raw entity identity as topic identity;
+- the viewer-side system iterator selects a type-`0x90` view and calls its
+  vtable `+0x10` predicate, `FUN_004f6330`; that function walks the view's
+  `+0x1c` container ancestry and causes `FUN_0053f090` to exclude the view
+  exactly when an ancestor's virtual type is `0xf2`;
+- row vtable functions `FUN_004ad730`/`FUN_004ad750` skip disabled neighbors,
+  preserve non-wrapping endpoints, and operate over the sorted bound list; and
+- the bounded viewer-side and system-picture EData key selectors in
+  `FUN_0045fa60`.
+
+The package remains `static-partial` and `runtime_capture_required`. The system
+predicate is structurally recovered, but source type `0xf2` remains deliberately
+unnamed: `FUN_005696b0` installs vtable `0x006639b8`, whose `+4` method
+`FUN_00569880` returns `0xf2`; that proves the exact ancestry test, not a
+friendlier knowledge, destruction, or visibility label. For the inspected
+source profile, Luke key `0x1842` maps to `EDATA.074`, `0x2842` is empty, and
+ENCYBMAP has no `EDATA.192` mapping; recovered REBEXE static evidence includes
+the `EDATA\` directory-literal reference inside `FUN_0045f7b0` and the identified
+table-selector loader callers, but does not establish a connected selector or
+predicate. `EDATA.192` therefore remains inventory-only under the current
+publication policy and no alternate-Luke predicate, runtime binding, or UI
+switch is published. The user-approved scope defers that research to
+`orlocal-2kq`; the asset remains inventoried but unused and does not block E08,
+the first-profile schema, or publication. This is not proof that original
+behavior is impossible or that the alternate was implemented. Static asset
+presence does not imply gameplay visibility, and no expression or mod-supplied
+predicate may substitute for future proof.
+
+The repository ledger validator continues to validate the shared ledger shape,
+surface coverage, and required package fields; it does not inspect the nested
+`semantic_research` contract. E08's retained ignored semantic checker separately
+validates all 14 rule records, all 25 named decision scenarios, their references
+and required fields, the recovered selector transitions, cache/comparator
+contract, canonical context key, exact type-`0xf2` system predicate, and bounded
+alternate evidence state: inventoried, unused, deferred to `orlocal-2kq`, with
+no predicate or runtime binding.
 
 Space battle is an explicit full mode, not a single panel. `TAC-01` through
 `TAC-07` currently define 106 baseline cells covering battle entry, both
