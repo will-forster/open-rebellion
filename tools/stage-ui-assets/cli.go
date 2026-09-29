@@ -18,6 +18,7 @@ func runCLIWithMedia(args []string, stdout, stderr io.Writer, targets []dllTarge
 	outputDir := flags.String("output", "data/base/ui", "runtime UI asset directory")
 	audioOutput := flags.String("audio-output", "data/sounds", "runtime audio directory")
 	mdata := flags.String("mdata", "", "original MDATA directory (default: source/MDATA)")
+	edata := flags.String("edata", "", "original EData directory (default: source/EData)")
 	stringsOutput := flags.String("strings-output", "data/base/textstra.json", "runtime text string JSON file")
 	cutsceneOutput := flags.String("cutscene-output", "assets/references", "parent of ref-videos and cutscene-frames outputs")
 	encyclopediaReportOnly := flags.Bool("encyclopedia-report-only", false, "stage or verify only the encyclopedia research report")
@@ -35,13 +36,20 @@ func runCLIWithMedia(args []string, stdout, stderr io.Writer, targets []dllTarge
 		return fmt.Errorf("unexpected arguments: %v", flags.Args())
 	}
 	encyclopediaOutputSet := false
+	edataSet := false
 	flags.Visit(func(selected *flag.Flag) {
 		if selected.Name == "encyclopedia-output" {
 			encyclopediaOutputSet = true
 		}
+		if selected.Name == "edata" {
+			edataSet = true
+		}
 	})
 	if encyclopediaOutputSet && !*encyclopediaReportOnly {
 		return fmt.Errorf("--encyclopedia-output requires --encyclopedia-report-only")
+	}
+	if edataSet && !*encyclopediaReportOnly {
+		return fmt.Errorf("--edata requires --encyclopedia-report-only")
 	}
 	selectedTacticalModes := 0
 	for _, selected := range []bool{*tactical3D, *tactical3DOnly, *tactical3DConvert, *tactical3DAssimpOracle != ""} {
@@ -57,7 +65,18 @@ func runCLIWithMedia(args []string, stdout, stderr io.Writer, targets []dllTarge
 	}
 	if *encyclopediaReportOnly {
 		if !*verifyOnly {
-			if err := stageEncyclopediaReport(*sourceDir, "", *encyclopediaOutput, *force, stdout); err != nil {
+			if *edata == "" {
+				*edata = filepath.Join(*sourceDir, "EData")
+			}
+			if err := stageEncyclopediaReportWithRequest(encyclopediaReportStageRequest{
+				SourceDir:   *sourceDir,
+				EDataDir:    *edata,
+				OutputDir:   *encyclopediaOutput,
+				ModRoots:    []string{"mods"},
+				Force:       *force,
+				ImageLimits: defaultEncyclopediaImageLimits(),
+				Log:         stdout,
+			}); err != nil {
 				return err
 			}
 		}
