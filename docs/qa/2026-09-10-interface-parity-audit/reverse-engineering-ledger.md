@@ -156,7 +156,7 @@ and a next proof in the [machine-readable ledger](reverse-engineering-ledger.jso
 | RE-GID-01 | Filters, legends, marker rules, pan, zoom, and selection | static-partial; default GID and source frame runtime-corroborated | Recover menu interior and geometry, expanded legend, remaining filter predicates and overlays, and exact map input |
 | RE-OVR-01 | Galaxy Overview | untriaged | Recover geometry, category formulas, resources, and destinations |
 | RE-MSG-01 | Messages, Agent menus, alerts, and reports | static-partial; rail controls recovered | Decompile `FUN_0042a240`, map unread states and the original index window, then join reports, audio, and navigation |
-| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; runtime capture pending; unproven alternate art deferred to `orlocal-2kq` | Run the finite `ENC-UI-01..21` A0 matrix with resource, focus, caller, faction, context, and endpoint provenance |
+| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; family binding/resource closure partial; E09 and runtime capture pending; unproven alternate art deferred to `orlocal-2kq` | Recover command `0x73` source joins and localized category-label selectors before E09, then run the finite `ENC-UI-01..21` A0 matrix with resource, focus, caller, faction, context, and endpoint provenance |
 | RE-OBJ-01 | System, sector, and object-window constructors | static-partial; sector and system shells runtime-corroborated | Complete system item compositions and commands, then map the remaining object families |
 | RE-ADV-01 | Type-302 advisor and briefing frame decoding | runtime-corroborated | Extend the verified advisor decoder/transport to briefings and compare with A0 captures |
 | RE-ADV-02 | SPT/BIN/FDT action semantics, cadence, and sound | static-partial | Replace inferred priority thirds with authored action mappings |
@@ -203,6 +203,42 @@ the same testable scenario IDs. Static recovery now proves:
   preserve non-wrapping endpoints, and operate over the sorted bound list; and
 - the bounded viewer-side and system-picture EData key selectors in
   `FUN_0045fa60`.
+
+E40 reconciles the accepted family fragments without repeating their reverse
+engineering. The strict embedded source profile now contains 331 observed
+family-qualified rows: 57 mobile-unit classes, 60 characters, and 214
+systems/facilities. It preserves every original/preferred/selected title
+selector, language-qualified body and art identity, source hash, exact EData
+basename, category command, and class/source identity. All 331 rows are bound;
+none is silently treated as an alias. Seventeen system art identities are
+explicit shared-resource groups, not topic aliases. Major/minor character
+`DatId` values are unique for this profile, while the source family remains in
+the canonical identity and future overlap must fail or add a reviewed table
+discriminator. Unit rows bind classes, not fleet/entity instances; the current
+raw-ID arena mismatch remains an application-boundary gate.
+
+Resource closure is intentionally partial. Against the exact owned source
+hashes, the profile accounts for all 348 ENCYTEXT records, 191 nonempty
+ENCYBMAP strings, 186 referenced filenames, and 187 EData images as bound,
+unresolved, or publication-deferred. The accepted rows bind 331 text resources,
+157 lookup identities, and 157 files. Command `0x73` has no accepted family
+fragment, leaving 17 text resources, 34 lookup identities, and 29 referenced
+files unresolved; their exact identities and next proof are in the
+[source contract](../../reference/asset-library/encyclopedia-source-contract.md#combined-family-bindings-and-resource-closure)
+and `semantic_research.source_reconciliation`. The five duplicate ENCYBMAP
+filenames explain why 34 lookup identities correspond to 29 files but do not
+prove aliases or topics. `EDATA.192` is the separate 187th file and remains
+publication-deferred under `orlocal-2kq`.
+
+The combined shape resolves one-category membership for the 331 bound rows:
+commands `0x70`, `0x71`, `0x72`, `0x74`, and `0x75` own their recovered rows,
+while `0x6f` is an aggregate selector rather than a second category. It also
+separates source identity from canonical body identity and requires explicit
+`alias_of` metadata for any future shared topic. It does **not** mark the
+profile ready for E09 schema freeze. The missing `[0x40,0x80)` command `0x73`
+source joins and original localized category-label selectors are named E09
+blockers; numbering gaps, filenames, and the numerical 17/34 residual pattern
+are not accepted joins.
 
 The package remains `static-partial` and `runtime_capture_required`. The system
 predicate is structurally recovered, but source type `0xf2` remains deliberately
