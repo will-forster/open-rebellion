@@ -509,19 +509,49 @@ mod tests {
 
     #[test]
     fn packed_encyclopedia_request_is_a_distinct_feature_fixture() {
-        let request = decode_request(0x0129).expect("packed encyclopedia scenario");
+        let request = decode_request(0x012a).expect("packed encyclopedia scenario");
 
         assert_eq!(request.scenario, Scenario::PackedEncyclopedia);
         assert_eq!(request.faction, CockpitFaction::Alliance);
         assert!(request.is_packed_encyclopedia());
         assert_eq!(
-            decode_request(0x0229).unwrap().faction,
+            decode_request(0x022a).unwrap().faction,
             CockpitFaction::Empire
         );
         assert!(!decode_request(0x0127).unwrap().is_packed_encyclopedia());
         assert_eq!(decode_request(0x0000), None);
-        assert_eq!(decode_request(0x0329), None);
-        assert_eq!(decode_request(0x01_0129), None);
+        assert_eq!(decode_request(0x032a), None);
+        assert_eq!(decode_request(0x01_012a), None);
+    }
+
+    #[test]
+    fn encyclopedia_fixture_scenarios_coexist_for_both_factions() {
+        for (code, scenario, faction) in [
+            (
+                0x0129,
+                Scenario::EncyclopediaIndexShell,
+                CockpitFaction::Alliance,
+            ),
+            (
+                0x0229,
+                Scenario::EncyclopediaIndexShell,
+                CockpitFaction::Empire,
+            ),
+            (
+                0x012a,
+                Scenario::PackedEncyclopedia,
+                CockpitFaction::Alliance,
+            ),
+            (0x022a, Scenario::PackedEncyclopedia, CockpitFaction::Empire),
+        ] {
+            let request = decode_request(code).expect("encyclopedia fixture scenario");
+            assert_eq!(request.scenario, scenario);
+            assert_eq!(request.faction, faction);
+            assert_eq!(
+                request.is_packed_encyclopedia(),
+                scenario == Scenario::PackedEncyclopedia
+            );
+        }
     }
 
     #[test]

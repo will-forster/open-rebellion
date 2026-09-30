@@ -745,14 +745,14 @@ mod runtime_pack_install_tests {
 
         for (code, viewer, asset_id, digest, faction) in [
             (
-                0x0129,
+                0x012a,
                 ViewerFaction::Alliance,
                 "edata:2",
                 "a93a4e651a970119d8da0386846785163291b7cfd67edaac7f6fc37b719fe592",
                 "alliance",
             ),
             (
-                0x0229,
+                0x022a,
                 ViewerFaction::Empire,
                 "edata:3",
                 "8746c347d4cf14daa2e0cc9d41d1f9abebbbb1aae997f31a172610e9ecdbe2dd",
@@ -802,7 +802,7 @@ mod packed_encyclopedia_fixture_route_tests {
         let packed = FixtureRequest {
             scenario: Scenario::PackedEncyclopedia,
             faction: rebellion_render::CockpitFaction::Alliance,
-            code: 0x0129,
+            code: 0x012a,
         };
         let legacy_art_probe = FixtureRequest {
             scenario: Scenario::EncyclopediaArtwork,
