@@ -1,4 +1,6 @@
 mod audio;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod encyclopedia_runtime;
 pub mod encyclopedia_session;
 #[cfg(any(test, all(target_arch = "wasm32", feature = "interface-test-fixtures")))]
 #[cfg_attr(
