@@ -1,4 +1,5 @@
 mod audio;
+pub mod encyclopedia_hd;
 pub mod encyclopedia_presenter;
 #[cfg(not(target_arch = "wasm32"))]
 mod encyclopedia_lifecycle;
