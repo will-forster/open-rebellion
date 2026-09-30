@@ -6,8 +6,8 @@ pub mod bmp_cache;
 pub mod cockpit;
 pub mod encyclopedia;
 pub mod encyclopedia_assets;
-pub mod encyclopedia_textures;
 pub mod encyclopedia_navigation;
+pub mod encyclopedia_textures;
 pub mod encyclopedia_view;
 pub mod event_screen;
 pub mod fleet_movement;
@@ -59,19 +59,23 @@ pub use cockpit::{
 };
 #[cfg(target_arch = "wasm32")]
 pub use encyclopedia::set_encyclopedia_asset_cache;
-pub use encyclopedia::{draw_encyclopedia, EncyclopediaState, EncyclopediaTab};
+pub use encyclopedia::{
+    draw_encyclopedia, draw_encyclopedia_surface, EncyclopediaState, EncyclopediaSurfaceDiagnostic,
+    EncyclopediaSurfaceFrame, EncyclopediaSurfaceLabels, EncyclopediaSurfaceState, EncyclopediaTab,
+};
 #[cfg(feature = "interface-test-fixtures")]
 pub use encyclopedia::{draw_encyclopedia_artwork_fixture, draw_encyclopedia_index_fixture};
 pub use encyclopedia_assets::{inspect_encyclopedia_bytes, InspectedBytes};
+pub use encyclopedia_navigation::{
+    apply_encyclopedia_action, reconcile_encyclopedia_state, BodyScrollIntent, EncyclopediaAction,
+    EncyclopediaMode, EncyclopediaState as EncyclopediaNavigationState, IndexCategoryDirection,
+    IndexRowNavigation, NavigationOutcome, NavigationRejection, ReconcileOutcome, SelectionForce,
+    SourceKeyIntent,
+};
 pub use encyclopedia_textures::{
     EguiEncyclopediaTextureBackend, EncyclopediaTextureBackend, EncyclopediaTextureCache,
     EncyclopediaTextureEvent, EncyclopediaTextureResolution, EncyclopediaTextureSampling,
     EncyclopediaTextureUpload,
-};
-pub use encyclopedia_navigation::{
-    apply_encyclopedia_action, reconcile_encyclopedia_state, BodyScrollIntent, EncyclopediaAction,
-    EncyclopediaMode, EncyclopediaState as EncyclopediaNavigationState, NavigationOutcome,
-    NavigationRejection, ReconcileOutcome, SelectionForce,
 };
 pub use encyclopedia_view::{
     ActiveTopicView, CategoryViewItem, EncyclopediaDiagnosticScope, EncyclopediaSelection,
