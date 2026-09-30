@@ -1,9 +1,10 @@
 mod audio;
-pub mod encyclopedia_presenter;
 #[cfg(not(target_arch = "wasm32"))]
 mod encyclopedia_lifecycle;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod encyclopedia_mods;
+pub mod encyclopedia_presenter;
+mod encyclopedia_routes;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod encyclopedia_runtime;
 pub mod encyclopedia_session;
@@ -87,20 +88,28 @@ use rebellion_render::{
     advisor_combat_result, advisor_death_star, advisor_greet, advisor_manufacturing_complete,
     advisor_mission_result, advisor_uprising, draw_advisor, draw_audio_controls,
     draw_cockpit_background, draw_cockpit_chrome, draw_cockpit_egui_layer, draw_credits,
-    draw_encyclopedia, draw_event_screen, draw_fleets, draw_galaxy_backdrop, draw_galaxy_map,
-    draw_game_options, draw_game_setup, draw_ground_combat, draw_main_menu, draw_manufacturing,
-    draw_missions, draw_multiplayer_setup, draw_officers, draw_save_load, draw_sector_windows,
+    draw_event_screen, draw_fleets, draw_galaxy_backdrop, draw_galaxy_map, draw_game_options,
+    draw_game_setup, draw_ground_combat, draw_main_menu, draw_manufacturing, draw_missions,
+    draw_multiplayer_setup, draw_officers, draw_save_load, draw_sector_windows,
     draw_system_windows, draw_tactical_view, handle_cockpit_egui_input, set_cockpit_viewport_clip,
     show_event_screen, update_event_screen, AdvisorFaction, AdvisorState, AssetRenderProfile,
     AudioVolumeState, BmpCache, CockpitButton, CockpitFaction, CockpitState, CreditsState,
-    EncyclopediaState, EventScreenState, FleetsState, GalaxyMapState, GameMessage,
-    GameOptionsAction, GameOptionsOrigin, GameOptionsState, GameSetupAction, GameSetupState,
-    GroundAction, GroundCombatState, MainMenuAction, MainMenuState, ManufacturingPanelState,
+    EventScreenState, FleetsState, GalaxyMapState, GameMessage, GameOptionsAction,
+    GameOptionsOrigin, GameOptionsState, GameSetupAction, GameSetupState, GroundAction,
+    GroundCombatState, MainMenuAction, MainMenuState, ManufacturingPanelState,
     MenuDestinationAction, MessageCategory, MessageLog, MessageLogState, MessageRail,
     MissionsPanelState, MultiplayerSetupAction, MultiplayerSetupState, MusicContext, OfficersState,
     PanelAction, RailAudience, SectorWindowAction, SectorWindowState, SfxKind, SystemWindowAction,
     SystemWindowState, TacticalAction, TacticalState, TacticalTrenchRunOutcome, VideoError,
     VideoPlayer,
+};
+
+#[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+use rebellion_render::EncyclopediaState;
+#[cfg(feature = "interface-test-fixtures")]
+use rebellion_render::{
+    draw_encyclopedia_surface, EguiEncyclopediaTextureBackend, EncyclopediaSurfaceLabels,
+    EncyclopediaSurfaceState, EncyclopediaTextureCache,
 };
 
 /// Top-level game mode state machine.
@@ -205,6 +214,38 @@ fn log_encyclopedia_refresh(
     }
 }
 
+fn encyclopedia_viewer(faction: MissionFaction) -> rebellion_data::encyclopedia::ViewerFaction {
+    match faction {
+        MissionFaction::Alliance => rebellion_data::encyclopedia::ViewerFaction::Alliance,
+        MissionFaction::Empire => rebellion_data::encyclopedia::ViewerFaction::Empire,
+    }
+}
+
+fn log_encyclopedia_route_error(
+    context: &str,
+    error: &rebellion_data::encyclopedia::EncyclopediaError,
+) {
+    macroquad::logging::warn!(
+        "[encyclopedia] context={} code={} path={} message={}",
+        context,
+        error.code(),
+        error.path(),
+        error
+    );
+}
+
+fn configured_candidate_fixture_world(requested: bool) -> Option<GameWorld> {
+    #[cfg(feature = "interface-test-fixtures")]
+    {
+        requested.then(encyclopedia_routes::candidate_fixture_world)
+    }
+    #[cfg(not(feature = "interface-test-fixtures"))]
+    {
+        let _ = requested;
+        None
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn original_game_dir() -> PathBuf {
     std::env::var_os("REBELLION_GAME_DIR")
@@ -227,6 +268,7 @@ fn common_edata_sibling(gdata_path: &Path) -> Option<PathBuf> {
         .map(|root| root.join("EData"))
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
 fn configured_edata_path(gdata_path: &Path) -> PathBuf {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -743,9 +785,155 @@ fn toggle_exclusive_panel(panels: &mut [&mut bool], selected: usize) {
     *panels[selected] = !was_open;
 }
 
+/// Ownership of Escape at the application shortcut boundary.
+///
+/// The encyclopedia surface reduces and consumes source navigation later in
+/// the egui pass. When it is open, Macroquad's earlier global shortcut pass
+/// must leave Escape (and all underlying Galaxy shortcuts) to that surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApplicationEscapeOwner {
+    Global,
+    EncyclopediaSurface,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ApplicationShortcutPriority {
+    escape_owner: ApplicationEscapeOwner,
+    underlying_galaxy_shortcuts: bool,
+}
+
+impl ApplicationShortcutPriority {
+    fn global_escape_requested(self, escape_pressed: bool, event_screen_active: bool) -> bool {
+        escape_pressed
+            && !event_screen_active
+            && self.escape_owner == ApplicationEscapeOwner::Global
+    }
+
+    fn galaxy_shortcuts_enabled(
+        self,
+        galaxy_mode: bool,
+        event_screen_active: bool,
+        save_load_open: bool,
+    ) -> bool {
+        galaxy_mode && !event_screen_active && !save_load_open && self.underlying_galaxy_shortcuts
+    }
+
+    fn strategic_input_enabled(self, event_screen_active: bool, other_modal_open: bool) -> bool {
+        !event_screen_active && !other_modal_open && self.underlying_galaxy_shortcuts
+    }
+}
+
+fn application_shortcut_priority(encyclopedia_open: bool) -> ApplicationShortcutPriority {
+    if encyclopedia_open {
+        ApplicationShortcutPriority {
+            escape_owner: ApplicationEscapeOwner::EncyclopediaSurface,
+            underlying_galaxy_shortcuts: false,
+        }
+    } else {
+        ApplicationShortcutPriority {
+            escape_owner: ApplicationEscapeOwner::Global,
+            underlying_galaxy_shortcuts: true,
+        }
+    }
+}
+
+#[cfg(any(test, feature = "interface-test-fixtures"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CandidateContextCallerWindow {
+    system: SystemKey,
+    dat_id: u32,
+}
+
+#[cfg(any(test, feature = "interface-test-fixtures"))]
+fn candidate_fixture_fingerprint(domain: &[u8], bytes: impl IntoIterator<Item = u8>) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in domain.iter().copied().chain(bytes) {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("fnv1a64:{hash:016x}")
+}
+
+#[cfg(any(test, feature = "interface-test-fixtures"))]
+fn candidate_fixture_evidence(
+    world: &GameWorld,
+    sim_rng: &Xoshiro256PlusPlus,
+    windows: &SystemWindowState,
+    caller: Option<CandidateContextCallerWindow>,
+) -> encyclopedia_routes::CandidateFixtureEvidence {
+    use ::rand::RngCore;
+
+    let world_fingerprint = serde_json::to_vec(world).map_or_else(
+        |error| format!("unavailable:{error}"),
+        |bytes| candidate_fixture_fingerprint(b"E31-CANDIDATE-WORLD\0", bytes),
+    );
+    let mut probe = sim_rng.clone();
+    let rng_bytes = (0..4).flat_map(|_| probe.next_u64().to_le_bytes());
+    let rng_fingerprint = candidate_fixture_fingerprint(b"E31-CANDIDATE-RNG\0", rng_bytes);
+    let caller_window_system_dat_id = caller
+        .filter(|value| {
+            windows.contains_system(value.system)
+                && world
+                    .systems
+                    .get(value.system)
+                    .is_some_and(|system| system.dat_id.index() == value.dat_id)
+        })
+        .map(|value| value.dat_id);
+    encyclopedia_routes::CandidateFixtureEvidence {
+        world_fingerprint,
+        rng_fingerprint,
+        caller_window_open: caller_window_system_dat_id.is_some(),
+        caller_window_count: windows.window_count(),
+        caller_window_system_dat_id,
+    }
+}
+
+#[cfg(any(test, feature = "interface-test-fixtures"))]
+fn open_candidate_context_caller_window(
+    fixture: &encyclopedia_routes::CandidateRouteFixture,
+    routes: &encyclopedia_routes::EncyclopediaRouteController,
+    world: &GameWorld,
+    faction: CockpitFaction,
+    layout: rebellion_render::CockpitLayout,
+    windows: &mut SystemWindowState,
+) -> Option<CandidateContextCallerWindow> {
+    if fixture.mode() != encyclopedia_routes::CandidateFixtureMode::Context {
+        return None;
+    }
+    let encyclopedia_routes::EncyclopediaFocusToken::Binding(binding) =
+        routes.active_caller_focus()?
+    else {
+        return None;
+    };
+    let (system, _) = world
+        .systems
+        .iter()
+        .find(|(_, system)| system.dat_id.index() == binding.dat_id)?;
+    if !windows.open(world, system, (350, 86), faction, layout) {
+        return None;
+    }
+    Some(CandidateContextCallerWindow {
+        system,
+        dat_id: binding.dat_id,
+    })
+}
+
+#[cfg(feature = "interface-test-fixtures")]
+fn queue_candidate_caller_focus(
+    handoff: &mut encyclopedia_routes::EncyclopediaCallerFocusHandoff,
+    focus: Option<&encyclopedia_routes::EncyclopediaFocusToken>,
+) {
+    if let Some(focus) = focus {
+        handoff.restore(focus.clone());
+    }
+}
+
 #[cfg(test)]
 mod panel_toggle_tests {
-    use super::toggle_exclusive_panel;
+    use super::{
+        application_shortcut_priority, configured_candidate_fixture_world, toggle_exclusive_panel,
+        ApplicationEscapeOwner,
+    };
 
     #[test]
     fn opens_closes_and_switches_exclusive_panels() {
@@ -769,6 +957,220 @@ mod panel_toggle_tests {
             [false, false, false, false, false, false, false, false, true]
         );
     }
+
+    #[test]
+    fn closed_encyclopedia_preserves_existing_global_and_galaxy_shortcuts() {
+        let priority = application_shortcut_priority(false);
+        assert_eq!(priority.escape_owner, ApplicationEscapeOwner::Global);
+        assert!(priority.global_escape_requested(true, false));
+        assert!(!priority.global_escape_requested(false, false));
+        assert!(!priority.global_escape_requested(true, true));
+        assert!(priority.galaxy_shortcuts_enabled(true, false, false));
+        assert!(!priority.galaxy_shortcuts_enabled(false, false, false));
+        assert!(!priority.galaxy_shortcuts_enabled(true, true, false));
+        assert!(!priority.galaxy_shortcuts_enabled(true, false, true));
+        assert!(priority.strategic_input_enabled(false, false));
+        assert!(!priority.strategic_input_enabled(true, false));
+        assert!(!priority.strategic_input_enabled(false, true));
+    }
+
+    #[cfg(feature = "interface-test-fixtures")]
+    #[test]
+    fn encyclopedia_candidate_fixture_world_switch_is_bounded_to_an_explicit_feature_request() {
+        assert!(configured_candidate_fixture_world(false).is_none());
+        assert_eq!(
+            configured_candidate_fixture_world(true)
+                .unwrap()
+                .systems
+                .len(),
+            2
+        );
+    }
+
+    #[cfg(feature = "interface-test-fixtures")]
+    #[test]
+    fn encyclopedia_candidate_application_boundary_queues_focus_without_fabricating_a_widget() {
+        let ctx = egui_macroquad::egui::Context::default();
+        let mut handoff = crate::encyclopedia_routes::EncyclopediaCallerFocusHandoff::default();
+        for focus in [
+            crate::encyclopedia_routes::EncyclopediaFocusToken::CockpitCommand(0x131),
+            crate::encyclopedia_routes::EncyclopediaFocusToken::Binding(
+                rebellion_data::encyclopedia::BindingKey {
+                    family: "systems_world_locations".to_owned(),
+                    dat_id: 7,
+                    variant: "default".to_owned(),
+                },
+            ),
+        ] {
+            let encyclopedia_child = egui_macroquad::egui::Id::new((
+                "candidate-surface-child",
+                matches!(
+                    focus,
+                    crate::encyclopedia_routes::EncyclopediaFocusToken::Binding(_)
+                ),
+            ));
+            ctx.memory_mut(|memory| memory.request_focus(encyclopedia_child));
+
+            super::queue_candidate_caller_focus(&mut handoff, Some(&focus));
+            assert_eq!(handoff.caller(), Some(&focus));
+            assert_eq!(
+                ctx.memory(|memory| memory.focused()),
+                Some(encyclopedia_child),
+                "the app must wait for a live registered caller response"
+            );
+        }
+    }
+
+    #[cfg(feature = "interface-test-fixtures")]
+    #[test]
+    fn open_encyclopedia_owns_escape_before_global_and_underlying_galaxy_shortcuts() {
+        use crate::encyclopedia_routes::{
+            CandidateFixtureMode, CandidateRebindReason, CandidateRouteFixture,
+        };
+        use rebellion_data::encyclopedia::ViewerFaction;
+        use rebellion_render::{EncyclopediaAction, NavigationOutcome, SourceKeyIntent};
+
+        let world = crate::encyclopedia_routes::candidate_fixture_world();
+        let world_before = serde_json::to_vec(&world).unwrap();
+        for viewer in [ViewerFaction::Alliance, ViewerFaction::Empire] {
+            for mode in [CandidateFixtureMode::Command, CandidateFixtureMode::Context] {
+                let mut fixture = CandidateRouteFixture::synthetic(mode, viewer).unwrap();
+                let mut routes = fixture.new_controller();
+                fixture
+                    .rebind(&mut routes, &world, viewer, CandidateRebindReason::Startup)
+                    .unwrap();
+                fixture.open_requested(&mut routes, &world).unwrap();
+
+                let priority = application_shortcut_priority(routes.is_open());
+                assert_eq!(
+                    priority.escape_owner,
+                    ApplicationEscapeOwner::EncyclopediaSurface
+                );
+                assert!(!priority.underlying_galaxy_shortcuts);
+                assert!(!priority.global_escape_requested(true, false));
+                assert!(!priority.galaxy_shortcuts_enabled(true, false, false));
+                assert!(!priority.strategic_input_enabled(false, false));
+
+                let view = fixture.build_view(&routes).unwrap();
+                let caller_window_open = true;
+                let result = fixture.apply_action(
+                    &mut routes,
+                    &view,
+                    EncyclopediaAction::SourceKey(SourceKeyIntent::Escape),
+                );
+                assert_eq!(result.outcome, NavigationOutcome::CloseRequested);
+                assert!(result.restored_focus.is_some());
+                assert!(!routes.is_open());
+                assert!(
+                    caller_window_open,
+                    "Escape must not close the caller window"
+                );
+                assert_eq!(serde_json::to_vec(&world).unwrap(), world_before);
+
+                fixture.open_requested(&mut routes, &world).unwrap();
+                assert!(routes.is_open(), "the restored caller can reopen the route");
+            }
+        }
+    }
+
+    #[cfg(feature = "interface-test-fixtures")]
+    #[test]
+    fn contextual_candidate_preserves_the_real_system_window_and_live_fingerprints() {
+        use crate::encyclopedia_routes::{
+            CandidateFixtureMode, CandidateRebindReason, CandidateRouteFixture,
+        };
+        use ::rand::SeedableRng;
+        use rand_xoshiro::Xoshiro256PlusPlus;
+        use rebellion_data::encyclopedia::ViewerFaction;
+        use rebellion_render::{
+            CockpitFaction, CockpitState, EncyclopediaAction, SystemWindowState,
+        };
+
+        let world = crate::encyclopedia_routes::candidate_fixture_world();
+        let rng = Xoshiro256PlusPlus::seed_from_u64(0x131);
+        for (viewer, cockpit_faction) in [
+            (ViewerFaction::Alliance, CockpitFaction::Alliance),
+            (ViewerFaction::Empire, CockpitFaction::Empire),
+        ] {
+            let mut fixture =
+                CandidateRouteFixture::synthetic(CandidateFixtureMode::Context, viewer).unwrap();
+            let mut routes = fixture.new_controller();
+            fixture
+                .rebind(&mut routes, &world, viewer, CandidateRebindReason::Startup)
+                .unwrap();
+            fixture.open_requested(&mut routes, &world).unwrap();
+
+            let cockpit = CockpitState::new(cockpit_faction);
+            let mut windows = SystemWindowState::default();
+            let caller = super::open_candidate_context_caller_window(
+                &fixture,
+                &routes,
+                &world,
+                cockpit_faction,
+                cockpit.layout_for(640.0, 480.0),
+                &mut windows,
+            )
+            .expect("the contextual route must instantiate its real system caller window");
+            assert_eq!(caller.dat_id, 7);
+            assert!(windows.contains_system(caller.system));
+            assert_eq!(world.systems[caller.system].dat_id.index(), caller.dat_id);
+
+            let before = super::candidate_fixture_evidence(&world, &rng, &windows, Some(caller));
+            assert!(before.caller_window_open);
+            assert_eq!(before.caller_window_count, 1);
+            assert_eq!(before.caller_window_system_dat_id, Some(7));
+            let mismatched_identity = super::candidate_fixture_evidence(
+                &world,
+                &rng,
+                &windows,
+                Some(super::CandidateContextCallerWindow {
+                    system: caller.system,
+                    dat_id: 8,
+                }),
+            );
+            assert!(!mismatched_identity.caller_window_open);
+            assert_eq!(mismatched_identity.caller_window_system_dat_id, None);
+
+            let view = fixture.build_view(&routes).unwrap();
+            let result = fixture.apply_action(&mut routes, &view, EncyclopediaAction::Return);
+            assert!(result.restored_focus.is_some());
+            assert!(!routes.is_open());
+
+            let after = super::candidate_fixture_evidence(&world, &rng, &windows, Some(caller));
+            assert_eq!(after.world_fingerprint, before.world_fingerprint);
+            assert_eq!(after.rng_fingerprint, before.rng_fingerprint);
+            assert!(after.caller_window_open);
+            assert_eq!(after.caller_window_count, 1);
+            assert_eq!(after.caller_window_system_dat_id, Some(7));
+            assert!(windows.contains_system(caller.system));
+
+            let mut changed_world = world.clone();
+            changed_world.systems.get_mut(caller.system).unwrap().x += 1;
+            assert_ne!(
+                super::candidate_fixture_evidence(&changed_world, &rng, &windows, Some(caller),)
+                    .world_fingerprint,
+                before.world_fingerprint,
+            );
+            let mut changed_rng = rng.clone();
+            use ::rand::RngCore;
+            let _ = changed_rng.next_u64();
+            assert_ne!(
+                super::candidate_fixture_evidence(&world, &changed_rng, &windows, Some(caller),)
+                    .rng_fingerprint,
+                before.rng_fingerprint,
+            );
+
+            fixture.open_requested(&mut routes, &world).unwrap();
+            assert!(routes.is_open());
+            assert!(windows.contains_system(caller.system));
+        }
+    }
+
+    #[cfg(not(feature = "interface-test-fixtures"))]
+    #[test]
+    fn default_build_excludes_the_encyclopedia_candidate_fixture_world() {
+        assert!(configured_candidate_fixture_world(true).is_none());
+    }
 }
 
 #[macroquad::main(window_conf)]
@@ -777,12 +1179,21 @@ async fn main() {
         clippy::too_many_lines,
         reason = "Keep the existing main loop together; extracting phases is a separate refactor."
     )]
+    #[cfg(feature = "interface-test-fixtures")]
+    let candidate_route_request = encyclopedia_routes::candidate_fixture_request();
+    #[cfg(feature = "interface-test-fixtures")]
+    let candidate_route_requested = candidate_route_request.is_some();
+    #[cfg(not(feature = "interface-test-fixtures"))]
+    let candidate_route_requested = false;
+
     // Accept an optional GData path as the first CLI argument.
     // On WASM there is no CLI, so always use the hardcoded default.
     #[cfg(not(target_arch = "wasm32"))]
     let gdata_path = {
         let args: Vec<String> = std::env::args().collect();
-        if args.len() > 1 {
+        if candidate_route_requested {
+            PathBuf::from("data/base")
+        } else if args.len() > 1 {
             PathBuf::from(&args[1])
         } else {
             let candidate = PathBuf::from("data/base");
@@ -816,24 +1227,33 @@ async fn main() {
     // Native: filesystem read via load_game_data()
     // WASM: HTTP fetch via macroquad::file::load_file() into cache, then load_game_data()
     #[cfg(not(target_arch = "wasm32"))]
-    let mut world = match rebellion_data::load_game_data(&gdata_path) {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!(
-                "Failed to load game data from {}: {}",
-                gdata_path.display(),
-                e
-            );
-            std::process::exit(1);
-        }
-    };
+    let mut world =
+        if let Some(world) = configured_candidate_fixture_world(candidate_route_requested) {
+            world
+        } else {
+            match rebellion_data::load_game_data(&gdata_path) {
+                Ok(w) => w,
+                Err(e) => {
+                    eprintln!(
+                        "Failed to load game data from {}: {}",
+                        gdata_path.display(),
+                        e
+                    );
+                    std::process::exit(1);
+                }
+            }
+        };
 
     #[cfg(target_arch = "wasm32")]
     let (mut world, mut browser_audio_files) = {
-        let audio_files = load_wasm_assets().await;
-        let world = rebellion_data::load_game_data(&gdata_path)
-            .unwrap_or_else(|error| panic!("Failed to parse game data: {error}"));
-        (world, audio_files)
+        if let Some(world) = configured_candidate_fixture_world(candidate_route_requested) {
+            (world, std::collections::HashMap::new())
+        } else {
+            let audio_files = load_wasm_assets().await;
+            let world = rebellion_data::load_game_data(&gdata_path)
+                .unwrap_or_else(|error| panic!("Failed to parse game data: {error}"));
+            (world, audio_files)
+        }
     };
 
     eprintln!(
@@ -861,10 +1281,33 @@ async fn main() {
         );
     }
     #[cfg(not(target_arch = "wasm32"))]
+    let encyclopedia_availability =
+        encyclopedia_runtime::load_native_encyclopedia(&gdata_path, None);
+    #[cfg(feature = "interface-test-fixtures")]
+    let mut candidate_route_fixture = candidate_route_request.and_then(|request| {
+        match encyclopedia_routes::CandidateRouteFixture::from_request(request) {
+            Ok(fixture) => Some(fixture),
+            Err(error) => {
+                log_encyclopedia_route_error("candidate_fixture_session", &error);
+                None
+            }
+        }
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut encyclopedia_routes =
+        encyclopedia_routes::EncyclopediaRouteController::from_availability(
+            &encyclopedia_availability,
+        )
+        .ok();
+    #[cfg(target_arch = "wasm32")]
+    let mut encyclopedia_routes: Option<encyclopedia_routes::EncyclopediaRouteController> = None;
+    #[cfg(feature = "interface-test-fixtures")]
+    if let Some(fixture) = candidate_route_fixture.as_ref() {
+        encyclopedia_routes = Some(fixture.new_controller());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     let mut encyclopedia_lifecycle =
-        encyclopedia_lifecycle::EncyclopediaLifecycle::from_availability(
-            encyclopedia_runtime::load_native_encyclopedia(&gdata_path, None),
-        );
+        encyclopedia_lifecycle::EncyclopediaLifecycle::from_availability(encyclopedia_availability);
     #[cfg(not(target_arch = "wasm32"))]
     {
         let ordered = mod_runtime.enabled_sorted();
@@ -876,6 +1319,9 @@ async fn main() {
         );
         for error in update.world.unwrap_or_default() {
             eprintln!("Mod error: {error:?}");
+        }
+        if let Some(routes) = encyclopedia_routes.as_mut() {
+            routes.observe_content_generation(update.content.generation);
         }
         log_encyclopedia_refresh("startup", &update.content);
     }
@@ -967,10 +1413,18 @@ async fn main() {
 
     // ── War Room panel state ────────────────────────────────────────────────
     let mut player_faction = MissionFaction::Alliance;
+    #[cfg(feature = "interface-test-fixtures")]
+    if let Some(fixture) = candidate_route_fixture.as_ref() {
+        player_faction = match fixture.viewer() {
+            rebellion_data::encyclopedia::ViewerFaction::Alliance => MissionFaction::Alliance,
+            rebellion_data::encyclopedia::ViewerFaction::Empire => MissionFaction::Empire,
+        };
+    }
     let mut officers_state = OfficersState::default();
     let mut fleets_state = FleetsState::default();
     let mut mfg_panel_state = ManufacturingPanelState::default();
     let mut missions_panel_state = MissionsPanelState::default();
+    #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let mut enc_state = EncyclopediaState::new();
     let mut research_panel_state = ResearchPanelState::default();
     let mut jedi_panel_state = JediPanelState::default();
@@ -978,15 +1432,37 @@ async fn main() {
     let mut mod_manager_state = rebellion_render::ModManagerState::default();
     #[cfg(debug_assertions)]
     let mut command_palette_state = rebellion_render::CommandPaletteState::new();
-    enc_state.set_edata_path(configured_edata_path(&gdata_path));
-    enc_state.set_asset_profile(asset_render_profile);
-    // HD upscaled PNGs live as a sibling of the base data directory.
-    let hd_path = gdata_path
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join("hd")
-        .join("EData");
-    enc_state.set_hd_path(hd_path);
+    #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+    {
+        enc_state.set_edata_path(configured_edata_path(&gdata_path));
+        enc_state.set_asset_profile(asset_render_profile);
+        // The legacy EData path is retained only by the browser inspection
+        // fixture. Production caller routes stay gated through E32.
+        let hd_path = gdata_path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join("hd")
+            .join("EData");
+        enc_state.set_hd_path(hd_path);
+    }
+
+    if let Some(routes) = encyclopedia_routes.as_mut() {
+        #[cfg(feature = "interface-test-fixtures")]
+        let rebind = match candidate_route_fixture.as_mut() {
+            Some(fixture) => fixture.rebind(
+                routes,
+                &world,
+                encyclopedia_viewer(player_faction),
+                encyclopedia_routes::CandidateRebindReason::Startup,
+            ),
+            None => routes.rebind_world(&world, encyclopedia_viewer(player_faction), None),
+        };
+        #[cfg(not(feature = "interface-test-fixtures"))]
+        let rebind = routes.rebind_world(&world, encyclopedia_viewer(player_faction), None);
+        if let Err(error) = rebind {
+            log_encyclopedia_route_error("startup", &error);
+        }
+    }
 
     // Panel visibility (mutually exclusive left panels)
     let mut show_officers = false;
@@ -1012,10 +1488,36 @@ async fn main() {
 
     // ── Cockpit chrome ───────────────────────────────────────────────────────
     let mut cockpit_state = CockpitState::new(CockpitFaction::Alliance);
+    #[cfg(feature = "interface-test-fixtures")]
+    if let Some(fixture) = candidate_route_fixture.as_ref() {
+        cockpit_state.faction = match fixture.viewer() {
+            rebellion_data::encyclopedia::ViewerFaction::Alliance => CockpitFaction::Alliance,
+            rebellion_data::encyclopedia::ViewerFaction::Empire => CockpitFaction::Empire,
+        };
+    }
     let mut game_speed_ui = GameSpeedUiState::default();
     let mut sector_window_state = SectorWindowState::default();
     let mut system_window_state = SystemWindowState::default();
+    #[cfg(feature = "interface-test-fixtures")]
+    let mut candidate_context_caller_window = None;
     let mut bmp_cache = BmpCache::new();
+    #[cfg(feature = "interface-test-fixtures")]
+    let mut candidate_route_surface = {
+        let mut surface = EncyclopediaSurfaceState::default();
+        surface.set_source_labels(EncyclopediaSurfaceLabels {
+            index_header: Some(std::sync::Arc::from("Synthetic candidate route index")),
+            index_static: Some(std::sync::Arc::from(
+                "Synthetic source-fact evidence; not an original mapping",
+            )),
+        });
+        surface
+    };
+    #[cfg(feature = "interface-test-fixtures")]
+    let mut candidate_route_textures: Option<
+        EncyclopediaTextureCache<EguiEncyclopediaTextureBackend>,
+    > = None;
+    #[cfg(feature = "interface-test-fixtures")]
+    let mut candidate_caller_focus = encyclopedia_routes::EncyclopediaCallerFocusHandoff::default();
     {
         // gdata_path is data/base; staged UI BMPs live at data/base/ui/
         let ui_path = gdata_path.join("ui");
@@ -1156,6 +1658,47 @@ async fn main() {
         };
     }
 
+    #[cfg(feature = "interface-test-fixtures")]
+    if let Some(fixture) = candidate_route_fixture.as_ref() {
+        cutscene_player = None;
+        audio_vol.muted = true;
+        audio_vol.music_muted = true;
+        audio_vol.dirty = true;
+        game_mode = GameMode::Galaxy;
+        if fixture.mode() == encyclopedia_routes::CandidateFixtureMode::Context {
+            if let Some(routes) = encyclopedia_routes.as_mut() {
+                match fixture.open_requested(routes, &world) {
+                    Ok(()) => {
+                        candidate_context_caller_window = open_candidate_context_caller_window(
+                            fixture,
+                            routes,
+                            &world,
+                            cockpit_state.faction,
+                            cockpit_state.layout(),
+                            &mut system_window_state,
+                        );
+                    }
+                    Err(error) => {
+                        let evidence = candidate_fixture_evidence(
+                            &world,
+                            &sim_rng,
+                            &system_window_state,
+                            candidate_context_caller_window,
+                        );
+                        fixture.emit_status(
+                            "candidate_failed",
+                            routes,
+                            None,
+                            Some(&error),
+                            &evidence,
+                        );
+                        log_encyclopedia_route_error("candidate_context", &error);
+                    }
+                }
+            }
+        }
+    }
+
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let interface_fixture_request = interface_test_fixture::requested();
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
@@ -1211,11 +1754,20 @@ async fn main() {
     let mut interface_fixture_frames = 0_u32;
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let mut interface_fixture_emitted = tactical_fixture_failed;
+    #[cfg(feature = "interface-test-fixtures")]
+    let candidate_fixture_active = candidate_route_fixture.is_some();
+    #[cfg(not(feature = "interface-test-fixtures"))]
+    let candidate_fixture_active = false;
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
-    let interface_fixture_active =
-        interface_fixture_request.is_some() || tactical_fixture_request.is_some();
+    let interface_fixture_active = interface_fixture_request.is_some()
+        || tactical_fixture_request.is_some()
+        || candidate_fixture_active;
     #[cfg(not(all(target_arch = "wasm32", feature = "interface-test-fixtures")))]
-    let interface_fixture_active = false;
+    let interface_fixture_active = candidate_fixture_active;
+    #[cfg(feature = "interface-test-fixtures")]
+    let mut candidate_fixture_frames = 0_u32;
+    #[cfg(feature = "interface-test-fixtures")]
+    let mut candidate_fixture_ready_emitted = false;
 
     // ── Apply Star Wars theme ────────────────────────────────────────────
     // Must happen inside the macroquad async context, after first frame init.
@@ -1252,6 +1804,14 @@ async fn main() {
         // ── Event screen overlay timer ────────────────────────────────────
         update_event_screen(&mut event_screen_state, dt);
 
+        // Encyclopedia navigation is reduced inside the egui pass below. Its
+        // open state therefore has to claim keyboard input before this earlier
+        // Macroquad shortcut pass can act on the same physical key press.
+        let encyclopedia_route_open = encyclopedia_routes
+            .as_ref()
+            .is_some_and(encyclopedia_routes::EncyclopediaRouteController::is_open);
+        let application_shortcuts = application_shortcut_priority(encyclopedia_route_open);
+
         // ── Global keyboard shortcuts ───────────────────────────────────────
         if matches!(game_mode, GameMode::Cutscene { .. }) {
             if is_key_pressed(KeyCode::Escape) || is_key_pressed(KeyCode::Space) {
@@ -1259,7 +1819,10 @@ async fn main() {
                     player.stop();
                 }
             }
-        } else if is_key_pressed(KeyCode::Escape) && !event_screen_state.is_active() {
+        } else if application_shortcuts.global_escape_requested(
+            is_key_pressed(KeyCode::Escape),
+            event_screen_state.is_active(),
+        ) {
             if let GameMode::GameOptions { origin } = game_mode.clone() {
                 if game_options_state.suspended {
                     save_load_panel_state.close();
@@ -1306,7 +1869,11 @@ async fn main() {
             }
         }
         // ── Galaxy-mode keyboard shortcuts (blocked during event screen) ────
-        if game_mode == GameMode::Galaxy && !event_screen_state.is_active() && !show_save_load {
+        if application_shortcuts.galaxy_shortcuts_enabled(
+            game_mode == GameMode::Galaxy,
+            event_screen_state.is_active(),
+            show_save_load,
+        ) {
             if is_key_pressed(KeyCode::R) {
                 map_state = GalaxyMapState::default();
             }
@@ -2313,9 +2880,8 @@ Some(RailAudience::side(*faction_is_alliance)),
             let uprising_tick = tick_events.last().map_or(0, |event| event.tick);
             let uprising_budget =
                 UprisingSystem::roll_budget(&uprising_state, &world, uprising_tick);
-            let uprising_rolls: Vec<f64> = (0..uprising_budget)
-                .map(|_| sim_rng.gen::<f64>())
-                .collect();
+            let uprising_rolls: Vec<f64> =
+                (0..uprising_budget).map(|_| sim_rng.gen::<f64>()).collect();
             let uprising_events = UprisingSystem::advance(
                 &mut uprising_state,
                 &world,
@@ -3000,12 +3566,42 @@ Some(RailAudience::side(*faction_is_alliance)),
                                                 error
                                             );
                                         }
+                                        if let Some(routes) = encyclopedia_routes.as_mut() {
+                                            routes.observe_content_generation(
+                                                update.content.generation,
+                                            );
+                                        }
                                         log_encyclopedia_refresh("new_campaign", &update.content);
                                         world = w;
                                     }
                                     #[cfg(target_arch = "wasm32")]
                                     {
                                         world = w;
+                                    }
+                                    if let Some(routes) = encyclopedia_routes.as_mut() {
+                                        #[cfg(feature = "interface-test-fixtures")]
+                                        let rebind = match candidate_route_fixture.as_mut() {
+                                            Some(fixture) => fixture.rebind(
+                                                    routes,
+                                                    &world,
+                                                    encyclopedia_viewer(player_faction),
+                                                    encyclopedia_routes::CandidateRebindReason::NewCampaign,
+                                                ),
+                                            None => routes.rebind_world(
+                                                &world,
+                                                encyclopedia_viewer(player_faction),
+                                                None,
+                                            ),
+                                        };
+                                        #[cfg(not(feature = "interface-test-fixtures"))]
+                                        let rebind = routes.rebind_world(
+                                            &world,
+                                            encyclopedia_viewer(player_faction),
+                                            None,
+                                        );
+                                        if let Err(error) = rebind {
+                                            log_encyclopedia_route_error("new_campaign", &error);
+                                        }
                                     }
                                     campaign_generation += 1;
                                     sim_rng = Xoshiro256PlusPlus::seed_from_u64(
@@ -3047,16 +3643,23 @@ Some(RailAudience::side(*faction_is_alliance)),
                                     research_panel_state = ResearchPanelState::default();
                                     jedi_panel_state = JediPanelState::default();
                                     bombardment_panel_state = BombardmentPanelState::default();
-                                    enc_state = EncyclopediaState::new();
-                                    enc_state.set_edata_path(configured_edata_path(&gdata_path));
-                                    enc_state.set_asset_profile(asset_render_profile);
-                                    enc_state.set_hd_path(
-                                        gdata_path
-                                            .parent()
-                                            .unwrap_or(Path::new("."))
-                                            .join("hd")
-                                            .join("EData"),
-                                    );
+                                    #[cfg(all(
+                                        target_arch = "wasm32",
+                                        feature = "interface-test-fixtures"
+                                    ))]
+                                    {
+                                        enc_state = EncyclopediaState::new();
+                                        enc_state
+                                            .set_edata_path(configured_edata_path(&gdata_path));
+                                        enc_state.set_asset_profile(asset_render_profile);
+                                        enc_state.set_hd_path(
+                                            gdata_path
+                                                .parent()
+                                                .unwrap_or(Path::new("."))
+                                                .join("hd")
+                                                .join("EData"),
+                                        );
+                                    }
                                     show_officers = false;
                                     show_fleets = false;
                                     show_manufacturing = false;
@@ -3234,11 +3837,15 @@ Some(RailAudience::side(*faction_is_alliance)),
                     });
                 #[cfg(not(all(target_arch = "wasm32", feature = "interface-test-fixtures")))]
                 let original_modal_fixture_open = false;
+                #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+                let encyclopedia_modal_open = encyclopedia_route_open || enc_state.open;
+                #[cfg(not(all(target_arch = "wasm32", feature = "interface-test-fixtures")))]
+                let encyclopedia_modal_open = encyclopedia_route_open;
                 map_state.pointer_blocked = sector_window_state
                     .contains_screen_point(cockpit_layout, pointer)
                     || system_window_state.contains_screen_point(cockpit_layout, pointer)
                     || cockpit_state.gid_ui.menu_open
-                    || enc_state.open
+                    || encyclopedia_modal_open
                     || original_modal_fixture_open
                     || game_speed_ui.menu_anchor.is_some()
                     || pause_alert_contains_screen_point(&clock, cockpit_layout, pointer)
@@ -3284,9 +3891,20 @@ Some(RailAudience::side(*faction_is_alliance)),
                     msg_log.unread_mask(player_faction == MissionFaction::Alliance);
 
                 // 4. All egui panels in a single ui() + draw() pass
+                #[cfg(feature = "interface-test-fixtures")]
+                let candidate_frame_evidence = candidate_route_fixture.as_ref().map(|_| {
+                    candidate_fixture_evidence(
+                        &world,
+                        &sim_rng,
+                        &system_window_state,
+                        candidate_context_caller_window,
+                    )
+                });
                 egui_macroquad::ui(|ctx| {
-                    let strategic_input_enabled =
-                        !event_screen_state.is_active() && !original_modal_fixture_open;
+                    let strategic_input_enabled = application_shortcuts.strategic_input_enabled(
+                        event_screen_state.is_active(),
+                        original_modal_fixture_open,
+                    );
                     // Register the cockpit background before panels so the
                     // opaque chrome never covers their content or artwork.
                     draw_cockpit_background(ctx, &cockpit_state, &mut bmp_cache);
@@ -3306,6 +3924,72 @@ Some(RailAudience::side(*faction_is_alliance)),
                         #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
                         if let Some(request) = interface_fixture_request {
                             interface_test_fixture::emit_selected(request, cockpit_state.gid_mode);
+                        }
+                    }
+
+                    #[cfg(feature = "interface-test-fixtures")]
+                    if let (Some(fixture), Some(routes)) = (
+                        candidate_route_fixture.as_ref(),
+                        encyclopedia_routes.as_mut(),
+                    ) {
+                        let caller = match fixture.mode() {
+                            encyclopedia_routes::CandidateFixtureMode::Command => {
+                                Some(encyclopedia_routes::EncyclopediaFocusToken::CockpitCommand(
+                                    encyclopedia_routes::ENCYCLOPEDIA_COMMAND_ID,
+                                ))
+                            }
+                            encyclopedia_routes::CandidateFixtureMode::Context => routes
+                                .active_caller_focus()
+                                .or_else(|| candidate_caller_focus.caller())
+                                .cloned(),
+                        };
+                        if let Some(caller) = caller {
+                            let caller_frame = encyclopedia_routes::draw_candidate_caller(
+                                ctx,
+                                &cockpit_state,
+                                cockpit_layout,
+                                &caller,
+                                &mut candidate_caller_focus,
+                            );
+                            if caller_frame.restored_now {
+                                fixture.emit_status(
+                                    "candidate_focus_restored",
+                                    routes,
+                                    candidate_caller_focus.focused_caller(ctx),
+                                    None,
+                                    candidate_frame_evidence
+                                        .as_ref()
+                                        .expect("active candidate has live evidence"),
+                                );
+                            }
+                            if caller_frame.activated && !routes.is_open() {
+                                match fixture.open_requested(routes, &world) {
+                                    Ok(()) => fixture.emit_status(
+                                        "candidate_reopened_from_caller",
+                                        routes,
+                                        None,
+                                        None,
+                                        candidate_frame_evidence
+                                            .as_ref()
+                                            .expect("active candidate has live evidence"),
+                                    ),
+                                    Err(error) => {
+                                        fixture.emit_status(
+                                            "candidate_failed",
+                                            routes,
+                                            None,
+                                            Some(&error),
+                                            candidate_frame_evidence
+                                                .as_ref()
+                                                .expect("active candidate has live evidence"),
+                                        );
+                                        log_encyclopedia_route_error(
+                                            "candidate_caller_reopen",
+                                            &error,
+                                        );
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -3448,10 +4132,16 @@ Some(RailAudience::side(*faction_is_alliance)),
                         }
                     }
 
-                    // Encyclopedia (floating window)
-                    if let Some(sys_key) =
-                        draw_encyclopedia(ctx, &world, &mut enc_state, &mut bmp_cache)
-                    {
+                    // The legacy approximate encyclopedia remains available to
+                    // the isolated browser fixture only. Production routes are
+                    // deliberately closed pending E32.
+                    #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+                    if let Some(sys_key) = rebellion_render::draw_encyclopedia(
+                        ctx,
+                        &world,
+                        &mut enc_state,
+                        &mut bmp_cache,
+                    ) {
                         panel_actions.push(PanelAction::FocusFleetSystem(sys_key));
                     }
                     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
@@ -3486,6 +4176,73 @@ Some(RailAudience::side(*faction_is_alliance)),
                         ) {
                             if (0x6f..=0x75).contains(&command) {
                                 enc_state.original_category_command = command;
+                            }
+                        }
+                    }
+
+                    #[cfg(feature = "interface-test-fixtures")]
+                    if let (Some(fixture), Some(routes)) = (
+                        candidate_route_fixture.as_mut(),
+                        encyclopedia_routes.as_mut(),
+                    ) {
+                        if routes.is_open() {
+                            match fixture.build_view(routes) {
+                                Ok(view) => {
+                                    let textures =
+                                        candidate_route_textures.get_or_insert_with(|| {
+                                            EncyclopediaTextureCache::new(
+                                                EguiEncyclopediaTextureBackend::new(ctx),
+                                            )
+                                        });
+                                    let frame = draw_encyclopedia_surface(
+                                        ctx,
+                                        &view,
+                                        routes.navigation_mut(),
+                                        &mut candidate_route_surface,
+                                        &mut bmp_cache,
+                                        textures,
+                                        cockpit_state.faction,
+                                        egui_macroquad::egui::pos2(85.0, 55.0),
+                                        1.0,
+                                    );
+                                    for action in frame.actions {
+                                        let result = fixture.apply_action(routes, &view, action);
+                                        let status = match result.outcome {
+                                            rebellion_render::NavigationOutcome::ReturnForwarded => {
+                                                "candidate_returned"
+                                            }
+                                            rebellion_render::NavigationOutcome::CloseRequested => {
+                                                "candidate_closed"
+                                            }
+                                            _ => "candidate_action",
+                                        };
+                                        queue_candidate_caller_focus(
+                                            &mut candidate_caller_focus,
+                                            result.restored_focus.as_ref(),
+                                        );
+                                        fixture.emit_status(
+                                            status,
+                                            routes,
+                                            None,
+                                            None,
+                                            candidate_frame_evidence
+                                                .as_ref()
+                                                .expect("active candidate has live evidence"),
+                                        );
+                                    }
+                                }
+                                Err(error) => {
+                                    fixture.emit_status(
+                                        "candidate_failed",
+                                        routes,
+                                        None,
+                                        Some(&error),
+                                        candidate_frame_evidence
+                                            .as_ref()
+                                            .expect("active candidate has live evidence"),
+                                    );
+                                    log_encyclopedia_route_error("candidate_presenter", &error);
+                                }
                             }
                         }
                     }
@@ -3611,7 +4368,8 @@ Some(RailAudience::side(*faction_is_alliance)),
                     let event_screen_was_active = event_screen_state.is_active();
                     draw_event_screen(ctx, &mut event_screen_state, &mut bmp_cache);
 
-                    let cockpit_command = (!original_modal_fixture_open
+                    let cockpit_command = (strategic_input_enabled
+                        && !original_modal_fixture_open
                         && !event_screen_was_active
                         && !event_screen_state.is_active())
                     .then(|| handle_cockpit_egui_input(ctx, &mut cockpit_state, &mut bmp_cache));
@@ -3622,7 +4380,9 @@ Some(RailAudience::side(*faction_is_alliance)),
                             CockpitButton::PersonnelFinder => (0x12f, "personnel_finder"),
                             CockpitButton::TroopFinder => (0x130, "troop_finder"),
                             CockpitButton::GameOptions => (0x133, "game_options"),
-                            CockpitButton::Encyclopedia => (0x131, "encyclopedia"),
+                            CockpitButton::Encyclopedia => {
+                                (encyclopedia_routes::ENCYCLOPEDIA_COMMAND_ID, "encyclopedia")
+                            }
                             CockpitButton::GalacticInformationDisplay => {
                                 cockpit_state.gid_ui.menu_open = !cockpit_state.gid_ui.menu_open;
                                 cockpit_state.gid_ui.category = None;
@@ -3650,6 +4410,64 @@ Some(RailAudience::side(*faction_is_alliance)),
                                 "[interface] command=0x{:x} destination={} status=opened_original",
                                 command,
                                 destination
+                            );
+                        } else if btn == CockpitButton::Encyclopedia {
+                            #[cfg(feature = "interface-test-fixtures")]
+                            let candidate_route = candidate_route_fixture.is_some();
+                            #[cfg(not(feature = "interface-test-fixtures"))]
+                            let candidate_route = false;
+                            let result = encyclopedia_routes
+                                .as_mut()
+                                .ok_or_else(|| {
+                                    rebellion_data::encyclopedia::EncyclopediaError::for_session(
+                                        "encyclopedia_unavailable",
+                                        "$.route.session",
+                                        "no validated encyclopedia session is available",
+                                    )
+                                })
+                                .and_then(|routes| {
+                                    let request =
+                                        encyclopedia_routes::request_for_cockpit_button(btn)
+                                            .expect(
+                                                "the matched Encyclopedia control has one route",
+                                            );
+                                    if candidate_route {
+                                        routes.open_candidate(request)
+                                    } else {
+                                        routes.open_production(request)
+                                    }
+                                });
+                            match result {
+                                Ok(()) => {
+                                    #[cfg(feature = "interface-test-fixtures")]
+                                    if let (Some(fixture), Some(routes)) = (
+                                        candidate_route_fixture.as_ref(),
+                                        encyclopedia_routes.as_ref(),
+                                    ) {
+                                        fixture.emit_status(
+                                            "candidate_opened",
+                                            routes,
+                                            None,
+                                            None,
+                                            candidate_frame_evidence
+                                                .as_ref()
+                                                .expect("active candidate has live evidence"),
+                                        );
+                                    }
+                                }
+                                Err(error) => {
+                                    log_encyclopedia_route_error("cockpit_command", &error);
+                                }
+                            }
+                            macroquad::logging::info!(
+                                "[interface] command=0x{:x} destination={} status={}",
+                                command,
+                                destination,
+                                if candidate_route {
+                                    "opened_candidate"
+                                } else {
+                                    "gated_until_e32"
+                                }
                             );
                         } else {
                             macroquad::logging::info!(
@@ -4215,35 +5033,40 @@ Some(RailAudience::side(*faction_is_alliance)),
                                 meta.game_tick,
                                 meta.state_fingerprint
                             );
-                            let mut campaign = LiveCampaign {
-                                world: &mut world,
-                                clock: &mut clock,
-                                manufacturing: &mut mfg_state,
-                                missions: &mut mission_state,
-                                events: &mut event_state,
-                                ai: &mut ai_state,
-                                movement: &mut movement_state,
-                                fog_alliance: &mut fog_alliance_state,
-                                fog_empire: &mut fog_empire_state,
-                                player_faction: &mut player_faction,
-                                blockade: &mut blockade_state,
-                                uprising: &mut uprising_state,
-                                death_star: &mut death_star_state,
-                                research: &mut research_state,
-                                jedi: &mut jedi_state,
-                                victory: &mut victory_state,
-                                betrayal: &mut betrayal_state,
-                                economy: &mut economy_state,
-                                sim_rng: &mut sim_rng,
-                                ai2: &mut secondary_ai_state,
-                                repair: &mut repair_state,
-                                troop_transport: &mut troop_transport_state,
-                                deliveries: &mut delivery_state,
-                                combat_cooldowns: &mut combat_cooldowns,
-                                game_config: &mut game_config,
-                                campaign_config: &mut campaign_config,
+                            let restored_fingerprint = {
+                                let mut campaign = LiveCampaign {
+                                    world: &mut world,
+                                    clock: &mut clock,
+                                    manufacturing: &mut mfg_state,
+                                    missions: &mut mission_state,
+                                    events: &mut event_state,
+                                    ai: &mut ai_state,
+                                    movement: &mut movement_state,
+                                    fog_alliance: &mut fog_alliance_state,
+                                    fog_empire: &mut fog_empire_state,
+                                    player_faction: &mut player_faction,
+                                    blockade: &mut blockade_state,
+                                    uprising: &mut uprising_state,
+                                    death_star: &mut death_star_state,
+                                    research: &mut research_state,
+                                    jedi: &mut jedi_state,
+                                    victory: &mut victory_state,
+                                    betrayal: &mut betrayal_state,
+                                    economy: &mut economy_state,
+                                    sim_rng: &mut sim_rng,
+                                    ai2: &mut secondary_ai_state,
+                                    repair: &mut repair_state,
+                                    troop_transport: &mut troop_transport_state,
+                                    deliveries: &mut delivery_state,
+                                    combat_cooldowns: &mut combat_cooldowns,
+                                    game_config: &mut game_config,
+                                    campaign_config: &mut campaign_config,
+                                };
+                                campaign.restore(state);
+                                rebellion_data::save::compute_state_fingerprint(
+                                    &campaign.snapshot(),
+                                )
                             };
-                            campaign.restore(state);
                             #[cfg(not(target_arch = "wasm32"))]
                             {
                                 let ordered = mod_runtime.enabled_sorted();
@@ -4258,12 +5081,36 @@ Some(RailAudience::side(*faction_is_alliance)),
                                     |ordered| encyclopedia_lifecycle.refresh_resolved(ordered),
                                 );
                                 debug_assert!(update.world.is_none());
+                                if let Some(routes) = encyclopedia_routes.as_mut() {
+                                    routes.observe_content_generation(update.content.generation);
+                                }
                                 log_encyclopedia_refresh("saved_world_load", &update.content);
                             }
-                            let restored_fingerprint =
-                                rebellion_data::save::compute_state_fingerprint(
-                                    &campaign.snapshot(),
+                            if let Some(routes) = encyclopedia_routes.as_mut() {
+                                #[cfg(feature = "interface-test-fixtures")]
+                                let rebind = match candidate_route_fixture.as_mut() {
+                                    Some(fixture) => fixture.rebind(
+                                        routes,
+                                        &world,
+                                        encyclopedia_viewer(player_faction),
+                                        encyclopedia_routes::CandidateRebindReason::SavedWorldLoad,
+                                    ),
+                                    None => routes.rebind_world(
+                                        &world,
+                                        encyclopedia_viewer(player_faction),
+                                        None,
+                                    ),
+                                };
+                                #[cfg(not(feature = "interface-test-fixtures"))]
+                                let rebind = routes.rebind_world(
+                                    &world,
+                                    encyclopedia_viewer(player_faction),
+                                    None,
                                 );
+                                if let Err(error) = rebind {
+                                    log_encyclopedia_route_error("saved_world_load", &error);
+                                }
+                            }
                             game_speed_ui = GameSpeedUiState::default();
                             macroquad::logging::info!(
                                 "[campaign] loaded configuration={}",
@@ -4287,16 +5134,22 @@ Some(RailAudience::side(*faction_is_alliance)),
                             research_panel_state = ResearchPanelState::default();
                             jedi_panel_state = JediPanelState::default();
                             bombardment_panel_state = BombardmentPanelState::default();
-                            enc_state = EncyclopediaState::new();
-                            enc_state.set_edata_path(configured_edata_path(&gdata_path));
-                            enc_state.set_asset_profile(asset_render_profile);
-                            enc_state.set_hd_path(
-                                gdata_path
-                                    .parent()
-                                    .unwrap_or(Path::new("."))
-                                    .join("hd")
-                                    .join("EData"),
-                            );
+                            #[cfg(all(
+                                target_arch = "wasm32",
+                                feature = "interface-test-fixtures"
+                            ))]
+                            {
+                                enc_state = EncyclopediaState::new();
+                                enc_state.set_edata_path(configured_edata_path(&gdata_path));
+                                enc_state.set_asset_profile(asset_render_profile);
+                                enc_state.set_hd_path(
+                                    gdata_path
+                                        .parent()
+                                        .unwrap_or(Path::new("."))
+                                        .join("hd")
+                                        .join("EData"),
+                                );
+                            }
                             show_officers = false;
                             show_fleets = false;
                             show_manufacturing = false;
@@ -4407,6 +5260,9 @@ Some(RailAudience::side(*faction_is_alliance)),
                         &mut mod_runtime,
                         #[cfg(not(target_arch = "wasm32"))]
                         &mut encyclopedia_lifecycle,
+                        &mut encyclopedia_routes,
+                        #[cfg(feature = "interface-test-fixtures")]
+                        &mut candidate_route_fixture,
                         #[cfg(not(target_arch = "wasm32"))]
                         &mut audio_engine,
                         #[cfg(not(target_arch = "wasm32"))]
@@ -4589,6 +5445,25 @@ Some(RailAudience::side(*faction_is_alliance)),
                 }
             }
         }
+        #[cfg(feature = "interface-test-fixtures")]
+        if game_mode == GameMode::Galaxy && !candidate_fixture_ready_emitted {
+            if let (Some(fixture), Some(routes)) = (
+                candidate_route_fixture.as_ref(),
+                encyclopedia_routes.as_ref(),
+            ) {
+                candidate_fixture_frames += 1;
+                if candidate_fixture_frames >= 3 {
+                    let evidence = candidate_fixture_evidence(
+                        &world,
+                        &sim_rng,
+                        &system_window_state,
+                        candidate_context_caller_window,
+                    );
+                    fixture.emit_status("candidate_ready", routes, None, None, &evidence);
+                    candidate_fixture_ready_emitted = true;
+                }
+            }
+        }
 
         next_frame().await;
     }
@@ -4635,6 +5510,10 @@ fn apply_panel_action(
     mod_runtime: &mut rebellion_data::mods::ModRuntime,
     #[cfg(not(target_arch = "wasm32"))]
     encyclopedia_lifecycle: &mut encyclopedia_lifecycle::EncyclopediaLifecycle,
+    _encyclopedia_routes: &mut Option<encyclopedia_routes::EncyclopediaRouteController>,
+    #[cfg(feature = "interface-test-fixtures")] candidate_route_fixture: &mut Option<
+        encyclopedia_routes::CandidateRouteFixture,
+    >,
     #[cfg(not(target_arch = "wasm32"))] audio_engine: &mut audio::AudioEngine,
     #[cfg(not(target_arch = "wasm32"))] audio_vol: &AudioVolumeState,
     #[cfg(not(target_arch = "wasm32"))] _sounds_dir: &Path,
@@ -4933,6 +5812,9 @@ fn apply_panel_action(
                     |ordered| encyclopedia_lifecycle.refresh_resolved(ordered),
                 );
                 debug_assert!(update.world.is_none());
+                if let Some(routes) = _encyclopedia_routes.as_mut() {
+                    routes.observe_content_generation(update.content.generation);
+                }
                 log_encyclopedia_refresh("toggle", &update.content);
             }
             msg_log.push(GameMessage::new(
@@ -4954,6 +5836,27 @@ fn apply_panel_action(
                 );
                 for error in update.world.unwrap_or_default() {
                     eprintln!("Mod reload error: {error:?}");
+                }
+                if let Some(routes) = _encyclopedia_routes.as_mut() {
+                    routes.observe_content_generation(update.content.generation);
+                    #[cfg(feature = "interface-test-fixtures")]
+                    let rebind = match candidate_route_fixture.as_mut() {
+                        Some(fixture) => fixture.rebind(
+                            routes,
+                            world,
+                            encyclopedia_viewer(*player_faction),
+                            encyclopedia_routes::CandidateRebindReason::ManualReload,
+                        ),
+                        None => {
+                            routes.rebind_world(world, encyclopedia_viewer(*player_faction), None)
+                        }
+                    };
+                    #[cfg(not(feature = "interface-test-fixtures"))]
+                    let rebind =
+                        routes.rebind_world(world, encyclopedia_viewer(*player_faction), None);
+                    if let Err(error) = rebind {
+                        log_encyclopedia_route_error("manual_reload", &error);
+                    }
                 }
                 log_encyclopedia_refresh("manual_reload", &update.content);
             }
@@ -5099,9 +6002,8 @@ fn apply_panel_action(
                     ));
                 } else if let Some(fleet) = world.fleets.get(fleet_key) {
                     let origin = fleet.location;
-                    let ticks = rebellion_core::movement::fleet_transit_ticks(
-                        fleet, world, origin, system,
-                    );
+                    let ticks =
+                        rebellion_core::movement::fleet_transit_ticks(fleet, world, origin, system);
                     if origin != system && ticks.is_none() {
                         msg_log.push(GameMessage::new(
                             clock.tick,

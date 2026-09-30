@@ -210,6 +210,16 @@ impl SystemWindowState {
         self.windows.len()
     }
 
+    /// Whether the modeless window for this exact current-world system is open.
+    ///
+    /// Caller-route acceptance uses this read-only identity query instead of
+    /// treating a window count or a synthetic label as evidence that the real
+    /// application window survived an Encyclopedia transition.
+    #[must_use]
+    pub fn contains_system(&self, system: SystemKey) -> bool {
+        self.windows.iter().any(|window| window.system == system)
+    }
+
     #[must_use]
     pub fn rail_count(&self) -> usize {
         self.rail.len()

@@ -84,6 +84,22 @@ pub enum CockpitButton {
     GalacticInformationDisplay,
 }
 
+impl CockpitButton {
+    /// Original command identifier dispatched by this recovered control.
+    #[must_use]
+    pub const fn command_id(self) -> u16 {
+        match self {
+            Self::SystemFinder => 0x12d,
+            Self::FleetFinder => 0x12e,
+            Self::PersonnelFinder => 0x12f,
+            Self::TroopFinder => 0x130,
+            Self::Encyclopedia => 0x131,
+            Self::GalacticInformationDisplay => 0x132,
+            Self::GameOptions => 0x133,
+        }
+    }
+}
+
 /// Strategic map overlay selected through the original GID menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GidMode {
@@ -1668,6 +1684,7 @@ mod tests {
                 .find(|control| control.command_id == 0x131)
                 .expect("both command centers have an Encyclopedia control");
             assert_eq!(control.button, CockpitButton::Encyclopedia);
+            assert_eq!(control.button.command_id(), control.command_id);
         }
     }
 
