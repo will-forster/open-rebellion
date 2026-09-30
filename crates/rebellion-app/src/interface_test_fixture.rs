@@ -20,7 +20,7 @@ use crate::GameMode;
 
 const FIXTURE_ABSENT: u32 = 0;
 #[cfg(test)]
-const SCENARIO_COUNT: u8 = 41;
+const SCENARIO_COUNT: u8 = 42;
 
 extern "C" {
     fn open_rebellion_interface_fixture_code() -> u32;
@@ -32,6 +32,12 @@ pub struct FixtureRequest {
     pub scenario: Scenario,
     pub faction: CockpitFaction,
     pub code: u32,
+}
+
+impl FixtureRequest {
+    pub fn is_packed_encyclopedia(self) -> bool {
+        self.scenario == Scenario::PackedEncyclopedia
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +84,7 @@ pub enum Scenario {
     EncyclopediaArtwork = 38,
     MessageIndexShell = 39,
     EncyclopediaIndexShell = 40,
+    PackedEncyclopedia = 41,
 }
 
 impl Scenario {
@@ -124,6 +131,7 @@ impl Scenario {
             38 => Self::EncyclopediaArtwork,
             39 => Self::MessageIndexShell,
             40 => Self::EncyclopediaIndexShell,
+            41 => Self::PackedEncyclopedia,
             _ => return None,
         })
     }
@@ -157,7 +165,10 @@ impl Scenario {
 }
 
 pub fn requested() -> Option<FixtureRequest> {
-    let code = unsafe { open_rebellion_interface_fixture_code() };
+    decode_request(unsafe { open_rebellion_interface_fixture_code() })
+}
+
+pub(crate) fn decode_request(code: u32) -> Option<FixtureRequest> {
     if code == FIXTURE_ABSENT || code >> 16 != 0 {
         return None;
     }
@@ -172,6 +183,11 @@ pub fn requested() -> Option<FixtureRequest> {
         faction,
         code,
     })
+}
+
+pub fn emit_report(report: &impl Serialize) {
+    let bytes = serde_json::to_vec(report).expect("serialize interface fixture report");
+    unsafe { open_rebellion_interface_fixture_emit(bytes.as_ptr(), bytes.len()) };
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -487,6 +503,23 @@ mod tests {
             assert_eq!(Scenario::decode(value).unwrap() as u8, value);
         }
         assert!(Scenario::decode(SCENARIO_COUNT).is_none());
+    }
+
+    #[test]
+    fn packed_encyclopedia_request_is_a_distinct_feature_fixture() {
+        let request = decode_request(0x0129).expect("packed encyclopedia scenario");
+
+        assert_eq!(request.scenario, Scenario::PackedEncyclopedia);
+        assert_eq!(request.faction, CockpitFaction::Alliance);
+        assert!(request.is_packed_encyclopedia());
+        assert_eq!(
+            decode_request(0x0229).unwrap().faction,
+            CockpitFaction::Empire
+        );
+        assert!(!decode_request(0x0127).unwrap().is_packed_encyclopedia());
+        assert_eq!(decode_request(0x0000), None);
+        assert_eq!(decode_request(0x0329), None);
+        assert_eq!(decode_request(0x01_0129), None);
     }
 
     #[test]
