@@ -817,7 +817,7 @@ mod tests {
         let request = FixtureRequest {
             scenario: Scenario::PackedEncyclopedia,
             faction: CockpitFaction::Alliance,
-            code: 0x0129,
+            code: 0x012a,
         };
 
         let report = packed_fixture_report(
@@ -870,7 +870,7 @@ mod tests {
         let request = FixtureRequest {
             scenario: Scenario::PackedEncyclopedia,
             faction: CockpitFaction::Empire,
-            code: 0x0229,
+            code: 0x022a,
         };
 
         let report =
@@ -894,7 +894,7 @@ mod tests {
         let request = FixtureRequest {
             scenario: Scenario::PackedEncyclopedia,
             faction: CockpitFaction::Alliance,
-            code: 0x0129,
+            code: 0x012a,
         };
 
         let report = packed_fixture_report(request, &model, None, None, None, "not selected", None);
