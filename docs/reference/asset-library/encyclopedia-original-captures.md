@@ -283,6 +283,24 @@ It proves neither F6 causality nor report/article/close behavior. Lifecycle
 records retain supervisor `143`; launcher and guard exit/reap remain unknown,
 and incomplete launcher output is not reinterpreted.
 
+## Current P65 catalog versus historical E51 accounting
+
+The current P65 product catalog is authoritative for product membership: it
+contains 356 compound objects and 25 mission definitions, with category counts
+`356/200/38/14/25/10/69`. The historical E51 source-accounting snapshot
+contains 347 candidates and 15 mission rows, with category counts
+`347/200/38/14/15/10/69`, plus an aggregate-only Fleet membership. Those are
+two separately proven scopes, not interchangeable counts. The apparent total,
+mission, and Fleet delta is pending exact object-by-object and resource joins
+in E56; it must not be converted into invented resources or inferred aliases.
+
+E51's reviewed 347-of-347 effective-art result remains valid historical
+evidence for that checksum-pinned 347-row snapshot only. It does not establish
+art coverage for the current P65 356-object catalog. E56 must either close all
+356 exact art joins or identify a genuine uncovered member. The general
+null-art paint branch remains untested, while `EDATA.192` remains separately
+unbound and deferred under `orlocal-2kq`.
+
 ## Matrix result
 
 `Partial acquisition` means retained evidence exists but at least one original
@@ -294,8 +312,8 @@ accepted merely because screenshots exist.
 |---|---|---|
 | `ENC-UI-01` | Partial / Open | Alliance F7, post-gate `0x131`, duplicate-F7 visible-child evidence, and an ordinary live child command `0x19`/mode-1/current-null observation exist. R56 adds two equal bounded target-thread samples focused on the validated initial-index child. Missing: Alliance pre-gate command observation, runtime-selected resources, and instrumented duplicate-F7 child count. |
 | `ENC-UI-02` | Partial / Open | Empire F7, pre/post behavioral `0x131` sequence, and duplicate-F7 visible-child observation exist. Missing: the direct `FUN_004fcee0` gate value, runtime-selected resources, focus trace, and instrumented child identity/count; hotspot plus elapsed game time does not itself prove the gate value. |
-| `ENC-UI-03` | Partial / Open | Visible: all seven Alliance selected-category frames, labels, and visible list portions. Reviewed static inference: commands are ordered `0x6f..0x75`; the accepted profile candidate counts are 347/200/38/14/15/10/69 and comparator-equal ties preserve source insertion order. Missing runtime proof: complete admitted membership identities/order, empty/gap outcomes, selected resources, and focus. |
-| `ENC-UI-04` | Partial / Open | Visible: all seven Empire selected-category frames, labels, and visible list portions. Reviewed static inference: the same fixed command order, candidate counts, and tie rule. Missing runtime proof: complete admitted membership identities/order, empty/gap outcomes, selected resources, and focus. |
+| `ENC-UI-03` | Partial / Open | Visible: all seven Alliance selected-category frames, labels, and visible list portions. Current P65 product membership is `356/200/38/14/25/10/69`; historical E51 source accounting was `347/200/38/14/15/10/69` plus aggregate-only Fleet membership. Commands remain ordered `0x6f..0x75` and comparator-equal ties preserve source insertion order. E56 owns exact cross-scope joins. Missing runtime proof: complete admitted membership identities/order, empty/gap outcomes, selected resources, and focus. |
+| `ENC-UI-04` | Partial / Open | Visible: all seven Empire selected-category frames, labels, and visible list portions. The same fixed command order applies; current P65 and historical E51 membership counts remain separately scoped as above pending E56. Missing runtime proof: complete admitted membership identities/order, empty/gap outcomes, selected resources, and focus. |
 | `ENC-UI-05` | Partial / Open | Category and Close pointer/press/cancel/selected sequences on both sides plus selected Alliance endpoint controls exist. Missing: exhaustive mode/navigation/disabled states and cursor/strobe timing. |
 | `ENC-UI-06` | Partial / Open | Visible: single click, clean double-click, Return, selected-row pixels, and a same-run Ship PageDown/Return ending at canonical key `5963`, packed identity `0x14000002`, mode 2/category `0x71`. Reviewed static inference: `FUN_006083c0` emits `0x29b`, repeat-click `0x29d`, and double-click/Return `0x309`; `FUN_0045da70` conditionally maps `0x309` to command `0x67` only when selected/current rows are non-null. Missing runtime proof: delivered notification identity, internal Win32 focus, and pointer-click/double-click selected-resource joins. |
 | `ENC-UI-07` | Missing / Open | Visible subcases: r41 Fleet/Corellian Corvette, r47 Recruitment and Espionage mission rows, r53 Build Selection/Alliance Escort Carrier, and r58 Character Status/Leia each opened a matching article within their bounded visible evidence; their ordinary close outcomes are retained. Reviewed static evidence now names all five direct class-context owners: Fleet `FUN_00486fb0`, mission `FUN_0046c3c0`, Build Selection `0x00438800`, Character Status `0x004443a0`, and Message Index Research Report `0x00467f10`. R59 found no eligible Research Report in the complete visible Manufacturing list, so that fifth visible route remains blocked by a legitimate fixture. The r46 Personnel setup, r47 mission-definition row, and r58 resolved Character Status class are distinct identities; Alt+M, Alt+B, and F6 causality remain unisolated. Missing: live command/notification and selected-resource proof, canonical current keys, action-specific target-thread focus, and an eligible Research Report row/article/close sequence. |
@@ -308,7 +326,7 @@ accepted merely because screenshots exist.
 | `ENC-UI-14` | Partial / Open | Visible/runtime metadata: explicit Left at full and filtered first rows retained canonical key `5696` and packed identity `0x1c000002` in two equal snapshots; native frames were inspected. Reviewed static inference: a null `0x83` neighbor branches before the `this+0x148` write, retaining the current row, while control disablement is handled separately. Missing: internal Win32 focus and complete after-action desktop pairs because immediate full frames caught a Wine/Xvfb repaint gap. |
 | `ENC-UI-15` | Partial / Open | A middle topic with both directions enabled exists. Missing: connected disabled-row setup and skip-disabled identity trace. |
 | `ENC-UI-16` | Partial / Open | Visible/runtime metadata: explicit Right retained full last canonical key `6802` / packed identity `0x38000002` and filtered last key `5699` / packed identity `0x1c000002` in two equal snapshots; native frames were inspected. Reviewed static inference: a null `0x84` neighbor retains `this+0x148`, with disablement separate. Missing: internal Win32 focus and complete after-action desktop pairs because immediate full frames caught a Wine/Xvfb repaint gap. |
-| `ENC-UI-17` | Missing historical acquisition / Open; supported profile corpus-not-applicable | Reviewed corpus evidence: all 347 bound rows have effective art (331 direct/system selections plus 16 viewer-faction rows with two complete variants), covering 186 bound files; no legitimate no-art topic exists in this checksum-pinned profile. `EDATA.192` is unbound and publication-deferred, not a fixture. The general null-art paint branch remains untested, but no fictional original topic or E26 mod-null case is required for this profile. |
+| `ENC-UI-17` | Missing historical acquisition / Open; historical 347-row corpus-not-applicable, current P65 scope unresolved | Reviewed historical corpus evidence: all 347 bound rows have effective art (331 direct/system selections plus 16 viewer-faction rows with two complete variants), covering 186 bound files; no legitimate no-art topic exists in that checksum-pinned snapshot. This does not prove coverage for the current 356-object P65 catalog; E56 owns exact reconciliation. `EDATA.192` remains unbound/deferred, not a fixture. The general null-art paint branch remains untested; do not fabricate a topic or substitute E26 mod-null. |
 | `ENC-UI-18` | Partial / Open | Visible: r41 Chewbacca produced eight discrete Down and eight discrete Up actions; first visible motion and reversal occurred on the fourth respective press. Up 5-8 were interrupted by Message Index and are rejected as article-scroll evidence. A separate scrollbar down-arrow click moved immediately; the attempted pointer drag showed no motion and is retained as a no-motion observation, not drag proof. Reviewed static join: Chewbacca is `0x38000343`, title `10819`, body/art lookup `6723`, `EDATA.081`. Missing: explicit-newline, long-token, body Page-key, font/extent parity, internal focus, and a successful pointer-drag result. |
 | `ENC-UI-19` | Partial / Open | Visible: topic Tab, Return, Escape, Close; r41 context-opened article Close restored Fleet 1; r47 Close restored the Recruitment and Espionage mission dialogs with the Personnel window still present; r53 Close restored Build Selection on Alliance Escort Carrier over Chandrila Shipyards; r58 Close returned to Personnel with Leia selected and Character Status no longer visible, without proving hidden destruction order. Runtime metadata: r7 Escape observed command-`0x19` child absence in two equal snapshots. Reviewed static inference: command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. Missing: runtime observation of the `0xfb` command/notification and internal focus restoration. |
 | `ENC-UI-20` | Partial / Open | Left from middle and first categories exists. Missing: connected hidden-predecessor configuration and complete selected-command/list/focus trace. |
@@ -317,10 +335,10 @@ accepted merely because screenshots exist.
 Fifteen rows retain their historical partial-acquisition classification, six
 retain their historical missing-acquisition classification, and all 21
 acceptance rows remain open. The unchanged 15/6/0 rollup is an acquisition /
-acceptance count, not an applicability count: `ENC-UI-17` is now explicitly
-corpus-not-applicable for the supported profile, so no original no-art fixture
-is demanded even though its historical capture bucket remains `missing` and
-the general branch remains untested. In explicit checker terms this remains
+acceptance count, not an applicability count. `ENC-UI-17` preserves the
+historical 347-row corpus-not-applicable disposition, but current 356-object
+coverage is unresolved pending E56 and the general branch remains untested. In
+explicit checker terms this remains
 **15 partial / 6 missing / 0 accepted / 21 open**. E51 therefore remains blocked as a complete
 A0 package. The partial set is still an
 authoritative reference for its named actions and states; it must not be used
@@ -342,6 +360,7 @@ does not provide.
 
 | Gate | Exact missing criterion | Evidence held | Smallest bounded next work |
 |---|---|---|---|
+| Source | Current P65 membership and art closure | P65 proves 356 objects/25 missions; historical E51 proves 347 candidates/15 missions plus aggregate-only Fleet and 347/347 effective art | E56 exact object and resource joins; do not infer the delta or carry historical no-art coverage forward |
 | Runtime | Loader-selected title/body/art and delivered notifications for visible opens | Static selectors plus matching Wine-visible topics | One reviewed bounded observation on an already-visible route; do not infer from pixels |
 | Runtime | Action-specific target-thread focus | R56 initial-index focus only | Observe the exact action child for one contextual open/close under a separately reviewed lane |
 | Fixture | Direct entity context | Five class-context source owners; no controlled entity provenance | A source-backed owned entity fixture retaining entity, definition, current key, and focus |
@@ -449,13 +468,14 @@ absence claims:
 | `ENC-UI-09` | `FUN_0045d400 -> FUN_0045fd90`; a real family `0xa0..0xaf` entity through each `FUN_0040d760` / `FUN_004025b0` association branch, plus a non-special miss | Source branches were traced and retained owned save/setup roots searched. No source-backed selected entity/save for either branch or miss was found. |
 | `ENC-UI-10` | `FUN_0045d400/FUN_0045fd90`; real stale/unavailable context whose direct and fallback keys fail | No legitimate stale/unavailable contextual save or scenario was present in the retained prefix/capture workspace. |
 | `ENC-UI-13` | `FUN_00422620 -> FUN_004f6330/FUN_0053f090`; selected System view with type-`0xf2` ancestry paired with an admitted view | Both fresh-viewer bounded runs returned 100/100 iterator candidates with zero exclusions. A campaign/save that actually produces an excluded candidate remains required; zero in two runs is not absence proof. |
-| `ENC-UI-17` | `FUN_0045fa60 -> FUN_0045f970`, with `FUN_0045f090` omitting the blit for null art | **Supported-profile corpus-not-applicable.** Reviewed profile accounting proves 347/347 bound rows have an effective art selection (331 direct/system plus 16 complete viewer-faction pairs) across 186 bound files. `EDATA.192` is unbound/publication-deferred. The generic null-art branch stays untested, but no original-profile capture fixture is required and E26 mod-null is separate. |
+| `ENC-UI-17` | `FUN_0045fa60 -> FUN_0045f970`, with `FUN_0045f090` omitting the blit for null art | **Historical E51 347-row corpus-not-applicable; current P65 scope unresolved.** The 347/347 bound rows have an effective art selection (331 direct/system plus 16 complete viewer-faction pairs) across 186 bound files, but this does not establish art coverage for the current 356-object catalog. E56 owns exact closure. `EDATA.192` is unbound/deferred and E26 mod-null remains separate. |
 | Hidden categories | `FUN_0045ddc0` creates commands `0x6f..0x75`; `FUN_0045fe60` skips controls for which `IsWindowVisible` is false | All seven were visible in both retained faction setups. No connected original writer/configuration that hides one has been recovered. |
 
-These items are now investigated rather than merely unattempted. All except
-the supported-profile `ENC-UI-17` applicability disposition retain missing
-fixtures; the latter preserves a general untested branch without demanding a
-fictional original topic. A blocked
+These items are now investigated rather than merely unattempted. All retain
+their named missing proof. `ENC-UI-17` additionally preserves the historical
+347-row corpus-not-applicable result while current 356-object coverage remains
+pending E56; the general branch stays untested without demanding a fictional
+topic. A blocked
 exceptional row does not invalidate the reachable endpoint, scroll, close, and
 selector evidence above.
 

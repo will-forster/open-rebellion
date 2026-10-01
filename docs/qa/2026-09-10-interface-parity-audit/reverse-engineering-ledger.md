@@ -204,6 +204,16 @@ the same testable scenario IDs. Static recovery now proves:
 - the bounded viewer-side and system-picture EData key selectors in
   `FUN_0045fa60`.
 
+P65 is authoritative for current product membership: 356 compound objects and
+25 mission definitions, with category counts `356/200/38/14/25/10/69`. The
+historical E51 source-accounting snapshot contains 347 candidates and 15
+mission rows, with counts `347/200/38/14/15/10/69`, plus aggregate-only Fleet
+membership. These scopes are both retained evidence, not interchangeable
+catalogs. E56 owns exact object-by-object and title/body/art joins; count
+arithmetic must not invent resources, aliases, or an implicit Fleet topic.
+The historical 347-of-347 effective-art result does not establish art coverage
+for the current 356-object catalog.
+
 The package remains `static-partial` and `runtime_capture_required`. The system
 predicate is structurally recovered, but source type `0xf2` remains deliberately
 unnamed: `FUN_005696b0` installs vtable `0x006639b8`, whose `+4` method
@@ -467,20 +477,25 @@ SHA-256
 validates the old Git objects and the current four-file/evidence/row closure
 separately.
 
-The remaining gates are named rather than inferred: runtime command/resource/
+The remaining gates are named rather than inferred: E56 exact membership and
+resource closure between the current P65 356-object/25-mission catalog and the
+historical E51 347-candidate/15-mission-plus-aggregate-only-Fleet snapshot;
+runtime command/resource/
 current-key/action-focus proof for the observed Fleet, mission, build, and
 Character Status class routes; a legitimate eligible Research Report route;
 all controlled entity-context routes;
 fallback and unavailable contexts; the admitted /
 excluded type-`0xf2` ancestry pair, Empire-side System-selector counterparts,
 exhaustive control states, full keyboard/body-layout cases, and connected
-hidden-category configurations. `ENC-UI-17` is corpus-not-applicable for this
-supported profile: all 347 bound rows have effective art (331 direct/system
-plus 16 complete viewer-faction pairs) across 186 bound files. The generic
-null-art branch remains untested; no fictional original topic or E26 mod-null
-fixture is required. Unused lookup IDs `7188`/`11284` must not be confused
+hidden-category configurations. `ENC-UI-17` was corpus-not-applicable for the
+historical E51 347-row snapshot: all 347 bound rows have effective art (331
+direct/system plus 16 complete viewer-faction pairs) across 186 bound files.
+That does not prove current P65 356-object art coverage, which remains pending
+E56. The generic null-art branch remains untested; no fictional topic or E26
+mod-null fixture may substitute for evidence. Unused lookup IDs
+`7188`/`11284` must not be confused
 with files `EDATA.142`/`EDATA.143`, which are bound through lookup IDs
-`7200`/`11296`. The unchanged 15 partial / 6 missing / 0 accepted rollup is a
+`7200`/`11296`. The unchanged **15 partial / 6 missing / 0 accepted / 21 open** rollup is a
 historical acquisition/acceptance count, not an applicability count. The same-topic faction pair is
 visual evidence only; it did not instrument selected image identities. The
 compatibility capture does not establish original-Windows rendering parity,
@@ -500,6 +515,7 @@ supply it.
 
 | Gate class | Missing criterion | Evidence held | Smallest prerequisite / bounded next work |
 |---|---|---|---|
+| Source | Current P65 membership and art closure | P65 356 objects/25 missions; historical E51 347 candidates/15 missions plus aggregate-only Fleet and 347/347 effective art | E56 exact object and resource joins; do not infer the delta |
 | Runtime | Loader-selected resources and delivered notifications | Static selectors and matching visible topics | One reviewed observation on an already-visible route |
 | Runtime | Action-specific focus | R56 initial-index focus | Observe the exact contextual action child under a new reviewed lane |
 | Fixture | Direct entity context | Five class-context owners | Source-backed owned entity with entity/definition/current-key provenance |
@@ -653,8 +669,9 @@ owning-surface routes and typed wrapper/current-key/internal-focus capture;
 and a non-special miss; unavailable mode needs a real stale context; the two
 fresh viewer runs' 100/100 System admission with zero exclusions does not
 replace a type-`0xf2` ancestry fixture; reviewed profile accounting makes the
-original no-art capture corpus-not-applicable for the supported profile while
-leaving the generic null-art branch untested; and all seven visible
+original no-art capture corpus-not-applicable for the historical E51 347-row
+snapshot while leaving current P65 356-object art coverage pending E56 and the
+generic null-art branch untested; and all seven visible
 categories do not replace a connected category-visibility writer. No matching
 owned save/scenario was present. `EDATA.192` remains deferred, not a fixture,
 and E26 mod-null remains a separate synthetic runtime case.
