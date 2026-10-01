@@ -30,7 +30,7 @@ not a comparison to the port, and not final encyclopedia acceptance.
 | Manifest | `manifest.json`, SHA-256 `8f9912f7e23d6d6209ce97e84ed103fee63fc451704235e818fad101add7a187` |
 | Baseline inventory | 198 retained PNGs in `manifest.json`; 60 cited matrix states, each with full/client frames; eight additional inspected live-cache setup/context frames remain supporting-only |
 | Reachable continuation | `reachable-captures-r7-summary.json`, SHA-256 `bb39f107c4b2cf44c04391559b4a9c893f3044739b3f3ffe4e8e5bd3f2b1afaa`; six immutable attempts/runs, four endpoint observations, four System selectors |
-| Reviewed later additions | r41 retained 75 raw full-desktop PNGs plus 75 lossless same-acquisition client crops outside the baseline manifest; r42/r43/r45/r46 added reviewed static evidence; r47 retained 70 raw full-desktop PNGs plus 70 lossless same-acquisition client crops outside the baseline manifest |
+| Reviewed later additions | r41 retained 75 raw full-desktop PNGs plus 75 lossless same-acquisition client crops outside the baseline manifest; r42/r43/r45/r46 and r49–r52 added reviewed static evidence; r47 retained 70 raw full-desktop PNGs plus 70 lossless same-acquisition client crops; r53 retained 35 raw full-desktop PNGs plus 35 lossless same-acquisition client crops, all outside the baseline manifest |
 
 The manifest records every PNG's byte length, dimensions, SHA-256,
 disposition, action sequence, setup, and matrix association. Retained attempts
@@ -141,6 +141,61 @@ attributing dialog creation to Alt+M. Cleanup is also qualified: the exact
 prefix stop returned zero and no owned process/window remained, but the
 supervisor exited 143 and the launcher exit status is unknown.
 
+The accepted r49–r52 static packet identifies handler `0x00438800` as the
+ordinary Build Selection dialog's class-context route, subject to the r50/r51
+review corrections and r52 retained-edge limit. Command `0x67` table index `3`
+reaches `0x004388d6`; the selected row supplies a class wrapper at `+0x54`, a
+separately empty entity companion is constructed, and the pair reaches
+`FUN_0041d6b0` / `FUN_00429f30`. The submission bridge reaches the retained
+build controller. Same-instance identity is proven only for the ordinary
+fresh-created collection on the key-check/equal edge: helper range
+`0049e130–0049e196` (SHA-256
+`2e279e7bf11780e1c28ecfd66dbd02329794b35bfb813969456ae43ab88dcc70`)
+returns exact nodes from the same collection and trampoline
+`00568ee0–00568ee5` (SHA-256
+`ad754bd90725bde9c206591c56972f8678048a6af3b94433e5587eb7acd98c1e`)
+reaches the exact-node leftmost fallback. The `0x00439ae4` bypass, malformed
+or duplicate-key serialized state, live command/resource/current-key/focus,
+and an already-open encyclopedia remain outside that proof. The r49 report /
+source / checker / review hashes are
+`a3b3033417ff76eb187259aa3a18109a814dcf7ae75da5dc1f01d823162b5d46`,
+`095f8d20b6da3727294348abb93bf7869ff664f29b94206cee70b51fc85156ef`,
+`ea1d2f5d679f31a5f7950ad098c1a718117c8b5ae321715ce622ba0a0737a3d2`,
+and `b4f93ebe5e02e4c05ba246a4f2217bfd2a1e4ecdb1b34ac4584e541cf84a893a`.
+The corrected r50 review, r51 review, and r52 report/source/checker hashes are
+`69e98d13601cd4f977c6d106580c65cae89c8d4626e310a03032cbfd33e61fa8`,
+`786facd40953ad8d8d7c48276ac4894d1283b44319f1224d8e6ab06820373610`,
+`bbfb800a56a9b088c4deb33cef5e6b7b338b6fd7c849dc48b854e68ca4853e62`,
+`9c9728cc9b5de81348b4973dedaaccd67d5e3efefdccec7238825aed47832c36`,
+and `3050238e9e25c9a18a29717f092bb7932eb2a6ae3bd9f7ee623ad16d64af8552`.
+
+Coordinator-accepted r53 Wine-visible evidence is retained under
+`visible-r53-1/`: 35 raw 1024×768 frames plus 35 exact same-acquisition
+640×480 crops. Its report/checker/artifact-manifest/action-journal SHA-256
+values are
+`596b732d5925632a6a855ce35252592dfdb609706ecd902a977b867004b101d4`,
+`d05db1e6d73babf700c5e6276049e84f399e6ac42f7e5a36d499c9016dd29cd8`,
+`6b0fe05f26222a4f88a69637900680403ffc0cb634cb1896d4f07647dde73dbe`,
+and `baefeb1e52ca31d4ca67e1de792cdbea8b3e9e522144db476b4c2769ca82274c`.
+In one ordinary Alliance / Chandrila run, the first post-shortcut frame showed
+no candidate dialog; a later visible Shipyards yard click opened Build
+Selection. The selected Alliance Escort Carrier row, matching article, and
+close back to the surviving Build Selection and Chandrila Shipyards surfaces
+are visible class-context evidence. They do not prove that Alt+B caused the
+dialog, nor a live command/notification, canonical key/DatId, loader-selected
+resource, or target-thread focus.
+
+| r53 full-frame artifact | SHA-256 | Reviewed visible role |
+|---|---|---|
+| `030-selected-escort-carrier-full.png` | `3abec7b2221f0819160e46e21bf9e3451dd762a31e90b584b064a22143a751ea` | Real Alliance Escort Carrier row selected in Build Selection |
+| `032-contextual-article-full.png` | `3899decfb20b1b1e937e2d432c539444afbb439feb63a33876356f59b00a5b00` | Matching Alliance Escort Carrier article visible |
+| `036-surviving-build-state-full.png` | `4c49f5fe41a59cbfc117f038c87e42f4cda245ed7cd5f9be926f99d6f606d505` | Encyclopedia closed; Build Selection and Chandrila Shipyards survive |
+
+The r53 launcher exited `0` and was reaped; exact-prefix stop returned `0`;
+the guard wrote its cancellation record and its PID is absent. The guard
+wait/reap exit status remains unknown. Lifecycle-shell exit `143` is not
+substituted as the guard exit. The r35 helper quarantine remains unchanged.
+
 The accepted r44 four-file metadata snapshot remains a historical validation at
 commit `1c3140059d8bd69d94715e47c907667c0fe29801`; its source hashes are not
 rewritten to describe this later evidence. The separate r48 metadata checker
@@ -186,6 +241,14 @@ Personnel windows. No mission was confirmed. This visible sequence does not
 identify the internal selected resource or focus, and its separate Alt+M
 attempt did not isolate the dialog-opening cause.
 
+The later r53 Alliance route used ordinary Chandrila manufacturing navigation.
+One Alt+B action was followed by a no-dialog frame; clicking the visible
+Shipyards yard later opened Build Selection. Selecting Alliance Escort Carrier
+and activating the visible Encyclopedia control opened its matching article;
+ordinary close retained both Build Selection and Chandrila Shipyards. No build
+order or save action was issued. This completes that visible class-context
+subcase only, not its internal runtime identities.
+
 ## Matrix result
 
 `Partial acquisition` means retained evidence exists but at least one original
@@ -201,7 +264,7 @@ accepted merely because screenshots exist.
 | `ENC-UI-04` | Partial / Open | Visible: all seven Empire selected-category frames, labels, and visible list portions. Reviewed static inference: the same fixed command order, candidate counts, and tie rule. Missing runtime proof: complete admitted membership identities/order, empty/gap outcomes, selected resources, and focus. |
 | `ENC-UI-05` | Partial / Open | Category and Close pointer/press/cancel/selected sequences on both sides plus selected Alliance endpoint controls exist. Missing: exhaustive mode/navigation/disabled states and cursor/strobe timing. |
 | `ENC-UI-06` | Partial / Open | Visible: single click, clean double-click, Return, selected-row pixels, and a same-run Ship PageDown/Return ending at canonical key `5963`, packed identity `0x14000002`, mode 2/category `0x71`. Reviewed static inference: `FUN_006083c0` emits `0x29b`, repeat-click `0x29d`, and double-click/Return `0x309`; `FUN_0045da70` conditionally maps `0x309` to command `0x67` only when selected/current rows are non-null. Missing runtime proof: delivered notification identity, internal Win32 focus, and pointer-click/double-click selected-resource joins. |
-| `ENC-UI-07` | Missing / Open | Visible subcases: r41 selected `Corellian Corvette 1` inside expanded Fleet 1, invoked its visible Encyclopedia menu item, showed the `Corellian Corvette` article, and Close preserved Fleet 1; r47 selected real Recruitment and Espionage mission-definition rows, opened each matching article through the visible mission-dialog Encyclopedia control, and Close preserved the mission and Personnel windows. Reviewed static inference: the typed Fleet route reaches popup command `0x100`, `FUN_00486fb0`, `FUN_0041d6b0`, and `FUN_00429f30`; the mission route uses `FUN_0046c3c0` command `0x67` with a class wrapper and empty entity companion. In both routes only the create branch passes wrappers to `FUN_0045d400`, while an existing window is reused. The r46 live Personnel entity/order setup is a distinct upstream input and was not causally isolated by r47. Missing: live command/notification and selected-resource proof, canonical current keys, target-thread focus, and the other three controlled contextual callers. |
+| `ENC-UI-07` | Missing / Open | Visible subcases: r41 selected `Corellian Corvette 1` inside expanded Fleet 1, invoked its visible Encyclopedia menu item, showed the `Corellian Corvette` article, and Close preserved Fleet 1; r47 selected real Recruitment and Espionage mission-definition rows, opened each matching article through the visible mission-dialog Encyclopedia control, and Close preserved the mission and Personnel windows; r53 selected Alliance Escort Carrier in Build Selection, opened its matching article, and Close preserved Build Selection and Chandrila Shipyards. Reviewed static inference: the typed Fleet route reaches popup command `0x100` / `FUN_00486fb0`; the mission route uses `FUN_0046c3c0` command `0x67`; and accepted r49–r52 evidence names `0x00438800` as the Build Selection command-`0x67` class route, with fresh-created/key-check-equal identity limits. All reach `FUN_0041d6b0` / `FUN_00429f30`, and only the create branch passes wrappers to `FUN_0045d400`. The r46 live Personnel entity/order setup is a distinct upstream input and was not causally isolated by r47; r53 likewise does not attribute dialog creation to Alt+B. Missing: live command/notification and selected-resource proof, canonical current keys, target-thread focus, and the other two direct contextual callers. |
 | `ENC-UI-08` | Missing / Open | No controlled fixture drives all five entity-context callers with caller/control, entity/definition/current-key provenance and focus. |
 | `ENC-UI-09` | Missing / Open | No source-backed save/setup exposes both special association fallback branches and a non-special miss. |
 | `ENC-UI-10` | Missing / Open | No controlled stale/unavailable contextual-open fixture retains title/list/mode/focus state. |
@@ -213,7 +276,7 @@ accepted merely because screenshots exist.
 | `ENC-UI-16` | Partial / Open | Visible/runtime metadata: explicit Right retained full last canonical key `6802` / packed identity `0x38000002` and filtered last key `5699` / packed identity `0x1c000002` in two equal snapshots; native frames were inspected. Reviewed static inference: a null `0x84` neighbor retains `this+0x148`, with disablement separate. Missing: internal Win32 focus and complete after-action desktop pairs because immediate full frames caught a Wine/Xvfb repaint gap. |
 | `ENC-UI-17` | Missing historical acquisition / Open; supported profile corpus-not-applicable | Reviewed corpus evidence: all 347 bound rows have effective art (331 direct/system selections plus 16 viewer-faction rows with two complete variants), covering 186 bound files; no legitimate no-art topic exists in this checksum-pinned profile. `EDATA.192` is unbound and publication-deferred, not a fixture. The general null-art paint branch remains untested, but no fictional original topic or E26 mod-null case is required for this profile. |
 | `ENC-UI-18` | Partial / Open | Visible: r41 Chewbacca produced eight discrete Down and eight discrete Up actions; first visible motion and reversal occurred on the fourth respective press. Up 5-8 were interrupted by Message Index and are rejected as article-scroll evidence. A separate scrollbar down-arrow click moved immediately; the attempted pointer drag showed no motion and is retained as a no-motion observation, not drag proof. Reviewed static join: Chewbacca is `0x38000343`, title `10819`, body/art lookup `6723`, `EDATA.081`. Missing: explicit-newline, long-token, body Page-key, font/extent parity, internal focus, and a successful pointer-drag result. |
-| `ENC-UI-19` | Partial / Open | Visible: topic Tab, Return, Escape, Close; r41 context-opened article Close restored Fleet 1; r47 Close restored the Recruitment and Espionage mission dialogs with the Personnel window still present. Runtime metadata: r7 Escape observed command-`0x19` child absence in two equal snapshots. Reviewed static inference: command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. Missing: runtime observation of the `0xfb` command/notification and internal focus restoration. |
+| `ENC-UI-19` | Partial / Open | Visible: topic Tab, Return, Escape, Close; r41 context-opened article Close restored Fleet 1; r47 Close restored the Recruitment and Espionage mission dialogs with the Personnel window still present; r53 Close restored Build Selection on Alliance Escort Carrier over Chandrila Shipyards. Runtime metadata: r7 Escape observed command-`0x19` child absence in two equal snapshots. Reviewed static inference: command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. Missing: runtime observation of the `0xfb` command/notification and internal focus restoration. |
 | `ENC-UI-20` | Partial / Open | Left from middle and first categories exists. Missing: connected hidden-predecessor configuration and complete selected-command/list/focus trace. |
 | `ENC-UI-21` | Partial / Open | Right from middle and last-to-first wrap exists. Missing: connected hidden-successor/hidden-leftmost configurations and complete selected-command/list/focus trace. |
 
@@ -223,11 +286,23 @@ acceptance rows remain open. The unchanged 15/6/0 rollup is an acquisition /
 acceptance count, not an applicability count: `ENC-UI-17` is now explicitly
 corpus-not-applicable for the supported profile, so no original no-art fixture
 is demanded even though its historical capture bucket remains `missing` and
-the general branch remains untested. E51 therefore remains blocked as a complete
+the general branch remains untested. In explicit checker terms this remains
+**15 partial / 6 missing / 0 accepted / 21 open**. E51 therefore remains blocked as a complete
 A0 package. The partial set is still an
 authoritative reference for its named actions and states; it must not be used
 to infer the missing contextual, unavailable, hidden, or terminal
 system-selector-side cases.
+
+The visible Fleet, mission, and build-selection class subcases are complete at
+their stated pixel/action scope. The other two direct contextual callers,
+every controlled entity-context route, internal command/notification/resource/
+current-key/focus evidence, exceptional fallback/unavailable/hidden fixtures,
+and original-Windows comparison remain open. A bounded read-only source trace
+can still name one remaining caller without new runtime access. Correlating the
+observed build route to internal runtime events needs a separately reviewed
+non-invasive observer; the r35 helper quarantine supplies no authority to do
+so. Original-Windows parity requires an authenticated original-Windows capture
+environment, which this Wine setup does not provide.
 
 ## Reachable interaction continuation (r7)
 
@@ -323,7 +398,7 @@ absence claims:
 
 | Matrix gap | Source path and candidate trigger | Attempt and exact missing prerequisite |
 |---|---|---|
-| `ENC-UI-07/08` | The five `FUN_0041d6b0` callers at `0x00438800`, `0x004443a0`, `0x00467f10`, `FUN_0046c3c0`, and `FUN_00486fb0`; a real selected class/entity from each owner | The Fleet/generic `FUN_00486fb0` and mission-dialog `FUN_0046c3c0` class-context routes now have reviewed static chains and visible results. Their runtime command/notification/resource/current-key/focus identities remain open. Legitimate routes for the three unrenamed owners remain absent, as do all controlled entity-context subcases. |
+| `ENC-UI-07/08` | The five `FUN_0041d6b0` callers at `0x00438800`, `0x004443a0`, `0x00467f10`, `FUN_0046c3c0`, and `FUN_00486fb0`; a real selected class/entity from each owner | The Fleet/generic `FUN_00486fb0`, mission-dialog `FUN_0046c3c0`, and corrected Build Selection `0x00438800` class-context routes now have reviewed static chains and visible results. Their runtime command/notification/resource/current-key/focus identities remain open. Legitimate routes for the two unrenamed owners (`0x004443a0` and `0x00467f10`) remain absent, as do all controlled entity-context subcases. |
 | `ENC-UI-09` | `FUN_0045d400 -> FUN_0045fd90`; a real family `0xa0..0xaf` entity through each `FUN_0040d760` / `FUN_004025b0` association branch, plus a non-special miss | Source branches were traced and retained owned save/setup roots searched. No source-backed selected entity/save for either branch or miss was found. |
 | `ENC-UI-10` | `FUN_0045d400/FUN_0045fd90`; real stale/unavailable context whose direct and fallback keys fail | No legitimate stale/unavailable contextual save or scenario was present in the retained prefix/capture workspace. |
 | `ENC-UI-13` | `FUN_00422620 -> FUN_004f6330/FUN_0053f090`; selected System view with type-`0xf2` ancestry paired with an admitted view | Both fresh-viewer bounded runs returned 100/100 iterator candidates with zero exclusions. A campaign/save that actually produces an excluded candidate remains required; zero in two runs is not absence proof. |
@@ -339,8 +414,9 @@ selector evidence above.
 
 The smallest remaining probes are finite and distinct: retain delivered
 command/notification, canonical current key, selected resource, and
-target-thread focus for one already-visible Fleet or mission class-context
-open; connect and capture each of the three unrenamed contextual owners; drive
+target-thread focus for one already-visible Fleet, mission, or Build Selection
+class-context open; connect and capture each of the two unrenamed contextual
+owners (`0x004443a0` and `0x00467f10`); drive
 one controlled direct entity-context open; capture each `FUN_0045fd90`
 association branch plus a non-special miss; retain one legitimate unavailable
 context; obtain one admitted/excluded type-`0xf2` System pair; and recover a
