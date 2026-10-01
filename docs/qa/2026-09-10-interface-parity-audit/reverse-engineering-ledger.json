@@ -338,18 +338,436 @@
         "sources": ["REBEXE.EXE", "ENCYBMAP.DLL", "ENCYTEXT.DLL", "EData", "GOKRES.DLL"],
         "anchors": ["FUN_00422620", "FUN_0041d6b0", "FUN_00429f30", "0x00438800", "0x004443a0", "0x00467f10", "FUN_0046c3c0", "FUN_00486fb0", "FUN_0045d400", "FUN_0045da70", "FUN_0045ddc0", "FUN_0045f090", "FUN_0045f100", "FUN_0045f480", "FUN_0045fa60", "FUN_0045fd20", "FUN_0045fd90", "FUN_0045fe60", "FUN_0041ecf0", "FUN_0041fd00", "FUN_0041fe70", "FUN_004f31b0", "FUN_004f6330", "FUN_0053ef50", "FUN_0053f090", "FUN_00566b90", "FUN_005696b0", "FUN_005f5060", "FUN_005f5c60", "FUN_005f59f0", "FUN_00601700", "FUN_00601b80", "FUN_00601ce0", "FUN_006075e0", "FUN_00607610", "FUN_0060a790", "FUN_0060a890", "FUN_006028c0", "FUN_00602d30", "FUN_006030c0", "FUN_006030f0", "FUN_006083c0", "FUN_0060d700", "FUN_0060d7e0", "FUN_004ad730", "FUN_004ad750"],
         "method": "Trace the shell +0x474 master topic cache, its sorted family projections, precise selector transitions, canonical context-to-topic routing, source-ancestry system admission, skip-disabled topic traversal, ordered category keyboard traversal, viewer-side/system EData selection, faction-shell plus mode-background composition, control state, focus, Return, wrap/scroll, and every connected open caller through source and owned resource metadata.",
-        "next_proof": "Run the finite ENC-UI-01..21 matrix in A0, retaining original resource identities, focus and caller context. Hidden-category cases require a connected original visibility configuration. Unproven alternate images remain inventoried and unused under deferred task orlocal-2kq."
+        "next_proof": "Complete the applicable partial and missing ENC-UI-01..21 subcases recorded by E51, retaining original resource identities, internal focus and caller context. Full/filtered endpoint identities and Alliance System selectors 1/24/25/26 have bounded live observations; r41 adds reviewed visible Chewbacca scrolling and a Fleet ship-context route. Contextual, unavailable, excluded-ancestry, other-viewer selector and hidden-category cases still need source-backed fixtures or connected observation. ENC-UI-17 original no-art capture is corpus-not-applicable for the 347/347 effective-art supported profile; the generic null-art branch remains untested. Unproven alternate images remain inventoried and unused under deferred task orlocal-2kq."
       },
       "runtime_capture_required": true,
       "semantic_research": {
         "version": 1,
         "source_profile": "encytext-49aea545-lang-1033-v1",
         "rebexe_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
-        "scope_status": "in_scope_static_complete_runtime_capture_pending_alternates_deferred",
+        "scope_status": "in_scope_static_complete_runtime_capture_partial_alternates_deferred",
+        "process_comparator_observation": {
+          "status": "same_process_post_input_values_observed_ui_and_cache_state_unverified",
+          "run_id": "E51-E09-replay-2",
+          "scope": "fresh_metadata_only_replay_not_attached_to_prior_screenshots",
+          "provenance_interpretation": "The immutable raw artifact stage/setup strings record intended timed input checkpoints; they do not verify main-menu state, campaign entry, encyclopedia opening, or cache construction.",
+          "process": {
+            "pid": 3202977,
+            "start_time_utc": "2026-09-29T12:37:49.560+00:00",
+            "viewer_intent": "Alliance",
+            "viewer_state_verified": false
+          },
+          "image": {
+            "preferred_base": "0x00400000",
+            "runtime_base": "0x00400000",
+            "size_of_image": "0x002c3000",
+            "lc_ctype_lcid": {"preferred_va": "0x006be840", "rva": "0x002be840", "runtime_va": "0x006be840"},
+            "codepage": {"preferred_va": "0x006be850", "rva": "0x002be850", "runtime_va": "0x006be850"}
+          },
+          "stages": [
+            {"id": "post_input_checkpoint_1", "raw_artifact_stage_id": "initialized_startup_main_menu", "observed_at_utc": "2026-09-29T12:38:22.660+00:00", "state_verified": false, "lc_ctype_lcid": 1033, "lc_ctype_lcid_hex": "0x0409", "codepage": 1252},
+            {"id": "post_input_checkpoint_2", "raw_artifact_stage_id": "after_alliance_f7_encyclopedia_cache_construction", "observed_at_utc": "2026-09-29T12:38:41.858+00:00", "state_verified": false, "lc_ctype_lcid": 1033, "lc_ctype_lcid_hex": "0x0409", "codepage": 1252}
+          ],
+          "read_method": "direct_parent_open_proc_exact_pid_mem_read_only_pread_exactly_four_bytes_per_address",
+          "artifact": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/process-globals-replay-2.json",
+          "artifact_sha256": "711a5025826e40357ab069e0ea0978b2674d129f5f3d4503f5bb437cb86702c9",
+          "provenance_qualification_artifact": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/process-globals-replay-2-provenance-r3.json",
+          "provenance_qualification_sha256": "6151877e8c8b3e8a63e8b0f8e8048aea8b802d2c28a277c57a6888a902203004",
+          "limitations": [
+            "raw_stage_labels_do_not_verify_ui_or_cache_state",
+            "successful_setlocale_timing_relative_to_reads_unresolved",
+            "cache_time_provenance_unresolved",
+            "does_not_prove_full_one_byte_fold_map",
+            "does_not_observe_live_system_iterator_identities",
+            "does_not_prove_admitted_cache_membership_or_order",
+            "static_200_SYSTEMSD_rows_remain_candidates_only"
+          ]
+        },
+        "live_cache_observation": {
+          "version": 1,
+          "status": "consistent_single_viewer_cache_and_iterator_observation",
+          "run_id": "E51-E09-live-cache-1",
+          "source_review": {
+            "disposition": "accepted-agent-mail-21465",
+            "recipe_sha256": "2347e6adb3176877a5f93d7d9a4034ed93cb736d2ec6aba8d55be3a945c01448"
+          },
+          "process": {
+            "pid": 3262757,
+            "start_ticks": 111056207,
+            "start_time_utc": "2026-09-29T13:27:48.070+00:00",
+            "executable_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
+            "preferred_image_base": "0x00400000",
+            "runtime_image_base": "0x00400000",
+            "stopped_after_observation": true
+          },
+          "stability": {
+            "complete_snapshot_count": 2,
+            "canonical_snapshot_sha256": "1c94f1a66ae8b590c768800f5c49b2c2e6f5ab645c00781380a354297b2ab345",
+            "complete_snapshots_equal": true,
+            "process_identity_before_after_equal": true,
+            "sentinel_before_after_equal": true
+          },
+          "same_snapshot_facts": {
+            "raw_viewer_selector": 1,
+            "lc_ctype_lcid": 1033,
+            "lc_ctype_lcid_hex": "0x0409",
+            "codepage": 1252,
+            "cache_mode": 2,
+            "cache_count": 247
+          },
+          "cache": {
+            "order": "actual_title_sorted_master_cache",
+            "system_count": 100,
+            "system_family_counts": {"0x90": 30, "0x92": 70},
+            "full_sequence_sha256": "ecc114bc73c0cfdf496d1bd0eb6b03a89d4950284d9b73e06f4b60d13f1e7c1a",
+            "system_sequence_sha256": "f586d142009c70b12c8a66b9368d2987cf31fadcaab54f065f58faa1d569051a"
+          },
+          "iterator": {
+            "order": "source_container_iteration_order_not_registry_or_cache_order",
+            "container_count": 100,
+            "returned_count": 100,
+            "excluded_count": 0,
+            "family_counts": {"0x90": 30, "0x92": 70},
+            "returned_sequence_sha256": "67250e7ba7bdfcd50b86575029aa7e5349b70a903d656b27664cae5b785392dd"
+          },
+          "relationship": {
+            "orders_equated": false,
+            "position_differences": 98,
+            "multiplicity_difference_count": 0,
+            "canonical_key_collision_count": 0
+          },
+          "read_budget": {
+            "calls_used": 10084,
+            "bytes_used": 42336,
+            "max_calls": 750000,
+            "max_bytes": 16777216,
+            "max_single_read": 6
+          },
+          "artifacts": {
+            "reader": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/live-cache-run-1-reader.json",
+            "reader_sha256": "aeb4c1140f747571d63d18bb4e3c68fd37b14f3527d3023888e45bb7d76cafd3",
+            "context": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/live-cache-run-1-context.json",
+            "context_sha256": "2e1dfe9aaad117104358d2a05f2b9143adb9d6e7660a03c56a1c4d92953dea6d",
+            "summary": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/live-cache-run-1-summary.json",
+            "summary_sha256": "863f75bd2bb5fc2795570bd0f1cac38e6634b5fa527f141804f7bd8f2b754630"
+          },
+          "limitations": [
+            "single_raw_viewer_selector_observed",
+            "cache_order_is_not_iterator_or_registry_order",
+            "lcid_and_codepage_do_not_prove_full_fold_map",
+            "static_corpus_is_not_live_admission_proof",
+            "no_localized_title_or_body_bytes_read",
+            "broader_ui_matrix_remains_incomplete"
+          ]
+        },
+        "live_cache_other_viewer_observation": {
+          "version": 1,
+          "status": "consistent_second_viewer_cache_and_iterator_observation",
+          "run_id": "E51-E09-live-cache-2-empire",
+          "source_review": {
+            "disposition": "accepted-agent-mail-21465",
+            "recipe_sha256": "2347e6adb3176877a5f93d7d9a4034ed93cb736d2ec6aba8d55be3a945c01448"
+          },
+          "setup_observation": {
+            "selected_faction_intent": "Empire",
+            "selected_control": "left green Imperial crest",
+            "visible_mode_label": "Standard Game",
+            "galaxy_or_scenario_size": "not visibly labeled in the observed setup frame",
+            "campaign_relationship_to_other_runs": "fresh run; no same-campaign claim",
+            "boundary": "human setup labels come from inspected frames; raw viewer selector and cache identities come separately from the source-connected reader"
+          },
+          "process": {
+            "pid": 3269886,
+            "start_ticks": 111145867,
+            "start_time_utc": "2026-09-29T13:42:44.670+00:00",
+            "executable_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
+            "preferred_image_base": "0x00400000",
+            "runtime_image_base": "0x00400000",
+            "stopped_after_observation": true
+          },
+          "stability": {
+            "complete_snapshot_count": 2,
+            "canonical_snapshot_sha256": "b250b7f486906f577a7c4f97121f405af1a632a91c0909f44fc7294166928cfc",
+            "complete_snapshots_equal": true,
+            "process_identity_before_after_equal": true,
+            "sentinel_before_after_equal": true
+          },
+          "same_snapshot_facts": {
+            "raw_viewer_selector": 2,
+            "lc_ctype_lcid": 1033,
+            "lc_ctype_lcid_hex": "0x0409",
+            "codepage": 1252,
+            "cache_mode": 2,
+            "cache_count": 247
+          },
+          "cache": {
+            "order": "actual_title_sorted_master_cache",
+            "system_count": 100,
+            "system_family_counts": {"0x90": 30, "0x92": 70},
+            "full_sequence_sha256": "ecc114bc73c0cfdf496d1bd0eb6b03a89d4950284d9b73e06f4b60d13f1e7c1a",
+            "system_sequence_sha256": "f586d142009c70b12c8a66b9368d2987cf31fadcaab54f065f58faa1d569051a"
+          },
+          "iterator": {
+            "order": "source_container_iteration_order_not_registry_or_cache_order",
+            "container_count": 100,
+            "returned_count": 100,
+            "excluded_count": 0,
+            "family_counts": {"0x90": 30, "0x92": 70},
+            "returned_sequence_sha256": "67250e7ba7bdfcd50b86575029aa7e5349b70a903d656b27664cae5b785392dd"
+          },
+          "relationship": {
+            "orders_equated": false,
+            "position_differences": 98,
+            "multiplicity_difference_count": 0,
+            "canonical_key_collision_count": 0
+          },
+          "cross_run_observation": {
+            "comparison_run_id": "E51-E09-live-cache-1",
+            "fresh_process_and_campaign": true,
+            "same_generated_campaign_claim": false,
+            "raw_viewer_selectors": [1, 2],
+            "cache_full_sequence_equal": true,
+            "cache_system_sequence_equal": true,
+            "iterator_sequence_equal": true,
+            "cache_full_multiset_equal": true,
+            "cache_system_multiset_equal": true,
+            "iterator_multiset_equal": true,
+            "boundary": "two-run equality is not a universal admission rule, same-campaign claim, registry-order claim, or proof that all static candidates are admitted"
+          },
+          "read_budget": {
+            "calls_used": 10068,
+            "bytes_used": 42272,
+            "max_calls": 750000,
+            "max_bytes": 16777216,
+            "max_single_read": 6
+          },
+          "artifacts": {
+            "reader": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/live-cache-run-2-empire-reader.json",
+            "reader_sha256": "4c3db5cdf85840ccbf85df1fe7ad537f631e838bf660daeead61dc416ce76fa1",
+            "context": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/live-cache-run-2-empire-context.json",
+            "context_sha256": "0771654552d158a8ce444d81befdb94efdd56d0259a9e0cad2fdb6d40c2c03c6",
+            "summary": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/live-cache-run-2-empire-summary.json",
+            "summary_sha256": "1c04afca3b7f2c9e93a2dbf53fa36e604277ad9574362e68a1900ecbf666864b"
+          },
+          "limitations": [
+            "fresh_run_not_same_generated_campaign",
+            "two_run_sequence_equality_is_not_a_universal_admission_rule",
+            "cache_order_is_not_iterator_or_registry_order",
+            "lcid_and_codepage_do_not_prove_full_fold_map",
+            "static_corpus_is_not_live_admission_proof",
+            "no_localized_title_or_body_bytes_read",
+            "galaxy_or_scenario_size_not_visibly_labeled",
+            "broader_ui_matrix_remains_incomplete"
+          ]
+        },
+        "live_cache_field_provenance_qualification": {
+          "version": 1,
+          "status": "supersedes_field_label_only",
+          "review_message": 21469,
+          "raw_field": "snapshots[].iterator.{containers,returned,excluded}[].picture_selector",
+          "corrected_name": "topic_selector",
+          "corrected_meaning": "definition object +0x30 topic/text selector used to derive canonical_key as low12 + 0x1000",
+          "explicit_nonmeaning": "not the System picture selector values 1, 24, 25 or 26",
+          "raw_reader_artifacts_preserved_unchanged": true,
+          "artifact": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/live-cache-selector-field-provenance-r6.json",
+          "artifact_sha256": "841e800d8d8112bd1c4ca5da6b97b6614d34855c13046d66180f7fae7d71d7b7",
+          "impact": "field label only; retained values, cache identities, canonical keys, observations and ENC-UI acceptance remain unchanged"
+        },
+        "reachable_interaction_observation": {
+          "version": 1,
+          "status": "bounded_reachable_evidence_matrix_still_open",
+          "source_review_disposition": "accepted-agent-mail-21465",
+          "profile": "encytext-49aea545-lang-1033-v1",
+          "rebexe_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
+          "observer": {
+            "sha256": "568ac5681f6f0938178aa6767e80b963194301354cdd7575492f5a757687fe31",
+            "test_sha256": "a33abd30db3642381b25013af292bd67513736bb0009196f869504a805f35fd9",
+            "read_method": "direct_parent_exact_pid_proc_mem_o_rdonly_bounded_two_equal_snapshots",
+            "reads": "shell child identity, mode, category, controls, current-row links/key/identity/enabled, art presence, viewer and locale",
+            "does_not_read": [
+              "localized_title_or_body_bytes",
+              "notification_ids",
+              "art_loader_selected_filename",
+              "internal_win32_focus",
+              "broad_memory"
+            ]
+          },
+          "artifacts": {
+            "summary": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/reachable-captures-r7-summary.json",
+            "summary_sha256": "bb39f107c4b2cf44c04391559b4a9c893f3044739b3f3ffe4e8e5bd3f2b1afaa",
+            "checker_sha256": "752da75f220cfbe713122b1362d29f30c3f0f5c1f2380182a9e6f8a75eb8a595"
+          },
+          "runs": [
+            {"id": "E51-reachable-r7-run-1-alliance", "run_sha256": "2c2ff2b5f7d9ee6600339dc2db0a6c2c6b5bb77f4e8ac3d8b38772c3835266d2", "disposition": "rejected_before_state"},
+            {"id": "E51-reachable-r7-run-2-alliance", "run_sha256": "063d6abe631c0329a4b20daa44c92e47300cf3cb5f131cdf3c0e9dffba19ac05", "disposition": "rejected_recipe_digest_fail_closed"},
+            {"id": "E51-reachable-r7-run-3-alliance", "run_sha256": "5d0f527646ecdad32d07d9bb169d189547dac64d366d38dc75a334925af529ae", "pid": 3352465, "start_time_utc": "2026-09-29T15:16:38.970+00:00", "disposition": "endpoint_evidence_retained_later_page_key_step_rejected"},
+            {"id": "E51-reachable-r7-run-4-alliance", "run_sha256": "1fb21ea822e34050849817e137df7300463b1a876b063b3f69c0c21cf72a2fbd", "disposition": "rejected_body_page_key_focus_attempt"},
+            {"id": "E51-reachable-r7-run-5-alliance", "run_sha256": "e886522e7440a8f3df132b2fb2451031729c5a90eef1d36d7f8bf88d08302a8b", "pid": 3359853, "start_time_utc": "2026-09-29T15:24:11.660+00:00", "disposition": "ordinary_interaction_evidence_retained"},
+            {"id": "E51-reachable-r7-run-6-alliance-system-selectors", "run_sha256": "e12c0477755a62d16b5a732b7a0853dc28a1bb8c5192aa32bd28a541d70b93dc", "pid": 3399522, "start_time_utc": "2026-09-29T15:32:12.460+00:00", "disposition": "alliance_system_selector_evidence_retained"}
+          ],
+          "endpoints": [
+            {"collection": "full_0x6f", "direction": "left", "endpoint": "first", "canonical_key_before_after": 5696, "packed_identity_before_after": "0x1c000002"},
+            {"collection": "filtered_ship_0x71", "direction": "left", "endpoint": "first", "canonical_key_before_after": 5696, "packed_identity_before_after": "0x1c000002"},
+            {"collection": "full_0x6f", "direction": "right", "endpoint": "last", "canonical_key_before_after": 6802, "packed_identity_before_after": "0x38000002"},
+            {"collection": "filtered_ship_0x71", "direction": "right", "endpoint": "last", "canonical_key_before_after": 5699, "packed_identity_before_after": "0x1c000002"}
+          ],
+          "ordinary_interactions": {
+            "index": "live command 0x19 child, mode 1, category 0x6f, current null",
+            "list_page_down_return": "mode 2, category 0x71, canonical key 5963, packed identity 0x14000002",
+            "pointer_body_scroll": "three Down-arrow clicks visibly moved the viewport while canonical key 5696 remained current",
+            "escape_close": "command 0x19 child absent in two equal snapshots and strategy shell visible",
+            "page_key_rejection": "two PageDown attempts advanced the selected list topic and are not body-scroll or internal-focus proof"
+          },
+          "system_selectors": [
+            {"selector": 1, "source_identity": "0x9200007a", "body_resource_id": 7714, "lookup_id": 11100, "asset_basename": "EDATA.166", "art_object_present": true},
+            {"selector": 24, "source_identity": "0x9000010f", "body_resource_id": 8049, "lookup_id": 11125, "asset_basename": "EDATA.191", "art_object_present": true},
+            {"selector": 25, "source_identity": "0x90000117", "body_resource_id": 8057, "lookup_id": 11123, "asset_basename": "EDATA.189", "art_object_present": true},
+            {"selector": 26, "source_identity": "0x9200011a", "body_resource_id": 8066, "lookup_id": 11124, "asset_basename": "EDATA.190", "art_object_present": true}
+          ],
+          "selector_boundary": "live Alliance current-row identities are joined to accepted E39 DAT/lookup metadata; the original loader-selected filename and Empire counterparts were not observed",
+          "exceptional_state_investigation": [
+            {"ids": ["ENC-UI-07", "ENC-UI-08"], "status": "investigated_open", "source_path": "five FUN_0041d6b0 callers", "missing_prerequisite": "legitimate routes for unnamed owning surfaces plus typed wrapper/current-key and internal focus"},
+            {"ids": ["ENC-UI-09"], "status": "investigated_open", "source_path": "FUN_0045d400 -> FUN_0045fd90", "missing_prerequisite": "owned selected family 0xa0..0xaf entity/save for both association branches plus a non-special miss"},
+            {"ids": ["ENC-UI-10"], "status": "investigated_open", "source_path": "FUN_0045d400/FUN_0045fd90", "missing_prerequisite": "legitimate stale or unavailable contextual save/scenario"},
+            {"ids": ["ENC-UI-13"], "status": "investigated_open", "source_path": "FUN_00422620 -> FUN_004f6330/FUN_0053f090", "missing_prerequisite": "source-backed campaign/save with a selected view whose ancestry contains virtual type 0xf2"},
+            {"ids": ["ENC-UI-17"], "status": "supported_profile_corpus_not_applicable_general_branch_untested", "source_path": "FUN_0045fa60 -> FUN_0045f970/FUN_0045f090", "disposition": "347_of_347_bound_rows_have_effective_art_331_direct_or_system_plus_16_complete_viewer_faction_pairs_186_bound_files", "remaining_boundary": "general_null_art_branch_untested_E26_mod_null_separate_no_fictional_original_topic_required"},
+            {"ids": ["hidden-category"], "status": "investigated_open", "source_path": "FUN_0045ddc0/FUN_0045fe60", "missing_prerequisite": "connected original category-visibility writer or configuration"}
+          ],
+          "screen_boundary": "native endpoint/interaction/selector frames were inspected; several immediate after-action full-desktop frames caught a Wine/Xvfb repaint gap and remain supporting-only",
+          "processes_stopped": true,
+          "display_left_available": true
+        },
+        "ui_state_field_provenance_qualification": {
+          "version": 1,
+          "status": "supersedes_field_label_only",
+          "raw_field": "snapshots[].current_topic.dat_id",
+          "raw_field_expression": "row_plus_0x68 & 0x00ffffff",
+          "corrected_name": "packed_handle_low24",
+          "corrected_meaning": "low 24 bits of the runtime packed handle stored at encyclopedia row +0x68; not a general original DAT identity",
+          "source_dat_id_rule": "an original source DatId requires a unique canonical-key/profile binding to accepted source metadata and must not be inferred from packed_handle_low24",
+          "collision_evidence": {
+            "canonical_keys": [5696, 5699],
+            "shared_packed_identity": "0x1c000002",
+            "shared_raw_low24": 2
+          },
+          "system_join_boundary": "run-6 System DatIds 122, 271, 279 and 282 remain source-proven through explicit accepted E39 SYSTEMSD/profile joins; they do not derive provenance from the raw snapshot field",
+          "raw_summary_sha256": "bb39f107c4b2cf44c04391559b4a9c893f3044739b3f3ffe4e8e5bd3f2b1afaa",
+          "artifact": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/ui-state-packed-handle-field-provenance-r8.json",
+          "artifact_sha256": "ab6b32ab15d771bb403f4ef179b27faabf89ca4c6a5b4524f94d06776d180b5c",
+          "future_reader": {
+            "field": "packed_handle_low24",
+            "reader_sha256": "086c04b6f00d98f88da03011494dfe766ea158f78adbcc2e9580cbca95710c4d",
+            "test_sha256": "33cc0a9f627c72ad8210bce40f2f8fcbb225ddefdc335928a9aaec27c005cafa",
+            "emits_legacy_dat_id": false
+          },
+          "raw_artifacts_preserved_unchanged": true,
+          "recapture_performed": false,
+          "impact": "field provenance only; raw values, canonical keys, packed identities, endpoint retention, source-joined System rows, screenshots, matrix counts and acceptance remain unchanged"
+        },
         "ui_contract": {
           "version": 1,
           "path": "docs/reference/asset-library/encyclopedia-ui-contract.md",
-          "scope_status": "source_control_and_caller_contract_complete_a0_capture_pending",
+          "scope_status": "source_control_and_caller_contract_complete_a0_partial_blocked",
+          "runtime_capture_evidence": {
+            "version": 1,
+            "status": "partial_blocked",
+            "profile": "encytext-49aea545-lang-1033-v1",
+            "rebexe_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
+            "environment": "ubuntu_24_04_wine_9_win32_xvfb_91_compatibility_reference_not_windows_parity",
+            "game_window": "640x480+1+1",
+            "desktop_frame": "1024x768",
+            "capture_document": "docs/reference/asset-library/encyclopedia-original-captures.md",
+            "ignored_manifest": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/manifest.json",
+            "manifest_sha256": "8f9912f7e23d6d6209ce97e84ed103fee63fc451704235e818fad101add7a187",
+            "png_count": 198,
+            "cited_paired_state_count": 60,
+            "inventory_boundary": "png_count_and_cited_paired_state_count_describe_the_original_manifest_only_later_reviewed_additions_are_append_only_and_not_folded_into_it",
+            "reviewed_additions": {
+              "r41_visible": {
+                "review_status": "coordinator_verified_visible_subset_independent_source_review_complete",
+                "report": "/data/projects/open-rebellion/agent-work/encyclopedia-dispatch/E51.r41.report.md",
+                "report_sha256": "60fa5c5ae076c07360b7cc0a97185181fa34691357c8b1d23deda997ade9abf8",
+                "checker_sha256": "0ff4fcb8e3346d4bea002a53caf7b741b9fdf8e518bd05355eae22fc92f362ba",
+                "raw_full_png_count": 75,
+                "same_acquisition_crop_png_count": 75,
+                "sorted_png_identity_sha256": "36f046e7c9d9672887df3027827811ed5605a0876365b34726d2f6539c55d28e",
+                "observations": [
+                  "chewbacca_discrete_down_motion_on_press_4_and_up_reversal_on_press_4",
+                  "up_5_through_8_interrupted_by_message_index_and_rejected_as_article_scroll",
+                  "pointer_down_arrow_immediate_motion_pointer_drag_no_motion_not_drag_proof",
+                  "fleet_1_ship_corellian_corvette_1_visible_context_menu_article_and_close_preserved_fleet"
+                ],
+                "boundary": "Wine_visible_observation_not_internal_focus_notification_or_runtime_loader_identity_proof"
+              },
+              "r42_static": {
+                "review_status": "coordinator_and_independent_sol_accepted_narrow_static_citation_correction",
+                "report": "/data/projects/open-rebellion/agent-work/encyclopedia-dispatch/E51.r42.report.md",
+                "report_sha256": "3c955d02f686b004ffa143ef21774f6033c7eaf69d1f35ab06da430d93ce455b",
+                "source_note": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/E51.r42-source-trace.md",
+                "source_note_sha256": "9147007d8bff711d9d78b37589f92b11ab576ee53f7d91db7d7aa95ce68ea7c0",
+                "checker_sha256": "9b53a58dada0265dd5d2841964e2cd440336aa6ba0942cb1ecd792808b0ae68e",
+                "facts": [
+                  "FUN_00421c70_initializes_shell_plus_0x474_null_FUN_00422620_allocates_and_populates_when_null",
+                  "FUN_0045fa60_row_plus_0x0c_selects_body_and_art_body_layout_precedes_row_plus_0x14_display_title",
+                  "FUN_006083c0_emits_0x29b_0x29d_0x309_and_FUN_0045da70_conditionally_maps_0x309_to_0x67_for_nonnull_selected_and_current_rows",
+                  "command_0xfb_and_escape_call_same_vtable_plus_0x30_close_method",
+                  "null_0x83_or_0x84_neighbor_retains_current_row_pointer",
+                  "supported_profile_347_of_347_rows_have_effective_art"
+                ],
+                "lookup_file_distinction": "lookup_ids_7188_and_11284_are_unused_but_EDATA_142_and_EDATA_143_files_are_bound_through_lookup_ids_7200_and_11296",
+                "boundary": "reviewed_static_inference_not_runtime_notification_focus_resource_selection_or_general_null_art_execution"
+              },
+              "r43": {
+                "review_status": "coordinator_and_independent_sol_accepted_narrow_fleet_ship_context_route",
+                "report_sha256": "fd32ddc0e98a8b451d42a3c1544ef41adece418f3ec3f4a294244a0b7fb24cc9",
+                "source_note_sha256": "85a7a02df550b084aaebef67565a9bb3cdee348c42e2b4886c1c1db1095b51e9",
+                "checker_sha256": "8ed791fdb84bb85ccf371555bce99d0e35e675ce5fc054ae22e87d0a2a75fd95",
+                "independent_review_sha256": "e40d6772bb21103b85eff9bad9d92e40160c21bcffd7b963e007e60a93c9748a",
+                "static_route": "typed_Fleet_owner_selected_row_wrapper_collection_to_popup_command_0x100_to_FUN_00486fb0_to_FUN_0041d6b0_to_FUN_00429f30",
+                "qualifications": [
+                  "FUN_00429f30_create_branch_passes_contextual_wrappers_to_FUN_0045d400_existing_window_branch_reuses_window",
+                  "deselection_matches_same_packed_base_row_identity_not_proven_discriminator_match"
+                ],
+                "boundary": "not_live_command_notification_selected_resource_canonical_DAT_identity_or_target_thread_focus_proof"
+              }
+            },
+            "matrix_summary": {
+              "acquisition": {"partial": 15, "missing": 6},
+              "acceptance": {"accepted": 0, "open": 21}
+            },
+            "matrix_results": [
+              {"id": "ENC-UI-01", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["alliance_pre_gate_command", "runtime_selected_resources", "internal_win32_focus_trace", "instrumented_duplicate_f7_child_count"]},
+              {"id": "ENC-UI-02", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["direct_FUN_004fcee0_gate_value", "runtime_selected_resources", "focus_trace", "instrumented_child_identity_count"]},
+              {"id": "ENC-UI-03", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "fixed_0x6f_through_0x75_order_profile_candidate_counts_347_200_38_14_15_10_69_and_source_order_ties", "unmet_subcriteria": ["complete_live_admitted_membership_identities", "complete_live_comparator_order", "empty_gap_outcomes", "runtime_selected_resources", "focus_trace"]},
+              {"id": "ENC-UI-04", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "fixed_0x6f_through_0x75_order_profile_candidate_counts_347_200_38_14_15_10_69_and_source_order_ties", "unmet_subcriteria": ["complete_live_admitted_membership_identities", "complete_live_comparator_order", "empty_gap_outcomes", "runtime_selected_resources", "focus_trace"]},
+              {"id": "ENC-UI-05", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["exhaustive_mode_states", "exhaustive_navigation_states", "all_disabled_states_both_factions", "cursor_strobe_timing"]},
+              {"id": "ENC-UI-06", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "emitter_0x29b_0x29d_0x309_and_conditional_receiver_0x309_to_0x67", "unmet_subcriteria": ["runtime_delivered_notification_identity_trace", "internal_win32_focus_trace", "pointer_click_double_click_selected_resource_joins"]},
+              {"id": "ENC-UI-07", "acquisition_status": "missing", "row_acceptance": "open", "reviewed_visible_subcase": "fleet_1_ship_corellian_corvette_1_context_menu_opens_corellian_corvette_and_close_preserves_fleet", "reviewed_static_route": "typed_Fleet_owner_and_selected_row_wrapper_to_popup_command_0x100_to_FUN_00486fb0_to_FUN_0041d6b0_to_FUN_00429f30_create_or_reuse_boundary", "reviewed_profile_join": "class_0x14000045_title_10053_body_art_lookup_5957_EDATA_047", "unmet_subcriteria": ["runtime_command_notification_occurrence", "runtime_selected_resources", "canonical_current_key", "internal_win32_focus", "remaining_four_class_context_callers"]},
+              {"id": "ENC-UI-08", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["all_five_entity_context_callers_and_provenance"]},
+              {"id": "ENC-UI-09", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["both_special_fallback_branches", "non_special_miss"]},
+              {"id": "ENC-UI-10", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["controlled_unavailable_stale_context"]},
+              {"id": "ENC-UI-11", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["runtime_selected_image_text_identities", "resource_composition_trace"]},
+              {"id": "ENC-UI-12", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["empire_selector_1_24_25_26_counterparts", "direct_original_loader_selected_filename_composition_trace"]},
+              {"id": "ENC-UI-13", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["controlled_admitted_excluded_pair_and_ancestry"]},
+              {"id": "ENC-UI-14", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "null_0x83_neighbor_retains_this_plus_0x148_current_row_control_disablement_separate", "unmet_subcriteria": ["internal_win32_focus_trace", "complete_after_action_full_desktop_pairs"]},
+              {"id": "ENC-UI-15", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["connected_disabled_row_setup", "skip_disabled_identity_trace"]},
+              {"id": "ENC-UI-16", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "null_0x84_neighbor_retains_this_plus_0x148_current_row_control_disablement_separate", "unmet_subcriteria": ["internal_win32_focus_trace", "complete_after_action_full_desktop_pairs"]},
+              {"id": "ENC-UI-17", "acquisition_status": "missing", "row_acceptance": "open", "applicability": "supported_profile_corpus_not_applicable", "reviewed_corpus_evidence": "347_of_347_bound_rows_have_effective_art_331_direct_or_system_plus_16_complete_viewer_faction_pairs_186_bound_files_EDATA_192_unbound_deferred", "unmet_subcriteria": ["general_null_art_branch_runtime_untested_nonblocking_for_supported_profile"]},
+              {"id": "ENC-UI-18", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_visible_evidence": "chewbacca_eight_down_onset_4_eight_up_reversal_4_up_5_through_8_interrupted_pointer_arrow_motion_pointer_drag_no_motion", "reviewed_profile_join": "0x38000343_title_10819_body_art_lookup_6723_EDATA_081", "unmet_subcriteria": ["explicit_newline", "long_token", "body_page_key", "font_metrics", "full_extent_internal_focus", "successful_pointer_drag"]},
+              {"id": "ENC-UI-19", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "command_0xfb_dispatches_to_same_vtable_plus_0x30_method_as_escape", "reviewed_visible_evidence": "context_opened_article_close_preserved_fleet_1_surface", "unmet_subcriteria": ["runtime_0xfb_command_notification_observation", "internal_win32_focus_routing_trace"]},
+              {"id": "ENC-UI-20", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["hidden_predecessor_configuration", "complete_command_list_focus_trace"]},
+              {"id": "ENC-UI-21", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["hidden_successor_leftmost_configuration", "complete_command_list_focus_trace"]}
+            ],
+            "limitations": [
+              "contextual_callers_need_controlled_typed_wrapper_fixtures",
+              "unavailable_and_fallback_cases_need_source_backed_save_or_scenario_state",
+              "system_selector_other_viewer_and_direct_loader_composition_not_captured",
+              "system_ancestry_exclusion_pair_not_captured",
+              "general_null_art_branch_untested_but_supported_profile_capture_corpus_not_applicable",
+              "hidden_category_configuration_not_connected",
+              "compatibility_capture_does_not_establish_original_windows_or_port_visual_parity"
+            ]
+          },
           "coordinate_space": "encyclopedia_client_relative_integer_pixels",
           "client_size": [470, 330],
           "entry_routes": [
@@ -427,7 +845,7 @@
             {"id": "ENC-UI-14", "state": "first_enabled_topic", "status": "static-proven-runtime-pending"},
             {"id": "ENC-UI-15", "state": "middle_and_disabled_intermediate_topic", "status": "static-proven-runtime-pending"},
             {"id": "ENC-UI-16", "state": "last_enabled_topic", "status": "static-proven-runtime-pending"},
-            {"id": "ENC-UI-17", "state": "legitimate_no_art_topic", "status": "source_branch-proven-trigger-and-runtime-pending"},
+            {"id": "ENC-UI-17", "state": "general_null_art_branch_no_supported_profile_topic", "status": "supported-profile-corpus-not-applicable-general-branch-untested"},
             {"id": "ENC-UI-18", "state": "body_wrap_scroll_focus", "status": "static-proven-runtime-pending"},
             {"id": "ENC-UI-19", "state": "topic_return_tab_escape_close", "status": "static-proven-runtime-pending"},
             {"id": "ENC-UI-20", "state": "index_category_left_middle_first_and_hidden_predecessor_edges", "status": "static-proven-runtime-pending_hidden_case_requires_connected_original_configuration"},
