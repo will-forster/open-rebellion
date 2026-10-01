@@ -156,7 +156,7 @@ and a next proof in the [machine-readable ledger](reverse-engineering-ledger.jso
 | RE-GID-01 | Filters, legends, marker rules, pan, zoom, and selection | static-partial; default GID and source frame runtime-corroborated | Recover menu interior and geometry, expanded legend, remaining filter predicates and overlays, and exact map input |
 | RE-OVR-01 | Galaxy Overview | untriaged | Recover geometry, category formulas, resources, and destinations |
 | RE-MSG-01 | Messages, Agent menus, alerts, and reports | static-partial; rail and empty index shell runtime-corroborated | Continue from the corrected [P63 Message Index mapping](../../../ghidra/notes/message-index-window.md): populate rows, selection, navigation, clear/delete, Advice slowdown, chat, production routing, and A0 comparison |
-| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; exact empty index shells, ten control pairs, and source-derived English catalog runtime-corroborated; original Wine compatibility captures partial/blocked with bounded endpoint/current-row evidence; unproven alternate art deferred to `orlocal-2kq` | Continue from the [P65 catalog checkpoint](evidence/2026-09-30-encyclopedia-index-catalog.md) and preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md): bind 356 catalog objects to ENCYTEXT and EDATA; complete E51's named partial/missing `ENC-UI-01..21` subcases with selected resources, internal focus, notifications, caller/faction/context fixtures and complete desktop pairs; complete topic composition and integrate production routing |
+| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; exact empty index shells, ten control pairs, and source-derived English catalog runtime-corroborated; original Wine compatibility captures partial/blocked with bounded endpoint/current-row, Fleet-context and mission-context evidence; unproven alternate art deferred to `orlocal-2kq` | Continue from the [P65 catalog checkpoint](evidence/2026-09-30-encyclopedia-index-catalog.md) and preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md): bind 356 catalog objects to ENCYTEXT and EDATA; complete E51's named partial/missing `ENC-UI-01..21` subcases with selected resources, internal focus, notifications, the three unrenamed caller routes, entity/faction/context fixtures and complete desktop pairs; complete topic composition and integrate production routing |
 | RE-OBJ-01 | System, sector, and object-window constructors | static-partial; sector and system shells runtime-corroborated | Complete system item compositions and commands, then map the remaining object families |
 | RE-ADV-01 | Type-302 advisor and briefing frame decoding | runtime-corroborated | Extend the verified advisor decoder/transport to briefings and compare with A0 captures |
 | RE-ADV-02 | SPT/BIN/FDT action semantics, cadence, and sound | static-partial | Replace inferred priority thirds with authored action mappings |
@@ -262,6 +262,18 @@ Their selected-row, guarded retained-context, selected-child, mission-row, and
 first-row flows are recorded by address. No visible surface name is inferred
 from proximity.
 
+Accepted r45 evidence proves the mission caller's exact class-context route:
+`FUN_0046c3c0` command `0x67` copies the selected mission-definition row into
+a class wrapper, pairs it with an empty entity companion, and calls
+`FUN_0041d6b0`. `FUN_00429f30` passes those wrappers into `FUN_0045d400` only
+on child construction; an existing encyclopedia child is reused without
+reconstructing context. Accepted r46 evidence proves the distinct conditional
+setup route: TEXTCOMM accelerator table 11 maps Alt+M to `0xbc0`; the root
+loop forwards it to the active child as `0x483`; a valid selected live
+Personnel entity may build order `0x240`; and only a nonempty
+`FUN_004f5380` legal-mission result admits the mission dialog. The live entity
+and later mission-definition class row are not interchangeable identities.
+
 Index focus belongs to the `CoolDragList`; Return emits the same `0x309`
 activation as a double-click and enters topic mode. In index mode Left uses
 `FUN_005f5c60` predecessor traversal and Right uses the threaded successor;
@@ -337,8 +349,52 @@ not a proven discriminator match. The visible Corvette result plus static
 route does not prove a live command occurrence, selected resources, canonical
 DAT identity, notification delivery, or target-thread focus.
 
-The remaining gates are named rather than inferred: all five contextual
-callers with typed wrappers, fallback and unavailable contexts, the admitted /
+The r45 report/source/checker/review hashes are
+`4621912fa106bfd8f5ba433c8a4fdb4ac7d33a1c1d08fd00b590b659a10c2dbe`,
+`7fb3b40c4d0288646d7c6b8e23adf3a0d778923b979b185259a1ac08c4ede520`,
+`207f78b59f72e9b48e1a4888611f34502e94d525da5f6de4de11c1a8c016f68c`,
+and `a0d746f21ff00227d2a0eed8d77ea0943aea22f731f2acc5dbac0f529fdae3bb`.
+The r46 report/source/checker/review hashes are
+`166d66f446039b8ddf96bb5cd50827f28e77ba3a127a72bf67355fe712ddbd96`,
+`1dd786bf12e9f02378e26b5a14329a09266e2ec5cc10a7538a58971027169837`,
+`8d7468b75db9b43c5071398a04bcfca392229cef0953955105f0ba86afc4fecb`,
+and `7f114fcb62e16b39a6ded1146a047c8085076c6d625eb73d453f80b8d77d4e81`.
+Their accepted scope is static source evidence, not a runtime
+command/resource/notification/focus observation.
+
+Coordinator-accepted r47 adds 70 raw full frames and 70 exact
+same-acquisition crops outside every earlier inventory (sorted digests
+`8fd989a44bd4fa5f8fd281da7437ef267a687b1c315080170801554bd128e631`
+and `9666c639bf6528e99c6014bc19077c72c4bf3834614e56b2bc7badf9697444e1`).
+In one Alliance / Sumitra / Yavin
+run, real Recruitment and Espionage mission-definition rows each opened the
+matching article through the visible mission-dialog Encyclopedia control, and
+ordinary close retained the mission and Personnel windows. Report/checker/
+action-journal hashes are
+`538a0d3f5b6e71b361e0f9b37031fb8255bc1b3634077dd4255e6358a532acdf`,
+`1c75f64daf9296546fe826b670af0ffedc711e68663402b352d5726356bd9d89`,
+and `de324268a33f48bf6c4901f68c3755fe0ba9d233587c8beeed61651f2a91fb7c`.
+The Alt+M bracket frames `055`/`056` are byte-identical
+(`8ff85f6dcfffed2c73b8bedc121140981dddf5e942f24f81faa08c24f861f97b`);
+a separate later double-click precedes dialog frame `057`
+(`802b2e74d4963881a3af120ea84c14d732753a680aa16809c9c03bf7a31024c5`).
+Thus the downstream class-context result is observed,
+while hotkey causality remains unisolated. Cleanup removed the owned
+game/window after exact prefix stop, but the supervisor exit 143 and unknown
+launcher exit status remain recorded rather than normalized.
+
+The prior r44 four-file metadata state remains a historical checkpoint at
+`1c3140059d8bd69d94715e47c907667c0fe29801`; its checker and hashes are not
+relabeled as current. The additive r48 checker (`check-r48-metadata.py`,
+SHA-256
+`091e4130d991dd2798305a27e77d20634724b6834aac29500d93743ccc02bd4d`)
+validates the old Git objects and the current four-file/evidence/row closure
+separately.
+
+The remaining gates are named rather than inferred: runtime command/resource/
+current-key/focus proof for the observed Fleet and mission class routes; the
+three unrenamed contextual owners; all controlled entity-context routes;
+fallback and unavailable contexts; the admitted /
 excluded type-`0xf2` ancestry pair, Empire-side System-selector counterparts,
 exhaustive control states, full keyboard/body-layout cases, and connected
 hidden-category configurations. `ENC-UI-17` is corpus-not-applicable for this

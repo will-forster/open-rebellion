@@ -338,7 +338,7 @@
         "sources": ["REBEXE.EXE", "ENCYBMAP.DLL", "ENCYTEXT.DLL", "EData", "GOKRES.DLL"],
         "anchors": ["FUN_00422620", "FUN_0041d6b0", "FUN_00429f30", "0x00438800", "0x004443a0", "0x00467f10", "FUN_0046c3c0", "FUN_00486fb0", "FUN_0045d400", "FUN_0045da70", "FUN_0045ddc0", "FUN_0045f090", "FUN_0045f100", "FUN_0045f480", "FUN_0045fa60", "FUN_0045fd20", "FUN_0045fd90", "FUN_0045fe60", "FUN_0041ecf0", "FUN_0041fd00", "FUN_0041fe70", "FUN_004f31b0", "FUN_004f6330", "FUN_0053ef50", "FUN_0053f090", "FUN_00566b90", "FUN_005696b0", "FUN_005f5060", "FUN_005f5c60", "FUN_005f59f0", "FUN_00601700", "FUN_00601b80", "FUN_00601ce0", "FUN_006075e0", "FUN_00607610", "FUN_0060a790", "FUN_0060a890", "FUN_006028c0", "FUN_00602d30", "FUN_006030c0", "FUN_006030f0", "FUN_006083c0", "FUN_0060d700", "FUN_0060d7e0", "FUN_004ad730", "FUN_004ad750"],
         "method": "Trace the shell +0x474 master topic cache, its sorted family projections, precise selector transitions, canonical context-to-topic routing, source-ancestry system admission, skip-disabled topic traversal, ordered category keyboard traversal, viewer-side/system EData selection, faction-shell plus mode-background composition, control state, focus, Return, wrap/scroll, and every connected open caller through source and owned resource metadata; reconcile those semantics with the source-derived P65 English catalog.",
-        "next_proof": "P65 adds the source-derived 356-entry English catalog, recovered labels and filters, stable selection, and scrolling; continue binding those objects to ENCYTEXT and EDATA. Complete the applicable partial and missing ENC-UI-01..21 subcases recorded by E51, retaining original resource identities, internal focus and caller context. Full/filtered endpoint identities and Alliance System selectors 1/24/25/26 have bounded live observations; r41 adds reviewed visible Chewbacca scrolling and a Fleet ship-context route. Contextual, unavailable, excluded-ancestry, other-viewer selector and hidden-category cases still need source-backed fixtures or connected observation. ENC-UI-17 original no-art capture is corpus-not-applicable for the 347/347 effective-art supported profile; the generic null-art branch remains untested. Unproven alternate images remain inventoried and unused under deferred task orlocal-2kq."
+        "next_proof": "P65 adds the source-derived 356-entry English catalog, recovered labels and filters, stable selection, and scrolling; continue binding those objects to ENCYTEXT and EDATA. Complete the applicable partial and missing ENC-UI-01..21 subcases recorded by E51, retaining original resource identities, internal focus and caller context. Full/filtered endpoint identities and Alliance System selectors 1/24/25/26 have bounded live observations; r41 adds reviewed Chewbacca scrolling and a Fleet ship-context route; r47 adds reviewed Recruitment and Espionage mission class-context opens and close/return while leaving Alt+M causality unisolated. Runtime identities for the two observed class routes, the three unrenamed contextual owners, all controlled entity routes, unavailable/fallback, excluded-ancestry, other-viewer selector and hidden-category cases still need source-backed fixtures or connected observation. ENC-UI-17 original no-art capture is corpus-not-applicable for the 347/347 effective-art supported profile; the generic null-art branch remains untested. Unproven alternate images remain inventoried and unused under deferred task orlocal-2kq."
       },
       "runtime_capture_required": true,
       "semantic_research": {
@@ -729,6 +729,70 @@
                   "deselection_matches_same_packed_base_row_identity_not_proven_discriminator_match"
                 ],
                 "boundary": "not_live_command_notification_selected_resource_canonical_DAT_identity_or_target_thread_focus_proof"
+              },
+              "r45_static_mission_context": {
+                "review_status": "coordinator_and_independent_sol_accepted_bounded_static_mission_context_route",
+                "report_sha256": "4621912fa106bfd8f5ba433c8a4fdb4ac7d33a1c1d08fd00b590b659a10c2dbe",
+                "source_note_sha256": "7fb3b40c4d0288646d7c6b8e23adf3a0d778923b979b185259a1ac08c4ede520",
+                "checker_sha256": "207f78b59f72e9b48e1a4888611f34502e94d525da5f6de4de11c1a8c016f68c",
+                "independent_review_sha256": "a0d746f21ff00227d2a0eed8d77ea0943aea22f731f2acc5dbac0f529fdae3bb",
+                "static_route": "FUN_0046c3c0_command_0x67_selected_mission_definition_class_wrapper_plus_empty_entity_via_FUN_0041d6b0_to_FUN_00429f30",
+                "create_reuse_boundary": "only_absent_child_construction_passes_context_wrappers_to_FUN_0045d400_existing_child_is_reused_without_context_reconstruction",
+                "boundary": "static_class_context_proof_not_live_command_notification_resource_current_key_DatId_or_focus_proof"
+              },
+              "r46_static_mission_setup": {
+                "review_status": "coordinator_and_independent_sol_accepted_bounded_static_player_mission_setup_route",
+                "report_sha256": "166d66f446039b8ddf96bb5cd50827f28e77ba3a127a72bf67355fe712ddbd96",
+                "source_note_sha256": "1dd786bf12e9f02378e26b5a14329a09266e2ec5cc10a7538a58971027169837",
+                "checker_sha256": "8d7468b75db9b43c5071398a04bcfca392229cef0953955105f0ba86afc4fecb",
+                "independent_review_sha256": "7f114fcb62e16b39a6ded1146a047c8085076c6d625eb73d453f80b8d77d4e81",
+                "accelerator_table_11_sha256": "3decf87850057749ba7041949f7402420039e24fad3869fe20f0a0e9ec9f7d65",
+                "root_translate_accelerator_loop_sha256": "319355da35d2c57d4fcba65072c0033b7a6c85c9ed3d403826385345df6e7da8",
+                "active_child_0x483_forward_sha256": "df0179ee6aadc6155ca32f41c0e4edba24e93f05bc22b1d8be173ffd5c55f747",
+                "static_route": "Alt_M_to_0xbc0_to_active_child_0x483_selected_live_Personnel_entity_to_order_0x240_to_nonempty_FUN_004f5380_dialog_admission",
+                "identity_boundary": "selected_live_Personnel_entity_builds_mission_team_later_mission_definition_row_is_distinct_class_context",
+                "boundary": "conditional_static_setup_not_proof_that_any_specific_live_character_system_tuple_opens_dialog"
+              },
+              "r47_visible_mission_context": {
+                "review_status": "coordinator_accepted_bounded_visible_downstream_evidence",
+                "profile": "encytext-49aea545-lang-1033-v1",
+                "rebexe_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
+                "faction": "alliance",
+                "setup": "Sumitra_sector_Yavin_system_Personnel_portrait_grid_Leia_Organa_attached_Yavin_awaiting_orders",
+                "report_sha256": "538a0d3f5b6e71b361e0f9b37031fb8255bc1b3634077dd4255e6358a532acdf",
+                "checker_sha256": "1c75f64daf9296546fe826b670af0ffedc711e68663402b352d5726356bd9d89",
+                "actions_sha256": "de324268a33f48bf6c4901f68c3755fe0ba9d233587c8beeed61651f2a91fb7c",
+                "raw_full_png_count": 70,
+                "same_acquisition_crop_png_count": 70,
+                "full_sorted_identity_sha256": "8fd989a44bd4fa5f8fd281da7437ef267a687b1c315080170801554bd128e631",
+                "crop_sorted_identity_sha256": "9666c639bf6528e99c6014bc19077c72c4bf3834614e56b2bc7badf9697444e1",
+                "observed_subcriteria": [
+                  "Recruitment_selected_mission_definition_to_matching_article_to_close_retaining_mission_and_Personnel_windows_frames_058_through_063",
+                  "Espionage_selected_mission_definition_to_matching_article_to_close_retaining_mission_and_Personnel_windows_frames_066_through_070"
+                ],
+                "key_full_frame_sha256": {
+                  "058-mission-choices-full.png": "dcc614223b56071d0f9032d75518f42506816fe3210caa73c7a80c772da739fe",
+                  "059-recruitment-selected-full.png": "563369cd429763d988b95f3c7cc6fd0cbe20d18ef8a664446acc4f672ed4fd8c",
+                  "060-mission-encyclopedia-before-full.png": "e5ef44d41362a071a7cbccf8fccd609893a8c8fc9941f769a4e87bd033cd75a1",
+                  "061-recruitment-article-full.png": "e15de48fbadf2f32b667702587a36bcdfe18c4cf079547c12363cc2c2b5e42d6",
+                  "063-article-close-after-full.png": "13dc00123d88408afb507c1159f81ca82e33ce74d016b88cd993f43b9bec84e0",
+                  "066-espionage-row-full.png": "f62449aa0a6ef32d2383b8fc9fd5e618b1a8523707079362d33ba61f35404864",
+                  "067-espionage-selected-full.png": "13f3378540f70efc25f7d8241284f1a933d2b47b6885c9033796ccd87a1c5be6",
+                  "068-espionage-ency-before-full.png": "bf1b93ccf5f9191c571cc5ce48c523bd2688c356a65458d42983ebc010700dfc",
+                  "069-espionage-article-full.png": "bbe29e3c7e181fb7ef3c1ca525a156bf4864f94f2586627f4cfae7cad5a4a28f",
+                  "070-espionage-close-after-full.png": "3d39de178befc518bb8db4b4ebb8eafa1bdd6d73c5a6f2b6fb925562e810554b"
+                },
+                "hotkey_observation": {
+                  "before_frame": "055-leia-selected-before-altm-full.png",
+                  "after_frame": "056-after-altm-full.png",
+                  "shared_sha256": "8ff85f6dcfffed2c73b8bedc121140981dddf5e942f24f81faa08c24f861f97b",
+                  "later_distinct_input_precedes_dialog": true,
+                  "later_dialog_frame": "057-personnel-tab-double-full.png",
+                  "later_dialog_frame_sha256": "802b2e74d4963881a3af120ea84c14d732753a680aa16809c9c03bf7a31024c5",
+                  "disposition": "Alt_M_causality_unisolated_not_a_missing_implementation_verdict"
+                },
+                "cleanup": "stop_script_rc_0_no_owned_process_or_window_supervisor_exit_143_launcher_exit_unknown",
+                "boundary": "Wine_visible_mission_name_article_and_close_return_observation_not_internal_command_resource_notification_DatId_or_target_thread_focus_proof"
               }
             },
             "matrix_summary": {
@@ -742,7 +806,7 @@
               {"id": "ENC-UI-04", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "fixed_0x6f_through_0x75_order_profile_candidate_counts_347_200_38_14_15_10_69_and_source_order_ties", "unmet_subcriteria": ["complete_live_admitted_membership_identities", "complete_live_comparator_order", "empty_gap_outcomes", "runtime_selected_resources", "focus_trace"]},
               {"id": "ENC-UI-05", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["exhaustive_mode_states", "exhaustive_navigation_states", "all_disabled_states_both_factions", "cursor_strobe_timing"]},
               {"id": "ENC-UI-06", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "emitter_0x29b_0x29d_0x309_and_conditional_receiver_0x309_to_0x67", "unmet_subcriteria": ["runtime_delivered_notification_identity_trace", "internal_win32_focus_trace", "pointer_click_double_click_selected_resource_joins"]},
-              {"id": "ENC-UI-07", "acquisition_status": "missing", "row_acceptance": "open", "reviewed_visible_subcase": "fleet_1_ship_corellian_corvette_1_context_menu_opens_corellian_corvette_and_close_preserves_fleet", "reviewed_static_route": "typed_Fleet_owner_and_selected_row_wrapper_to_popup_command_0x100_to_FUN_00486fb0_to_FUN_0041d6b0_to_FUN_00429f30_create_or_reuse_boundary", "reviewed_profile_join": "class_0x14000045_title_10053_body_art_lookup_5957_EDATA_047", "unmet_subcriteria": ["runtime_command_notification_occurrence", "runtime_selected_resources", "canonical_current_key", "internal_win32_focus", "remaining_four_class_context_callers"]},
+              {"id": "ENC-UI-07", "acquisition_status": "missing", "row_acceptance": "open", "reviewed_visible_subcase": "fleet_1_ship_corellian_corvette_1_context_menu_opens_corellian_corvette_and_close_preserves_fleet", "reviewed_visible_mission_subcase": "r47_Recruitment_and_Espionage_selected_mission_definition_rows_open_matching_articles_and_close_preserves_mission_and_Personnel_windows", "reviewed_static_route": "typed_Fleet_owner_and_selected_row_wrapper_to_popup_command_0x100_to_FUN_00486fb0_to_FUN_0041d6b0_to_FUN_00429f30_create_or_reuse_boundary", "reviewed_static_mission_route": "mission_FUN_0046c3c0_command_0x67_class_wrapper_empty_entity_to_FUN_0041d6b0_FUN_00429f30_create_or_reuse_boundary", "reviewed_profile_join": "class_0x14000045_title_10053_body_art_lookup_5957_EDATA_047_for_Fleet_subcase_mission_rows_have_no_runtime_resource_or_DatId_claim", "setup_boundary": "r46_live_Personnel_entity_order_setup_is_distinct_from_r45_r47_mission_definition_class_context_and_r47_did_not_isolate_Alt_M", "unmet_subcriteria": ["runtime_command_notification_occurrence", "runtime_selected_resources", "canonical_current_keys", "internal_win32_focus", "remaining_three_class_context_callers"]},
               {"id": "ENC-UI-08", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["all_five_entity_context_callers_and_provenance"]},
               {"id": "ENC-UI-09", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["both_special_fallback_branches", "non_special_miss"]},
               {"id": "ENC-UI-10", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["controlled_unavailable_stale_context"]},
@@ -754,12 +818,14 @@
               {"id": "ENC-UI-16", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "null_0x84_neighbor_retains_this_plus_0x148_current_row_control_disablement_separate", "unmet_subcriteria": ["internal_win32_focus_trace", "complete_after_action_full_desktop_pairs"]},
               {"id": "ENC-UI-17", "acquisition_status": "missing", "row_acceptance": "open", "applicability": "supported_profile_corpus_not_applicable", "reviewed_corpus_evidence": "347_of_347_bound_rows_have_effective_art_331_direct_or_system_plus_16_complete_viewer_faction_pairs_186_bound_files_EDATA_192_unbound_deferred", "unmet_subcriteria": ["general_null_art_branch_runtime_untested_nonblocking_for_supported_profile"]},
               {"id": "ENC-UI-18", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_visible_evidence": "chewbacca_eight_down_onset_4_eight_up_reversal_4_up_5_through_8_interrupted_pointer_arrow_motion_pointer_drag_no_motion", "reviewed_profile_join": "0x38000343_title_10819_body_art_lookup_6723_EDATA_081", "unmet_subcriteria": ["explicit_newline", "long_token", "body_page_key", "font_metrics", "full_extent_internal_focus", "successful_pointer_drag"]},
-              {"id": "ENC-UI-19", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "command_0xfb_dispatches_to_same_vtable_plus_0x30_method_as_escape", "reviewed_visible_evidence": "context_opened_article_close_preserved_fleet_1_surface", "unmet_subcriteria": ["runtime_0xfb_command_notification_observation", "internal_win32_focus_routing_trace"]},
+              {"id": "ENC-UI-19", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "command_0xfb_dispatches_to_same_vtable_plus_0x30_method_as_escape", "reviewed_visible_evidence": "context_opened_article_close_preserved_fleet_1_surface", "reviewed_visible_mission_close_evidence": "r47_Recruitment_and_Espionage_article_close_preserved_mission_dialog_and_Personnel_window", "unmet_subcriteria": ["runtime_0xfb_command_notification_observation", "internal_win32_focus_routing_trace"]},
               {"id": "ENC-UI-20", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["hidden_predecessor_configuration", "complete_command_list_focus_trace"]},
               {"id": "ENC-UI-21", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["hidden_successor_leftmost_configuration", "complete_command_list_focus_trace"]}
             ],
             "limitations": [
-              "contextual_callers_need_controlled_typed_wrapper_fixtures",
+              "observed_Fleet_and_mission_class_context_routes_need_runtime_command_resource_notification_current_key_and_focus_identity",
+              "three_unrenamed_class_context_callers_and_all_entity_context_callers_need_controlled_typed_wrapper_fixtures",
+              "Alt_M_mission_setup_causality_unisolated_but_not_a_universal_encyclopedia_gate",
               "unavailable_and_fallback_cases_need_source_backed_save_or_scenario_state",
               "system_selector_other_viewer_and_direct_loader_composition_not_captured",
               "system_ancestry_exclusion_pair_not_captured",
@@ -776,7 +842,7 @@
             {"id": "selected_row_handler_00438800", "source": "0x00438800_call_0x004388ff", "trigger": "command_0x67", "context": "row_plus_0x54_from_control_this_plus_0x114_via_FUN_0041d6b0", "surface_name": "unresolved_do_not_infer_from_proximity"},
             {"id": "guarded_context_handler_004443a0", "source": "0x004443a0_call_0x0044445d", "trigger": "command_0x66_after_nonempty_and_not_high_byte_0xf1_guards", "context": "this_plus_0x128_with_empty_companion_via_FUN_0041d6b0", "surface_name": "unresolved_do_not_infer_from_proximity"},
             {"id": "selected_child_handler_00467f10", "source": "0x00467f10_call_0x0046886a", "trigger": "command_0x67_or_0x97_selected_child_virtual_type_4", "context": "selected_child_plus_0x60_with_prepared_companion_via_FUN_0041d6b0", "surface_name": "unresolved_do_not_infer_from_proximity"},
-            {"id": "mission_selected_row", "source": "FUN_0046c3c0", "trigger": "command_0x67", "context": "typed_selected_row_via_FUN_0041d6b0"},
+            {"id": "mission_selected_row", "source": "FUN_0046c3c0", "trigger": "command_0x67", "context": "mission_definition_class_wrapper_plus_empty_entity_companion_via_FUN_0041d6b0", "constructor_boundary": "FUN_00429f30_passes_wrappers_to_FUN_0045d400_only_when_child_absent_existing_child_reused", "visible_observation": "r47_Recruitment_and_Espionage_rows_each_open_matching_article_and_close_preserves_mission_and_Personnel_windows", "runtime_identity_boundary": "no_live_numeric_command_resource_notification_current_key_DatId_or_focus_trace"},
             {"id": "strategic_list_selected_row", "source": "FUN_00486fb0", "trigger": "event_0x100", "context": "typed_first_row_via_FUN_0041d6b0"}
           ],
           "construction": {
