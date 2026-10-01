@@ -156,7 +156,7 @@ and a next proof in the [machine-readable ledger](reverse-engineering-ledger.jso
 | RE-GID-01 | Filters, legends, marker rules, pan, zoom, and selection | static-partial; default GID and source frame runtime-corroborated | Recover menu interior and geometry, expanded legend, remaining filter predicates and overlays, and exact map input |
 | RE-OVR-01 | Galaxy Overview | untriaged | Recover geometry, category formulas, resources, and destinations |
 | RE-MSG-01 | Messages, Agent menus, alerts, and reports | static-partial; rail controls recovered | Decompile `FUN_0042a240`, map unread states and the original index window, then join reports, audio, and navigation |
-| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; upstream index shell and ten control pairs runtime-corroborated; original Wine compatibility captures partial/blocked with bounded endpoint/current-row, Fleet-context, mission-context, and Build Selection class-context evidence; unproven alternate art deferred to `orlocal-2kq` | Preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md); complete E51's named partial/missing `ENC-UI-01..21` subcases with selected resources, internal focus, notifications, the two unrenamed caller routes, entity/faction/context fixtures and complete desktop pairs; complete topic composition and outer-window comparison |
+| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; all five class-context source owners named; original Wine compatibility captures partial/blocked with bounded endpoint/current-row, four visible class-context routes and one initial-index focus observation; unproven alternate art deferred to `orlocal-2kq` | Preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md); complete E51's named partial/missing `ENC-UI-01..21` subcases with selected resources, notifications, action-specific focus, entity/faction/context fixtures, a legitimate eligible Research Report and complete desktop pairs; complete topic composition and outer-window comparison |
 | RE-OBJ-01 | System, sector, and object-window constructors | static-partial; sector and system shells runtime-corroborated | Complete system item compositions and commands, then map the remaining object families |
 | RE-ADV-01 | Type-302 advisor and briefing frame decoding | runtime-corroborated | Extend the verified advisor decoder/transport to briefings and compare with A0 captures |
 | RE-ADV-02 | SPT/BIN/FDT action semantics, cadence, and sound | static-partial | Replace inferred priority thirds with authored action mappings |
@@ -255,12 +255,13 @@ typed context to `FUN_00429f30`, while `0x0045da70` dispatches close `0xfb`,
 mode container `0x66`, category container `0x6e`, list `0x65`, and navigation
 `0x83`/`0x84`. Context-free shell paths are F7 (`0x76`) and command `0x131`.
 An exhaustive direct-call scan proves five contextual callers into
-`FUN_0041d6b0`: unrenamed handlers `0x00438800` command `0x67`, `0x004443a0`
-command `0x66`, and `0x00467f10` commands `0x67`/`0x97` with selected-child
-type `4`; `FUN_0046c3c0` command `0x67`; and `FUN_00486fb0` event `0x100`.
-Their selected-row, guarded retained-context, selected-child, mission-row, and
-first-row flows are recorded by address. No visible surface name is inferred
-from proximity.
+`FUN_0041d6b0`: Build Selection `0x00438800` command `0x67`, Character Status
+`0x004443a0` command `0x66`, Message Index Research Report `0x00467f10`
+commands `0x67`/`0x97` with selected-child type `4`, mission dialog
+`FUN_0046c3c0` command `0x67`, and Fleet `FUN_00486fb0` event `0x100`.
+Each surface name is supported by its independently reviewed bounded owner,
+constructor, dispatch, wrapper, and resource chain—not proximity or article
+text.
 
 Accepted r45 evidence proves the mission caller's exact class-context route:
 `FUN_0046c3c0` command `0x67` copies the selected mission-definition row into
@@ -324,8 +325,9 @@ for full and filtered Left/Right endpoints, an ordinary list PageDown/Return,
 pointer body scrolling, Escape child absence, and Alliance System selectors
 1/24/25/26. These observations still do not establish complete membership or
 runtime-admitted comparator order, empty/gap outcomes, delivered notification
-identities, direct loader filename selection, internal Win32 focus, the direct
-`FUN_004fcee0` value, or duplicate-F7 internal child count.
+identities, direct loader filename selection, action-specific Win32 focus, the
+direct `FUN_004fcee0` value, or duplicate-F7 internal child count. R56 below
+adds only the initial-index target-thread focus subcase.
 
 Coordinator-verified r41 additions are append-only and are not folded into the
 198-PNG baseline: 75 raw full frames plus 75 exact same-acquisition crops have
@@ -417,6 +419,46 @@ cancelled and its PID is absent. The guard wait/reap exit status remains
 unknown, and lifecycle-shell exit `143` is not substituted for it. The r35
 quarantine remains authoritative.
 
+Accepted r55 static evidence names Character Status `0x004443a0` and preserves
+the resolved-class / empty-entity and create-only boundary. Its source-note
+SHA-256 is
+`ff7a0c7b58d0e1d4d29ebbf9fe022281b7766a2e24e32e2b447e47c0fe6b2b97`;
+the independent review is
+`f9871d3badd25d5069fbf57d17a5bca7b342579e12b3360057022dcbc52fceba`.
+Accepted r57 static evidence names Message Index Research Report
+`0x00467f10`, including its type-4 class context and existing-child reuse
+boundary. Its source-note and independent-review hashes are
+`5703716043c4db73e3d4c1d59fa84954b079f532da2ca7e0f057efc725b3170b`
+and `11ebfd03700b2cac15cb8f415011b37f1422d314b9c5815c405e50ae53c639b9`.
+Neither source trace is a live command, resource, notification, or focus
+observation.
+
+R56 separately proves one bounded Wine initial-index focus result: two equal
+`GetGUIThreadInfo` target-thread samples focused the validated index child,
+with equal bounded before/after snapshots and bounded helper/game cleanup.
+Observation SHA-256 is
+`5de023bb410b25abf34d81bbb08e922a32e83cae19b099955fd71af8d38ea4bf`;
+checker SHA-256 is
+`357f7a57ce6d0ece68d7f895ec78ad88c85baf5fe03b4bec41efe1cde045e30f`.
+This does not prove notifications, loader-selected resources, a selected
+canonical current key, other actions/children, contextual routes, or Windows
+parity. The old r35 quarantine remains immutable at
+`ab5d3c77ea52326b7152ee80b3120887146dd07e2549deb2687dc4ad129f24a7`.
+
+R58 adds 28 full/crop pairs of bounded visible Character Status evidence:
+Leia's Status control opened a matching article, and encyclopedia-only close
+returned to Personnel with Leia selected while Status was no longer visible.
+Manifest SHA-256 is
+`1198943b9f390124cc247a13f02740d710917ecf9f57dbc0d9e96acf114154d7`.
+The covered Status window does not expose its internal destruction or close
+ordering. R59 is a verified-inconclusive capture, not a Research Report route:
+Message Index appeared later, and Manufacturing's complete visible list was
+empty. Manifest SHA-256 is
+`d1af9b876dc93f05b5c6e1ed67a8c7690915930c8dd35fe68d18435a235c5403`.
+It proves no F6 causality, eligible report, article, close, focus, or resource
+identity. Its lifecycle records preserve supervisor `143`; launcher and guard
+exit/reap remain unknown, and incomplete output is not reinterpreted.
+
 The prior r44 four-file metadata state remains a historical checkpoint at
 `1c3140059d8bd69d94715e47c907667c0fe29801`; its checker and hashes are not
 relabeled as current. The additive r48 checker (`check-r48-metadata.py`,
@@ -426,8 +468,9 @@ validates the old Git objects and the current four-file/evidence/row closure
 separately.
 
 The remaining gates are named rather than inferred: runtime command/resource/
-current-key/focus proof for the observed Fleet, mission, and build class
-routes; the two unrenamed contextual owners; all controlled entity-context routes;
+current-key/action-focus proof for the observed Fleet, mission, build, and
+Character Status class routes; a legitimate eligible Research Report route;
+all controlled entity-context routes;
 fallback and unavailable contexts; the admitted /
 excluded type-`0xf2` ancestry pair, Empire-side System-selector counterparts,
 exhaustive control states, full keyboard/body-layout cases, and connected
@@ -445,15 +488,26 @@ port parity, or final acceptance. Guide captures 018, 019, and 027 remain A3
 leads only. Any A0 contradiction must reopen source/schema review before
 consumers change.
 
-The smallest source-only next investigation is one finite owner trace for
-`0x004443a0` or `0x00467f10`; it needs no new runtime access. Correlating any
-of the three visible class routes with live command, notification, resource,
-current-key, or target-thread focus needs a separately reviewed non-invasive
-observer, and r35 quarantine is a genuine gate rather than reusable authority.
+Correlating any visible class route with live command, notification, resource,
+current-key, or action-specific target-thread focus needs a separately
+reviewed non-invasive observer; r56 is initial-index-only and the r35
+quarantine is a genuine gate rather than reusable authority. Research Report
+needs a legitimate eligible ordinary state, not a blind recapture.
 Exceptional fallback/unavailable/hidden cases need a legitimate owned
 save/scenario or connected source fixture. Original-Windows parity needs an
 authenticated original-Windows capture environment; Wine evidence cannot
 supply it.
+
+| Gate class | Missing criterion | Evidence held | Smallest prerequisite / bounded next work |
+|---|---|---|---|
+| Runtime | Loader-selected resources and delivered notifications | Static selectors and matching visible topics | One reviewed observation on an already-visible route |
+| Runtime | Action-specific focus | R56 initial-index focus | Observe the exact contextual action child under a new reviewed lane |
+| Fixture | Direct entity context | Five class-context owners | Source-backed owned entity with entity/definition/current-key provenance |
+| Fixture | Research Report route | R57 source chain; r59 empty Manufacturing list | Legitimate state with an eligible Research Report, then row/Display/article/close |
+| Source | Fallback, unavailable/stale, hidden category | Static branches and bounded absence searches | Connected writer or legitimate owned save/scenario |
+| Fixture | Type-`0xf2` exclusion and Empire selectors | Zero exclusions in two runs; Alliance selectors | Legitimate excluded pair and bounded Empire counterparts |
+| Runtime | Remaining control/body cases | Named pointer/key/endpoint subsets | Finite disabled-row, Page/newline/token/extent/drag fixtures |
+| Windows | Original-Windows parity | Wine compatibility evidence | Authenticated original-Windows environment |
 
 A separately labeled metadata-only replay resolved the two comparator globals
 without attaching them retroactively to the screenshots. For exact process PID

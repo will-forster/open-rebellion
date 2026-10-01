@@ -338,7 +338,7 @@
         "sources": ["REBEXE.EXE", "ENCYBMAP.DLL", "ENCYTEXT.DLL", "EData", "GOKRES.DLL"],
         "anchors": ["FUN_00422620", "FUN_0041d6b0", "FUN_00429f30", "0x00438800", "0x004443a0", "0x00467f10", "FUN_0046c3c0", "FUN_00486fb0", "FUN_0045d400", "FUN_0045da70", "FUN_0045ddc0", "FUN_0045f090", "FUN_0045f100", "FUN_0045f480", "FUN_0045fa60", "FUN_0045fd20", "FUN_0045fd90", "FUN_0045fe60", "FUN_0041ecf0", "FUN_0041fd00", "FUN_0041fe70", "FUN_004f31b0", "FUN_004f6330", "FUN_0053ef50", "FUN_0053f090", "FUN_00566b90", "FUN_005696b0", "FUN_005f5060", "FUN_005f5c60", "FUN_005f59f0", "FUN_00601700", "FUN_00601b80", "FUN_00601ce0", "FUN_006075e0", "FUN_00607610", "FUN_0060a790", "FUN_0060a890", "FUN_006028c0", "FUN_00602d30", "FUN_006030c0", "FUN_006030f0", "FUN_006083c0", "FUN_0060d700", "FUN_0060d7e0", "FUN_004ad730", "FUN_004ad750"],
         "method": "Trace the shell +0x474 master topic cache, its sorted family projections, precise selector transitions, canonical context-to-topic routing, source-ancestry system admission, skip-disabled topic traversal, ordered category keyboard traversal, viewer-side/system EData selection, faction-shell plus mode-background composition, control state, focus, Return, wrap/scroll, and every connected open caller through source and owned resource metadata.",
-        "next_proof": "Complete the applicable partial and missing ENC-UI-01..21 subcases recorded by E51, retaining original resource identities, internal focus and caller context. Full/filtered endpoint identities and Alliance System selectors 1/24/25/26 have bounded live observations; r41 adds reviewed Chewbacca scrolling and a Fleet ship-context route; r47 adds reviewed Recruitment and Espionage mission class-context opens and close/return while leaving Alt+M causality unisolated; corrected r49-r52 evidence names the Build Selection class route and r53 visibly opens and closes Alliance Escort Carrier while leaving Alt+B causality unisolated. Runtime identities for the three observed class routes, the two unrenamed contextual owners, all controlled entity routes, unavailable/fallback, excluded-ancestry, other-viewer selector and hidden-category cases still need source-backed fixtures or connected observation. ENC-UI-17 original no-art capture is corpus-not-applicable for the 347/347 effective-art supported profile; the generic null-art branch remains untested. Unproven alternate images remain inventoried and unused under deferred task orlocal-2kq."
+        "next_proof": "Complete the applicable partial and missing ENC-UI-01..21 subcases recorded by E51, retaining original resource identities, action-specific focus and caller context. All five direct class-context source owners are now named. Bounded visible evidence exists for Fleet, mission, Build Selection and Character Status, while the Message Index Research Report route has source proof but no eligible ordinary row in r59. R56 proves target-thread focus only for one initial index open. Runtime command/notification/resource/current-key evidence, all controlled entity routes, a legitimate eligible Research Report fixture, unavailable/fallback, excluded-ancestry, other-viewer selector and hidden-category cases still need source-backed fixtures or connected observation. ENC-UI-17 original no-art capture is corpus-not-applicable for the 347/347 effective-art supported profile; the generic null-art branch remains untested. Unproven alternate images remain inventoried and unused under deferred task orlocal-2kq."
       },
       "runtime_capture_required": true,
       "semantic_research": {
@@ -835,20 +835,97 @@
                 "alt_b_causality": "first_post_shortcut_frame_no_dialog_later_visible_yard_click_opened_BuildSelection",
                 "cleanup": "launcher_exit_0_reaped_stop_0_guard_cancelled_pid_absent_wait_exit_unknown",
                 "boundary": "Wine_visible_class_context_name_article_and_close_return_observation_not_internal_command_resource_notification_current_key_DatId_target_thread_focus_or_Windows_parity_proof"
+              },
+              "r55_static_character_status": {
+                "review_status": "coordinator_and_independent_sol_accepted_bounded_static_character_status_route",
+                "source_note": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/E51.r55-source-trace.md",
+                "source_note_sha256": "ff7a0c7b58d0e1d4d29ebbf9fe022281b7766a2e24e32e2b447e47c0fe6b2b97",
+                "independent_review_sha256": "f9871d3badd25d5069fbf57d17a5bca7b342579e12b3360057022dcbc52fceba",
+                "static_route": "Character_Status_owner_0x004443a0_command_0x66_guarded_class_at_this_plus_0x128_plus_empty_entity_companion_via_FUN_0041d6b0",
+                "class_entity_boundary": "selected_live_character_entity_is_owner_input_but_contextual_encyclopedia_argument_is_the_resolved_class_wrapper",
+                "create_reuse_boundary": "context_wrappers_are_consumed_only_when_the_encyclopedia_child_is_created",
+                "boundary": "static_class_context_proof_not_live_command_notification_resource_current_key_DatId_focus_or_hidden_status_destruction_order_proof"
+              },
+              "r56_initial_index_focus": {
+                "review_status": "coordinator_accepted_bounded_Wine_initial_index_target_thread_focus",
+                "report_sha256": "18290cd3663ed7e2852db9b7d7c462e4b8c21e307f6ceeb0608039f7e730bd8d",
+                "checker_sha256": "357f7a57ce6d0ece68d7f895ec78ad88c85baf5fe03b4bec41efe1cde045e30f",
+                "observation_sha256": "5de023bb410b25abf34d81bbb08e922a32e83cae19b099955fd71af8d38ea4bf",
+                "cleanup_sha256": "106ab4f030518b9e4c1a51ebd5bb0fe29b90c1f08331c75fea8d694de79baadb",
+                "release_sha256": "c2169ca303197df949e0ac9fa2d3ab0b305589b4e1c89eddd9cb03d29ed705ee",
+                "consumption_sha256": "0fd8a71236c01bef51418276551113b22e9ac474134a8df0cb27da3b7362568a",
+                "observation": "two_equal_GetGUIThreadInfo_target_thread_samples_focus_the_validated_initial_index_child_with_equal_bounded_pre_post_snapshots",
+                "cleanup": "helper_and_game_cleanup_completed_within_the_reviewed_bounds",
+                "old_r35_quarantine_sha256": "ab5d3c77ea52326b7152ee80b3120887146dd07e2549deb2687dc4ad129f24a7",
+                "boundary": "Wine_initial_open_index_focus_only_not_notification_loader_resource_selected_current_key_cache_hit_other_action_context_or_Windows_parity_proof"
+              },
+              "r57_static_message_index_research_report": {
+                "review_status": "coordinator_and_independent_sol_accepted_bounded_static_message_index_research_report_route",
+                "report_sha256": "8ec3483028cf4ff87f12c0962821ed70fde329add4440885628441efc7cbbd0a",
+                "source_note": "/data/projects/open-rebellion/agent-work/original-game-capture/E51/E51.r57-source-trace.md",
+                "source_note_sha256": "5703716043c4db73e3d4c1d59fa84954b079f532da2ca7e0f057efc725b3170b",
+                "checker_sha256": "6dc86ed0fa3d34903dd4ff7d92467bb01678f5921bdd246c803ec82b318871fb",
+                "independent_review_sha256": "11ebfd03700b2cac15cb8f415011b37f1422d314b9c5815c405e50ae53c639b9",
+                "static_route": "Message_Index_owner_0x00467f10_commands_0x67_or_0x97_selected_child_virtual_type_4_research_report_class_at_plus_0x60_plus_empty_entity_companion_via_FUN_0041d6b0",
+                "create_reuse_boundary": "existing_encyclopedia_child_0x19_is_reused_without_context_retarget",
+                "boundary": "static_Research_Report_class_context_proof_not_live_availability_delivery_current_key_resource_focus_article_or_close_proof_other_type_4_cases_not_exhaustive"
+              },
+              "r58_visible_character_status": {
+                "review_status": "coordinator_accepted_bounded_visible_Wine_character_status_evidence",
+                "profile": "encytext-49aea545-lang-1033-v1",
+                "rebexe_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
+                "faction": "alliance",
+                "setup": "Yavin_Personnel_Leia_Character_Status",
+                "report_sha256": "c19d884ae61e8e3337351c441f1d422e92449cb818064e0efe151503eb0422c7",
+                "artifact_manifest_sha256": "1198943b9f390124cc247a13f02740d710917ecf9f57dbc0d9e96acf114154d7",
+                "checker_sha256": "29fdf06a5c20f0d520d0e8f50efa737d4fd1e3c283a9f414c511bb7e623768a3",
+                "raw_full_png_count": 28,
+                "same_acquisition_crop_png_count": 28,
+                "observed_subcriteria": [
+                  "Character_Status_visible_Encyclopedia_control_opens_matching_Leia_article",
+                  "encyclopedia_only_close_returns_to_Personnel_with_Leia_selected_and_Status_not_visible"
+                ],
+                "boundary": "Wine_visible_class_context_result_not_numeric_command_internal_focus_notification_loader_resource_runtime_key_DatId_direct_entity_context_hidden_Status_destruction_order_existing_child_reuse_or_Windows_parity_proof"
+              },
+              "r59_inconclusive_research_report": {
+                "review_status": "coordinator_verified_bounded_inconclusive_capture",
+                "disposition": "verified_inconclusive_empty_manufacturing_list",
+                "profile": "encytext-49aea545-lang-1033-v1",
+                "rebexe_sha256": "b3fe3997cab9a6e96403d638875dcba25484e4d8601751afec748471ac0ed6ab",
+                "faction": "alliance",
+                "report_sha256": "e62db447581536a8623e2064d0781257d4cfcaba2123be5033c772bc4741beed",
+                "artifact_manifest_sha256": "d1af9b876dc93f05b5c6e1ed67a8c7690915930c8dd35fe68d18435a235c5403",
+                "checker_sha256": "9219dd62656aac2daa3751e87bf277e7119a330bcfcc608f93076fc13028fe1a",
+                "raw_full_png_count": 16,
+                "same_acquisition_crop_png_count": 16,
+                "observation": "Message_Index_visible_later_Manufacturing_tooltip_verified_complete_visible_list_empty",
+                "blocker": "ordinary_accepted_profile_state_with_real_eligible_Research_Report_then_row_Display_article_and_close_evidence",
+                "lifecycle": "supervisor_143_launcher_and_guard_exit_reap_unknown_incomplete_output",
+                "boundary": "no_F6_causality_report_availability_article_close_helper_focus_command_notification_resource_current_key_DatId_existing_child_reuse_or_Windows_parity_proof"
               }
             },
             "matrix_summary": {
               "acquisition": {"partial": 15, "missing": 6},
               "acceptance": {"accepted": 0, "open": 21}
             },
+            "current_blockers": [
+              {"id": "selected_runtime_resources", "missing_criterion": "loader-selected title body and art identities for visible opens", "evidence_held": "source selectors and visible matching topics", "smallest_next_work": "one reviewed bounded loader/resource observation for an already-visible route", "gate_class": "runtime"},
+              {"id": "notification_and_action_focus", "missing_criterion": "delivered notifications and target-thread focus outside initial index open", "evidence_held": "static notification paths and r56 initial-index focus", "smallest_next_work": "bounded per-action notification and focus observation without reusing r35 authority", "gate_class": "runtime"},
+              {"id": "entity_context", "missing_criterion": "controlled direct entity-context provenance", "evidence_held": "five class-context source owners and four visible class routes", "smallest_next_work": "source-backed owned entity fixture with entity definition current-key and focus", "gate_class": "fixture"},
+              {"id": "research_report_fixture", "missing_criterion": "eligible Message Index Manufacturing Research Report and downstream Display route", "evidence_held": "r57 static class route and r59 verified empty Manufacturing list", "smallest_next_work": "legitimate ordinary accepted-profile state with an eligible Research Report; do not fabricate or blindly recapture", "gate_class": "fixture"},
+              {"id": "fallback_unavailable_hidden", "missing_criterion": "fallback unavailable stale and hidden-category cases", "evidence_held": "static branches and bounded absence searches", "smallest_next_work": "connected source writer or legitimate owned save/scenario for each branch", "gate_class": "source"},
+              {"id": "system_exclusion_and_faction", "missing_criterion": "type-0xf2 admitted/excluded pair and Empire selector counterparts", "evidence_held": "two 100-row observations with zero exclusions and Alliance selector joins", "smallest_next_work": "legitimate excluded ancestry fixture and bounded Empire selector observations", "gate_class": "fixture"},
+              {"id": "control_and_body_edges", "missing_criterion": "exhaustive controls disabled rows Page keys newline long-token extent and successful drag", "evidence_held": "ordinary pointer/key subsets and endpoint source/runtime joins", "smallest_next_work": "finite source-backed ordinary fixtures for the named remaining cases", "gate_class": "runtime"},
+              {"id": "original_windows_parity", "missing_criterion": "original Windows rendering and interaction comparison", "evidence_held": "Wine 9 compatibility observations only", "smallest_next_work": "authenticated original-Windows capture environment", "gate_class": "Windows"}
+            ],
             "matrix_results": [
-              {"id": "ENC-UI-01", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["alliance_pre_gate_command", "runtime_selected_resources", "internal_win32_focus_trace", "instrumented_duplicate_f7_child_count"]},
+              {"id": "ENC-UI-01", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_runtime_focus": "r56_two_equal_target_thread_samples_focus_the_validated_initial_index_child_with_bounded_helper_and_game_cleanup", "unmet_subcriteria": ["alliance_pre_gate_command", "runtime_selected_resources", "instrumented_duplicate_f7_child_count"]},
               {"id": "ENC-UI-02", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["direct_FUN_004fcee0_gate_value", "runtime_selected_resources", "focus_trace", "instrumented_child_identity_count"]},
               {"id": "ENC-UI-03", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "fixed_0x6f_through_0x75_order_profile_candidate_counts_347_200_38_14_15_10_69_and_source_order_ties", "unmet_subcriteria": ["complete_live_admitted_membership_identities", "complete_live_comparator_order", "empty_gap_outcomes", "runtime_selected_resources", "focus_trace"]},
               {"id": "ENC-UI-04", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "fixed_0x6f_through_0x75_order_profile_candidate_counts_347_200_38_14_15_10_69_and_source_order_ties", "unmet_subcriteria": ["complete_live_admitted_membership_identities", "complete_live_comparator_order", "empty_gap_outcomes", "runtime_selected_resources", "focus_trace"]},
               {"id": "ENC-UI-05", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["exhaustive_mode_states", "exhaustive_navigation_states", "all_disabled_states_both_factions", "cursor_strobe_timing"]},
               {"id": "ENC-UI-06", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "emitter_0x29b_0x29d_0x309_and_conditional_receiver_0x309_to_0x67", "unmet_subcriteria": ["runtime_delivered_notification_identity_trace", "internal_win32_focus_trace", "pointer_click_double_click_selected_resource_joins"]},
-              {"id": "ENC-UI-07", "acquisition_status": "missing", "row_acceptance": "open", "reviewed_visible_subcase": "fleet_1_ship_corellian_corvette_1_context_menu_opens_corellian_corvette_and_close_preserves_fleet", "reviewed_visible_mission_subcase": "r47_Recruitment_and_Espionage_selected_mission_definition_rows_open_matching_articles_and_close_preserves_mission_and_Personnel_windows", "reviewed_visible_build_subcase": "r53_Chandrila_Build_Selection_Alliance_Escort_Carrier_opens_matching_article_and_close_preserves_Build_Selection_and_Shipyards", "reviewed_static_route": "typed_Fleet_owner_and_selected_row_wrapper_to_popup_command_0x100_to_FUN_00486fb0_to_FUN_0041d6b0_to_FUN_00429f30_create_or_reuse_boundary", "reviewed_static_mission_route": "mission_FUN_0046c3c0_command_0x67_class_wrapper_empty_entity_to_FUN_0041d6b0_FUN_00429f30_create_or_reuse_boundary", "reviewed_static_build_route": "corrected_r49_r52_Build_Selection_0x00438800_command_0x67_class_wrapper_empty_entity_create_only_fresh_created_key_check_equal_identity_limit", "reviewed_profile_join": "class_0x14000045_title_10053_body_art_lookup_5957_EDATA_047_for_Fleet_subcase_mission_and_build_rows_have_no_runtime_resource_or_DatId_claim", "setup_boundary": "r46_live_Personnel_entity_order_setup_is_distinct_from_r45_r47_mission_definition_class_context_r47_did_not_isolate_Alt_M_and_r53_did_not_isolate_Alt_B", "unmet_subcriteria": ["runtime_command_notification_occurrence", "runtime_selected_resources", "canonical_current_keys", "internal_win32_focus", "remaining_two_class_context_callers"]},
+              {"id": "ENC-UI-07", "acquisition_status": "missing", "row_acceptance": "open", "reviewed_visible_subcase": "fleet_1_ship_corellian_corvette_1_context_menu_opens_corellian_corvette_and_close_preserves_fleet", "reviewed_visible_mission_subcase": "r47_Recruitment_and_Espionage_selected_mission_definition_rows_open_matching_articles_and_close_preserves_mission_and_Personnel_windows", "reviewed_visible_build_subcase": "r53_Chandrila_Build_Selection_Alliance_Escort_Carrier_opens_matching_article_and_close_preserves_Build_Selection_and_Shipyards", "reviewed_visible_character_status_subcase": "r58_Character_Status_Leia_opens_matching_article_and_close_returns_to_Personnel_with_Leia_selected", "reviewed_inconclusive_message_index_subcase": "r59_Message_Index_Manufacturing_complete_visible_list_empty_no_eligible_Research_Report", "reviewed_static_route": "typed_Fleet_owner_and_selected_row_wrapper_to_popup_command_0x100_to_FUN_00486fb0_to_FUN_0041d6b0_to_FUN_00429f30_create_or_reuse_boundary", "reviewed_static_mission_route": "mission_FUN_0046c3c0_command_0x67_class_wrapper_empty_entity_to_FUN_0041d6b0_FUN_00429f30_create_or_reuse_boundary", "reviewed_static_build_route": "corrected_r49_r52_Build_Selection_0x00438800_command_0x67_class_wrapper_empty_entity_create_only_fresh_created_key_check_equal_identity_limit", "reviewed_static_character_status_route": "r55_Character_Status_0x004443a0_command_0x66_resolved_class_plus_empty_entity_create_only", "reviewed_static_research_report_route": "r57_Message_Index_0x00467f10_commands_0x67_0x97_type_4_Research_Report_class_plus_empty_entity_create_or_reuse_boundary", "reviewed_profile_join": "class_0x14000045_title_10053_body_art_lookup_5957_EDATA_047_for_Fleet_subcase_other_visible_rows_have_no_runtime_resource_or_DatId_claim", "setup_boundary": "r46_live_Personnel_entity_order_setup_is_distinct_from_r45_r47_mission_definition_class_context_r47_did_not_isolate_Alt_M_r53_did_not_isolate_Alt_B_r59_did_not_isolate_F6_or_supply_an_eligible_report", "unmet_subcriteria": ["runtime_command_notification_occurrence", "runtime_selected_resources", "canonical_current_keys", "internal_win32_focus", "eligible_Research_Report_visible_route"]},
               {"id": "ENC-UI-08", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["all_five_entity_context_callers_and_provenance"]},
               {"id": "ENC-UI-09", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["both_special_fallback_branches", "non_special_miss"]},
               {"id": "ENC-UI-10", "acquisition_status": "missing", "row_acceptance": "open", "unmet_subcriteria": ["controlled_unavailable_stale_context"]},
@@ -860,13 +937,14 @@
               {"id": "ENC-UI-16", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "null_0x84_neighbor_retains_this_plus_0x148_current_row_control_disablement_separate", "unmet_subcriteria": ["internal_win32_focus_trace", "complete_after_action_full_desktop_pairs"]},
               {"id": "ENC-UI-17", "acquisition_status": "missing", "row_acceptance": "open", "applicability": "supported_profile_corpus_not_applicable", "reviewed_corpus_evidence": "347_of_347_bound_rows_have_effective_art_331_direct_or_system_plus_16_complete_viewer_faction_pairs_186_bound_files_EDATA_192_unbound_deferred", "unmet_subcriteria": ["general_null_art_branch_runtime_untested_nonblocking_for_supported_profile"]},
               {"id": "ENC-UI-18", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_visible_evidence": "chewbacca_eight_down_onset_4_eight_up_reversal_4_up_5_through_8_interrupted_pointer_arrow_motion_pointer_drag_no_motion", "reviewed_profile_join": "0x38000343_title_10819_body_art_lookup_6723_EDATA_081", "unmet_subcriteria": ["explicit_newline", "long_token", "body_page_key", "font_metrics", "full_extent_internal_focus", "successful_pointer_drag"]},
-              {"id": "ENC-UI-19", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "command_0xfb_dispatches_to_same_vtable_plus_0x30_method_as_escape", "reviewed_visible_evidence": "context_opened_article_close_preserved_fleet_1_surface", "reviewed_visible_mission_close_evidence": "r47_Recruitment_and_Espionage_article_close_preserved_mission_dialog_and_Personnel_window", "reviewed_visible_build_close_evidence": "r53_Alliance_Escort_Carrier_article_close_preserved_Build_Selection_and_Chandrila_Shipyards", "unmet_subcriteria": ["runtime_0xfb_command_notification_observation", "internal_win32_focus_routing_trace"]},
+              {"id": "ENC-UI-19", "acquisition_status": "partial", "row_acceptance": "open", "reviewed_static_inference": "command_0xfb_dispatches_to_same_vtable_plus_0x30_method_as_escape", "reviewed_visible_evidence": "context_opened_article_close_preserved_fleet_1_surface", "reviewed_visible_mission_close_evidence": "r47_Recruitment_and_Espionage_article_close_preserved_mission_dialog_and_Personnel_window", "reviewed_visible_build_close_evidence": "r53_Alliance_Escort_Carrier_article_close_preserved_Build_Selection_and_Chandrila_Shipyards", "reviewed_visible_character_status_close_evidence": "r58_Leia_article_close_returns_to_Personnel_with_Leia_selected_Status_not_visible_hidden_destruction_order_unproved", "unmet_subcriteria": ["runtime_0xfb_command_notification_observation", "internal_win32_focus_routing_trace"]},
               {"id": "ENC-UI-20", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["hidden_predecessor_configuration", "complete_command_list_focus_trace"]},
               {"id": "ENC-UI-21", "acquisition_status": "partial", "row_acceptance": "open", "unmet_subcriteria": ["hidden_successor_leftmost_configuration", "complete_command_list_focus_trace"]}
             ],
             "limitations": [
-              "observed_Fleet_mission_and_build_class_context_routes_need_runtime_command_resource_notification_current_key_and_focus_identity",
-              "two_unrenamed_class_context_callers_and_all_entity_context_callers_need_controlled_typed_wrapper_fixtures",
+              "observed_Fleet_mission_build_and_Character_Status_class_context_routes_need_runtime_command_resource_notification_current_key_and_action_focus_identity",
+              "all_five_class_context_source_owners_are_named_but_all_entity_context_callers_need_controlled_typed_wrapper_fixtures",
+              "Research_Report_source_route_is_named_but_r59_had_no_eligible_ordinary_row_and_did_not_observe_Display_article_or_close",
               "Alt_M_mission_setup_causality_unisolated_but_not_a_universal_encyclopedia_gate",
               "unavailable_and_fallback_cases_need_source_backed_save_or_scenario_state",
               "system_selector_other_viewer_and_direct_loader_composition_not_captured",
@@ -874,7 +952,7 @@
               "general_null_art_branch_untested_but_supported_profile_capture_corpus_not_applicable",
               "hidden_category_configuration_not_connected",
               "compatibility_capture_does_not_establish_original_windows_or_port_visual_parity",
-              "r35_helper_quarantine_remains_authoritative_no_internal_runtime_observer_is_authorized_by_r53"
+              "r56_clears_only_the_tested_initial_index_focus_execution_blocker_old_r35_quarantine_remains_immutable"
             ]
           },
           "coordinate_space": "encyclopedia_client_relative_integer_pixels",
@@ -883,8 +961,8 @@
             {"id": "shell_f7", "source": "FUN_00422ce0", "trigger": "WM_KEYDOWN_VK_F7_0x76", "context": "empty"},
             {"id": "shell_command", "source": "FUN_00422ce0", "trigger": "WM_COMMAND_0x131_when_FUN_004fcee0_at_least_2", "context": "empty"},
             {"id": "selected_row_handler_00438800", "source": "0x00438800_call_0x004388ff", "trigger": "command_0x67", "context": "row_plus_0x54_from_control_this_plus_0x114_via_FUN_0041d6b0", "surface_name": "build_selection_dialog", "context_kind": "class_wrapper_plus_empty_entity_companion", "constructor_boundary": "FUN_00429f30_passes_wrappers_to_FUN_0045d400_only_when_child_absent_existing_child_reused", "identity_boundary": "same_instance_only_on_fresh_created_collection_key_check_equal_edge_not_0x00439ae4_bypass_or_duplicate_key_serialization", "visible_observation": "r53_Alliance_Escort_Carrier_row_opens_matching_article_and_close_preserves_Build_Selection_and_Chandrila_Shipyards", "runtime_identity_boundary": "no_live_numeric_command_resource_notification_current_key_DatId_or_focus_trace"},
-            {"id": "guarded_context_handler_004443a0", "source": "0x004443a0_call_0x0044445d", "trigger": "command_0x66_after_nonempty_and_not_high_byte_0xf1_guards", "context": "this_plus_0x128_with_empty_companion_via_FUN_0041d6b0", "surface_name": "unresolved_do_not_infer_from_proximity"},
-            {"id": "selected_child_handler_00467f10", "source": "0x00467f10_call_0x0046886a", "trigger": "command_0x67_or_0x97_selected_child_virtual_type_4", "context": "selected_child_plus_0x60_with_prepared_companion_via_FUN_0041d6b0", "surface_name": "unresolved_do_not_infer_from_proximity"},
+            {"id": "guarded_context_handler_004443a0", "source": "0x004443a0_call_0x0044445d", "trigger": "command_0x66_after_nonempty_and_not_high_byte_0xf1_guards", "context": "resolved_class_at_this_plus_0x128_with_empty_entity_companion_via_FUN_0041d6b0", "surface_name": "character_status", "constructor_boundary": "context_wrappers_consumed_only_on_encyclopedia_child_creation", "visible_observation": "r58_Leia_Character_Status_visible_control_opens_matching_article_and_close_returns_to_Personnel", "runtime_identity_boundary": "no_live_numeric_command_notification_resource_current_key_DatId_action_focus_or_hidden_Status_destruction_order_trace"},
+            {"id": "selected_child_handler_00467f10", "source": "0x00467f10_call_0x0046886a", "trigger": "command_0x67_or_0x97_selected_child_virtual_type_4", "context": "Research_Report_class_at_selected_child_plus_0x60_with_empty_entity_companion_via_FUN_0041d6b0", "surface_name": "message_index_research_report", "constructor_boundary": "existing_encyclopedia_child_0x19_is_reused_without_context_retarget", "visible_observation": "r59_Message_Index_Manufacturing_visible_but_complete_list_empty_no_eligible_Research_Report", "runtime_identity_boundary": "no_F6_causality_live_report_command_resource_notification_current_key_DatId_focus_article_or_close_trace"},
             {"id": "mission_selected_row", "source": "FUN_0046c3c0", "trigger": "command_0x67", "context": "mission_definition_class_wrapper_plus_empty_entity_companion_via_FUN_0041d6b0", "constructor_boundary": "FUN_00429f30_passes_wrappers_to_FUN_0045d400_only_when_child_absent_existing_child_reused", "visible_observation": "r47_Recruitment_and_Espionage_rows_each_open_matching_article_and_close_preserves_mission_and_Personnel_windows", "runtime_identity_boundary": "no_live_numeric_command_resource_notification_current_key_DatId_or_focus_trace"},
             {"id": "strategic_list_selected_row", "source": "FUN_00486fb0", "trigger": "event_0x100", "context": "typed_first_row_via_FUN_0041d6b0"}
           ],
