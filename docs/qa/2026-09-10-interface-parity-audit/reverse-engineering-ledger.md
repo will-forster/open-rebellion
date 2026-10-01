@@ -156,7 +156,7 @@ and a next proof in the [machine-readable ledger](reverse-engineering-ledger.jso
 | RE-GID-01 | Filters, legends, marker rules, pan, zoom, and selection | static-partial; default GID and source frame runtime-corroborated | Recover menu interior and geometry, expanded legend, remaining filter predicates and overlays, and exact map input |
 | RE-OVR-01 | Galaxy Overview | untriaged | Recover geometry, category formulas, resources, and destinations |
 | RE-MSG-01 | Messages, Agent menus, alerts, and reports | static-partial; rail and empty index shell runtime-corroborated | Continue from the corrected [P63 Message Index mapping](../../../ghidra/notes/message-index-window.md): populate rows, selection, navigation, clear/delete, Advice slowdown, chat, production routing, and A0 comparison |
-| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; exact empty index shells, ten control pairs, and source-derived English catalog runtime-corroborated; original captures pending; unproven alternate art deferred to `orlocal-2kq` | Continue from the [P65 catalog checkpoint](evidence/2026-09-30-encyclopedia-index-catalog.md) and preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md): bind 356 catalog objects to ENCYTEXT and EDATA, run the finite `ENC-UI-01..21` A0 matrix with resource, focus, caller, faction, context and endpoint provenance, complete topic composition, and integrate production routing |
+| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; exact empty index shells, ten control pairs, and source-derived English catalog runtime-corroborated; original Wine compatibility captures partial/blocked with bounded endpoint/current-row evidence; unproven alternate art deferred to `orlocal-2kq` | Continue from the [P65 catalog checkpoint](evidence/2026-09-30-encyclopedia-index-catalog.md) and preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md): bind 356 catalog objects to ENCYTEXT and EDATA; complete E51's named partial/missing `ENC-UI-01..21` subcases with selected resources, internal focus, notifications, caller/faction/context fixtures and complete desktop pairs; complete topic composition and integrate production routing |
 | RE-OBJ-01 | System, sector, and object-window constructors | static-partial; sector and system shells runtime-corroborated | Complete system item compositions and commands, then map the remaining object families |
 | RE-ADV-01 | Type-302 advisor and briefing frame decoding | runtime-corroborated | Extend the verified advisor decoder/transport to briefings and compare with A0 captures |
 | RE-ADV-02 | SPT/BIN/FDT action semantics, cadence, and sound | static-partial | Replace inferred priority thirds with authored action mappings |
@@ -281,16 +281,229 @@ control or world-field binding is present in the recovered constructor,
 mode/render, and text-population paths.
 
 The package deliberately remains `static-partial` and
-`runtime_capture_required`. The finite `ENC-UI-01..21` matrix distinguishes the
-static contract from missing A0 proof for both factions, all seven category
-commands, index Left/Right traversal and edge behavior, button states,
-click/Return behavior, typed context routes,
-unavailable context, faction/system selectors, type-`0xf2` admission, first /
-middle / last navigation, a legitimate no-art trigger, body wrap/scroll, and
-close/focus routing. Hidden-category capture remains conditional on recovering
-a connected original visibility configuration. Guide captures 018, 019, and
-027 are A3 leads only. A0 contradictions must reopen source/schema review
-before consumers change.
+`runtime_capture_required`. E51 supplies the bounded
+[original capture set](../../reference/asset-library/encyclopedia-original-captures.md)
+for the identified executable under Ubuntu Wine 9 on authenticated Xvfb
+`:91`. Its original manifest retains 198 hashed PNGs and cites 60 paired
+full-desktop/native-client states. Acquisition and acceptance are separate: 15 rows have partial
+acquisition, six lack a direct acquisition, and all 21 acceptances remain
+open. Both faction index shells, all seven visible command states, F7 and
+shell-command behavior, duplicate-F7 visible-child behavior,
+click/double-click/Return pixels, selected control states, filtered endpoints,
+a real body-scroll change, visible close results, and visible category edge
+behavior are represented. E51 r7 separately adds bounded current-row evidence
+for full and filtered Left/Right endpoints, an ordinary list PageDown/Return,
+pointer body scrolling, Escape child absence, and Alliance System selectors
+1/24/25/26. These observations still do not establish complete membership or
+runtime-admitted comparator order, empty/gap outcomes, delivered notification
+identities, direct loader filename selection, internal Win32 focus, the direct
+`FUN_004fcee0` value, or duplicate-F7 internal child count.
+
+Coordinator-verified r41 additions are append-only and are not folded into the
+198-PNG baseline: 75 raw full frames plus 75 exact same-acquisition crops have
+sorted identity digest
+`36f046e7c9d9672887df3027827811ed5605a0876365b34726d2f6539c55d28e`.
+They visibly establish Chewbacca scroll onset on discrete Down 4 and reversal
+on Up 4, with Up 5-8 rejected after a Message Index interruption; a separate
+down-arrow click moved immediately while an attempted pointer drag did not.
+They also show `Corellian Corvette 1` inside expanded Fleet 1 opening the
+`Corellian Corvette` article and Close preserving Fleet 1. Those pixels do not
+prove internal focus, notifications, selected resource identities, or the
+exact owning typed wrapper. The r41 report/checker hashes are
+`60fa5c5ae076c07360b7cc0a97185181fa34691357c8b1d23deda997ade9abf8`
+and `0ff4fcb8e3346d4bea002a53caf7b741b9fdf8e518bd05355eae22fc92f362ba`.
+
+The independently reviewed r42 static correction (report/source/checker hashes
+`3c955d02f686b004ffa143ef21774f6033c7eaf69d1f35ab06da430d93ce455b`,
+`9147007d8bff711d9d78b37589f92b11ab576ee53f7d91db7d7aa95ce68ea7c0`,
+and `9b53a58dada0265dd5d2841964e2cd440336aa6ba0942cb1ecd792808b0ae68e`)
+proves the `0x29b`/`0x29d`/`0x309` emitter paths, conditional non-null
+`0x309 -> 0x67` receiver, command `0xfb`'s same-vtable-`+0x30` close route as
+Escape, and null-neighbor retention for `0x83`/`0x84`. It also corrects the
+master cache lifecycle (`FUN_00421c70` initializes shell `+0x474` null;
+`FUN_00422620` allocates/populates when null) and body/title ordering
+(`FUN_0045fa60` uses row `+0x0c` for body/art and reads row `+0x14` only after
+body layout). These are static facts, not retained runtime event/resource
+observations.
+
+The independently reviewed r43 trace connects the r41 Fleet ship route through
+the typed Fleet owner, selected-row wrapper collection, popup command `0x100`,
+`FUN_00486fb0`, `FUN_0041d6b0`, and `FUN_00429f30` (report/source/checker/review
+hashes `fd32ddc0...24cc9`, `85a7a02d...b51e9`,
+`8ed791fd...fd95`, and `e40d6772...748a`). On the create branch,
+`FUN_00429f30` passes the contextual wrappers to `FUN_0045d400`; an existing
+window is reused. Deselect matches the wrapper's same packed/base identity,
+not a proven discriminator match. The visible Corvette result plus static
+route does not prove a live command occurrence, selected resources, canonical
+DAT identity, notification delivery, or target-thread focus.
+
+The remaining gates are named rather than inferred: all five contextual
+callers with typed wrappers, fallback and unavailable contexts, the admitted /
+excluded type-`0xf2` ancestry pair, Empire-side System-selector counterparts,
+exhaustive control states, full keyboard/body-layout cases, and connected
+hidden-category configurations. `ENC-UI-17` is corpus-not-applicable for this
+supported profile: all 347 bound rows have effective art (331 direct/system
+plus 16 complete viewer-faction pairs) across 186 bound files. The generic
+null-art branch remains untested; no fictional original topic or E26 mod-null
+fixture is required. Unused lookup IDs `7188`/`11284` must not be confused
+with files `EDATA.142`/`EDATA.143`, which are bound through lookup IDs
+`7200`/`11296`. The unchanged 15 partial / 6 missing / 0 accepted rollup is a
+historical acquisition/acceptance count, not an applicability count. The same-topic faction pair is
+visual evidence only; it did not instrument selected image identities. The
+compatibility capture does not establish original-Windows rendering parity,
+port parity, or final acceptance. Guide captures 018, 019, and 027 remain A3
+leads only. Any A0 contradiction must reopen source/schema review before
+consumers change.
+
+A separately labeled metadata-only replay resolved the two comparator globals
+without attaching them retroactively to the screenshots. For exact process PID
+`3202977` (start `2026-09-29T12:37:49.560Z`), the identified executable mapped
+at its preferred base `0x00400000`; RVAs `0x002be840` and `0x002be850`
+therefore resolved to process addresses `0x006be840` and `0x006be850`.
+Read-only, exact four-byte `/proc/<pid>/mem` reads observed LC_CTYPE LCID
+`0x0409` (1033) and code page 1252 at two recorded post-input timestamps in the
+same process. The first followed timed startup and intro-skip input; the second
+followed a timed Alliance-intent click, Escape, and F7. Those actions and the
+observer's raw stage labels do not independently verify main-menu state,
+campaign entry, encyclopedia opening, or cache construction. The retained raw
+metadata artifact remains unchanged with SHA-256
+`711a5025826e40357ab069e0ea0978b2674d129f5f3d4503f5bb437cb86702c9`.
+The superseding provenance qualification has SHA-256
+`6151877e8c8b3e8a63e8b0f8e8048aea8b802d2c28a277c57a6888a902203004`.
+This proves those two process values at those timestamps, not successful
+`setlocale` timing, cache-time provenance, the full one-byte fold map, the live
+System iterator, admitted-cache identities, or order; the 200 SYSTEMSD profile
+rows remain static candidates rather than assumed same-viewer membership. A
+connected source-derived cache root/pointer/identity recipe was requested in
+Agent Mail message 21456; no traversal was attempted without it.
+
+Coordinator release 21465 subsequently approved corrected recipe SHA-256
+`2347e6adb3176877a5f93d7d9a4034ed93cb736d2ec6aba8d55be3a945c01448`.
+The separate direct-parent run `E51-E09-live-cache-1` produced two fully equal
+source-connected metadata snapshots for exact PID 3262757 and the identified
+executable at runtime base `0x00400000`. Each snapshot independently retained
+process identity and before/after sentinels. The canonical snapshot SHA-256 is
+`1c94f1a66ae8b590c768800f5c49b2c2e6f5ab645c00781380a354297b2ab345`.
+
+For raw viewer selector 1, the validated mode-2 master cache contains 247 rows,
+including 100 system rows: 30 family `0x90` and 70 family `0x92`. The source
+iterator independently returned the same 100 identities and multiplicities
+with zero observed ancestry exclusions or canonical-key collisions. Its order
+is not the title-sorted cache order: 98 of 100 positions differ. The cache
+system sequence SHA-256 is
+`f586d142009c70b12c8a66b9368d2987cf31fadcaab54f065f58faa1d569051a`;
+the iterator sequence SHA-256 is
+`67250e7ba7bdfcd50b86575029aa7e5349b70a903d656b27664cae5b785392dd`.
+The same snapshots observed LCID `0x0409` and code page 1252. The reader used
+10,084 fixed reads / 42,336 bytes and read no localized title/body data.
+
+The metadata artifact SHA-256 is
+`aeb4c1140f747571d63d18bb4e3c68fd37b14f3527d3023888e45bb7d76cafd3`;
+the supporting context artifact SHA-256 is
+`2e1dfe9aaad117104358d2a05f2b9143adb9d6e7660a03c56a1c4d92953dea6d`.
+The inspected frame shows the encyclopedia open, but it is supporting context,
+not cache proof. This single-viewer result does not establish registry order,
+the other viewer, the full fold map, or static-corpus admission; E51's broader
+UI matrix remains incomplete.
+
+A second fresh direct-parent run, `E51-E09-live-cache-2-empire`, observed the
+other viewer without reusing or overwriting run 1. Inspected checkpoint pairs
+show `Standard Game` with the left Imperial control, the Empire strategy shell,
+and the Empire encyclopedia. No galaxy/scenario size was visibly labeled, so
+none is inferred from the cache size. The source-connected reader separately
+reported raw viewer selector 2 for PID 3269886 (start
+`2026-09-29T13:42:44.670Z`) with two complete equal snapshots, canonical SHA-256
+`b250b7f486906f577a7c4f97121f405af1a632a91c0909f44fc7294166928cfc`.
+It observed the same-snapshot LCID `0x0409`, code page 1252, mode 2, 247 cache
+rows, 100 System rows, 100 iterator returns, zero exclusions, family counts 30
+`0x90` / 70 `0x92`, and 98 cache-versus-iterator position differences. The
+reader used 10,068 fixed reads / 42,272 bytes with no read larger than six
+bytes, localized text read, write, injection, or dump.
+
+The fresh run-2 full-cache, System-cache and iterator sequences equal run 1
+exactly (sequence SHA-256 values `ecc114bc...e7c1a`,
+`f586d142...9051a`, and `67250e7b...392dd`). This is a bounded two-run
+observation, not a universal viewer-independent admission rule, registry-order
+claim, same-generated-campaign claim, or proof that all 200 static SYSTEMSD
+rows are admitted. Run-2 reader/context/summary hashes are respectively
+`4c3db5cd...6fa1`, `07716545...03c6`, and `1c04afca...864b`. The game was
+stopped after acquisition and display `:91` remained available. E51's broad
+matrix remains incomplete.
+
+Coordinator review message 21469 supersedes one field label in both immutable
+raw reader files: iterator key `picture_selector` contains definition `+0x30`'s
+topic/text selector used for the low-12-plus-`0x1000` canonical key. It is not
+the separate System image selector 1, 24, 25 or 26. Qualification artifact
+`live-cache-selector-field-provenance-r6.json` has SHA-256
+`841e800d8d8112bd1c4ca5da6b97b6614d34855c13046d66180f7fae7d71d7b7`;
+future output uses `topic_selector`. This changes no retained values,
+identities, hashes, snapshot conclusions or matrix acceptance.
+
+E51 r7 uses a separate bounded `O_RDONLY` observer for ordinary reachable UI
+state. It validates the exact process/executable and source-connected child
+vtable, reads only mode/category/control pointers/current-row metadata/art
+presence/viewer/locale, and requires two complete equal snapshots. Four
+synthetic tests cover valid index/topic states plus tree-cycle, changed-state,
+wrong-vtable, wrong-mode/category and malformed-row rejection. Observer and
+test SHA-256 values are respectively `568ac568...8fe31` and
+`a33abd30...bfd9`.
+
+Run 3 (PID 3352465) retained three same-run endpoint pairs before a later
+PageDown step was rejected. Run 5 (PID 3359853) retained ordinary index,
+pointer body-scroll, list PageDown/Return, filtered Right endpoint and Escape
+close. Their `run.json` SHA-256 values are `5d0f5276...29ae` and
+`e886522e...02a8b`. Left at the first full and filtered rows retained key 5696
+/ identity `0x1c000002`; Right at the last full row retained key 6802 /
+identity `0x38000002`; Right at the last filtered row retained key 5699 /
+identity `0x1c000002`. The repeated packed identity across different filtered
+canonical keys is not treated as a unique topic ID. Pointer scrolling visibly
+moved the body while key 5696 remained current; two PageDown attempts instead
+changed the selected list topic and are rejected as body-focus proof. Escape
+left no command-`0x19` child in either equal snapshot.
+
+Run 6 (PID 3399522, `run.json` SHA-256 `e12c0477...93dc`) source-joined four
+Alliance current rows to accepted E39 metadata: selector 1 identity
+`0x9200007a` / body 7714 / EDATA.166; 24 identity `0x9000010f` / body 8049 /
+EDATA.191; 25 identity `0x90000117` / body 8057 / EDATA.189; and 26 identity
+`0x9200011a` / body 8066 / EDATA.190. All were mode 2/category `0x70`, had
+nonnull art objects, equal snapshots, and inspected distinct images. This is a
+live-current-row plus accepted-source join, not a read of the filename chosen
+inside the original loader and not Empire-side selector proof.
+
+All six r7 attempts/runs remain immutable. Runs 1, 2, and 4 preserve rejected
+setup, recipe-digest, and Page-key attempts; no check was weakened. The summary
+artifact SHA-256 is `bb39f107...1afaa`, and its checker SHA-256 is
+`752da75f...a595`. The checker now recomputes every cited canonical snapshot
+hash rather than merely comparing the two stored hash strings. Immediate
+after-action full-desktop frames for several
+endpoints caught a Wine/Xvfb repaint gap; paired native 640 × 480 frames and
+equal metadata are retained, but those transient desktops are supporting-only.
+Consequently all 21 row acceptances remain open.
+
+Revision 8 supersedes one raw snapshot field label without rewriting any r7
+artifact. `snapshots[].current_topic.dat_id` contains
+`(row + 0x68) & 0x00ffffff`: the low 24 bits of the runtime packed handle, now
+named `packed_handle_low24` in future observer output. It is not a general
+original DAT identity. Canonical keys 5696 and 5699 share packed handle
+`0x1c000002` and low-24 value 2. Original DatId attribution therefore requires
+a unique canonical-key/profile join. The System DatIds 122/271/279/282 remain
+valid through their explicit accepted E39 joins, not the raw field. The
+qualification artifact SHA-256 is `ab6b32ab...80b5c`; it records unchanged r7
+summary/run hashes and no recapture. Future observer/test hashes are
+`086c04b6...10c4d` and `33cc0a9f...5cafa`.
+
+The exceptional rows are now source-guided investigated gaps rather than
+unattempted assertions. The five contextual caller paths need legitimate
+owning-surface routes and typed wrapper/current-key/internal-focus capture;
+`FUN_0045fd90` needs owned setups for both `0xa0..0xaf` association branches
+and a non-special miss; unavailable mode needs a real stale context; the two
+fresh viewer runs' 100/100 System admission with zero exclusions does not
+replace a type-`0xf2` ancestry fixture; reviewed profile accounting makes the
+original no-art capture corpus-not-applicable for the supported profile while
+leaving the generic null-art branch untested; and all seven visible
+categories do not replace a connected category-visibility writer. No matching
+owned save/scenario was present. `EDATA.192` remains deferred, not a fixture,
+and E26 mod-null remains a separate synthetic runtime case.
 
 Space battle is an explicit full mode, not a single panel. `TAC-01` through
 `TAC-07` currently define 106 baseline cells covering battle entry, both

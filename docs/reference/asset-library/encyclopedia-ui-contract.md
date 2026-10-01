@@ -34,9 +34,13 @@ The evidence grades used here are deliberately separate:
 - **A3 visual leads:** Steam-guide captures 018, 019, and 027 and the French
   Abandonware capture. These corroborate composition only; they do not supply
   exact geometry, control state, English text, or strict-parity proof.
-- **A0 proof:** not yet captured. Every matrix row below therefore remains
-  `static-proven-runtime-pending` or an explicit source gap. E51 owns original
-  executable capture; this task does not substitute third-party images for it.
+- **A0 proof:** E51 acquired a bounded compatibility reference under Wine for
+  the identified executable. Fifteen rows have partial acquisition, six lack a
+  direct acquisition, and all 21 row acceptances remain open. The exact
+  environment, actions, file hashes, acquired evidence, and unmet subcriteria
+  are recorded in the
+  [original capture evidence](encyclopedia-original-captures.md). The partial
+  set does not establish Windows-rendering parity or complete A0 acceptance.
 
 All coordinates below are integer pixels relative to the encyclopedia client.
 `FUN_00429f30` passes `470 × 330` (`0x1d6 × 0x14a`) to
@@ -209,10 +213,14 @@ animated hover effect, and none is admitted by this contract.
   directional buttons are hidden. `FUN_0045f480(1)` selects the index mode tab.
 - Category selection and switching to index mode both focus the list window.
 - A new single-click selection sends notification `0x29b`; a repeat click may
-  send `0x29d`. Neither opens the topic. A double-click sends `0x309`.
+  send `0x29d`. Neither opens the topic. A double-click sends `0x309`. These
+  are independently reviewed static emitter paths, not claims about which
+  notification a retained Wine frame delivered.
 - With list focus, Return (`VK_RETURN`, `0x0d`) marks the selected row and sends
-  the same `0x309` notification. `FUN_0045da70` then selects mode command
-  `0x67`, which opens topic mode for that current row.
+  the same `0x309` notification. When both the selected list item and current
+  row resolve non-null, `FUN_0045da70` maps `0x309` to mode command `0x67`.
+  The static receiver chain is conditional and is not a retained runtime
+  notification trace.
 - Left (`0x25`) and Right (`0x27`) are category navigation in index mode, not
   topic navigation. `FUN_0045fe60` reads the selected category child from the
   category container at `this + 0x124`, recovers its ordered-tree node, then
@@ -279,15 +287,17 @@ The UI consumes the source contract without adding a second interpretation:
 | System picture selector | The proven 1–26 selector chooses key `0x2b5c..0x2b75`; it is not faction arithmetic. |
 | System ancestry exclusion | An excluded type-`0xf2` ancestry view never enters the list and cannot be opened contextually. No friendlier gameplay label is inferred. |
 | First/middle/last topic | Backward/Forward state follows the skip-disabled links; endpoints disable and never wrap. |
-| Missing art object | `FUN_0045f090` omits the EData blit when current art at `+0x14c` is null; header/body mode remains separately constructed. The exact original no-art pixels need A0. |
+| Missing art object | `FUN_0045f090` omits the EData blit when current art at `+0x14c` is null; header/body mode remains separately constructed. The generic branch remains untested. It is corpus-not-applicable to the checksum-pinned supported profile because all 347 bound rows have effective art; no fictional original topic or E26 mod-null fixture is required. |
 
 ### No live-stat binding recovered
 
 The original constructor creates only the header/index fields, list, text body,
-image region, tabs, and navigation/close controls above. `FUN_0045fa60` obtains
-the current row title from row `+0x14`, loads the type-10 `ENCYTEXT.DLL`
-resource named by the row identity, copies that narrow string into the body,
-and selects the art. Its only connected world-derived display lookup is the
+image region, tabs, and navigation/close controls above. `FUN_0045fa60` reads
+row `+0x0c` for the qualified body/art key, loads the type-10
+`ENCYTEXT.DLL` body resource, copies the decoded narrow string into body object
+`+0xa0`, and lays it out. Only afterward does it read row `+0x14` for the
+display title. The title does not select the body. Its only connected
+world-derived display lookup is the
 system picture selector used for art. There is no constructed stat-row control
 and no connected lookup of current maintenance, capacity, shield, weapon,
 character, or facility values. `FUN_0045fa60` writes row `+0x14` into the
@@ -306,29 +316,85 @@ visual pass. Each capture must be lossless at native 640 × 480, retain faction,
 entry route, typed identity/current key, selected command, and original
 resource identities, and compare exact client bounds and state pixels.
 
-| ID | Required state(s) | Static expectation | Missing A0 proof / next action |
+| ID | Required state(s) | Static expectation | E51 acquisition / acceptance / remaining proof |
 |---|---|---|---|
-| `ENC-UI-01` | Alliance context-free index | `0x6f` full cache; Alliance shell/rail; shared index overlay `0x2862`, baked text resource `0x1843`, background selector `2`; list focus. | F7 and `0x131` captures, including command gate and duplicate-open behavior. |
-| `ENC-UI-02` | Empire context-free index | Empire shell/rail with the same index overlay `0x2862`, baked text resource `0x1843`, and background selector `2`. | Repeat both entry paths for Empire. |
-| `ENC-UI-03` | Alliance commands `0x6f..0x75` | Seven fixed x slots; proven full/range collections and stable ordering. | Capture every selected icon, list membership, label, and empty/gap result. |
-| `ENC-UI-04` | Empire commands `0x6f..0x75` | Same command/range contract with faction-specific icon resources where mapped. | Capture every selected icon and collection; join localized labels only from evidence. |
-| `ENC-UI-05` | Normal, pointer-over, captured press, canceled press, selected, disabled | Source bitmap slots and capture behavior above. | Capture each state for close, mode, category, and navigation controls in both factions; confirm no distinct hover bitmap/animation. |
-| `ENC-UI-06` | Index selection by click, double-click, and Return | `0x29b` selects; `0x309` enters topic; list retains endpoint without wrapping. | Record notifications, focus, and selected-row pixels. |
-| `ENC-UI-07` | Class-context topic across all five direct contextual callers | Canonical definition-derived row opens; body focus. | Retain caller address/surface, command/event, wrapper identity, definition `+0x30`, and current key. |
-| `ENC-UI-08` | Direct entity-context topic across all five direct contextual callers | Same canonical-row topic flow. | Retain caller address/surface, command/event, entity, definition, selected key, and caller control. |
-| `ENC-UI-09` | Special-range entity fallback and non-special miss | Proven fallback may resolve; non-special retry cannot invent another key. | Capture both special association branches and a non-special miss. |
-| `ENC-UI-10` | Unavailable/stale context | Index mode, no fabricated current topic. | Capture title/list/mode/focus state after failed direct and fallback resolution. |
-| `ENC-UI-11` | Same applicable topic as Alliance and Empire | Text identity fixed; both use topic background selector `1` and shared overlay `0x2861`, while faction shell/rail and the proven faction art key differ. | Paired capture with composite and selected image identities. |
-| `ENC-UI-12` | Representative system selectors 1, 24, 25, 26 | Keys `0x2b5c`, `0x2b75`, `0x2b73`, `0x2b74`; text identity fixed. | Capture terminal non-sequential cases and both viewer sides where admitted. |
-| `ENC-UI-13` | System side-view admitted/excluded | Exact type-`0xf2` ancestry predicate controls list presence. | Retain selected view and every tested ancestor identity; do not infer a gameplay label. |
-| `ENC-UI-14` | First enabled topic | Backward disabled; invocation retains current. | Pointer and Left-key capture in full and one filtered collection. |
-| `ENC-UI-15` | Middle topic and disabled intermediate row | Both directions enabled; navigation skips disabled row. | Requires a connected disabled-row writer or controlled observation before capture. |
-| `ENC-UI-16` | Last enabled topic | Forward disabled; invocation retains current. | Pointer and Right-key capture in full and one filtered collection. |
-| `ENC-UI-17` | Proven current topic with no usable art object | No EData blit; header/body remain independently populated. | Identify a legitimate source trigger, then capture; do not manufacture a catalog mapping. |
-| `ENC-UI-18` | Short, wrapped, explicit-newline, long-token, and scrolling body | Read-only `0x2410` layout, scrollbar only when needed; Up/Down/Page keys scroll. | Pixel compare with original font `0x299d`; record scrollbar extent and focus. |
-| `ENC-UI-19` | Topic Return, Tab, Escape, and `0xfb` | Return has no local topic action; Tab consumed; Escape/`0xfb` close. | Capture shell-visible result and focus/close routing. |
-| `ENC-UI-20` | Index Left from a middle category, the first category, and across hidden predecessor candidates | Select first visible predecessor; immediate null reselects the tree's first child; running off the start only after hidden candidates retains current; list focus remains. | Capture command/state/list changes. A hidden-category case requires a connected original visibility configuration; do not fabricate one. |
-| `ENC-UI-21` | Index Right from a middle category, the last category, and across hidden successor candidates | Select first visible successor; immediate null at the last child wraps to the tree's first child; running off the end only after hidden candidates retains current; list focus remains. | Capture command/state/list changes. If a connected configuration can hide the leftmost child, separately test the source's unfiltered immediate fallback. |
+| `ENC-UI-01` | Alliance context-free index | `0x6f` full cache; Alliance shell/rail; shared index overlay `0x2862`, baked text resource `0x1843`, background selector `2`; list focus. | **Partial acquisition / Open:** F7, post-gate `0x131`, duplicate-F7 visible-child evidence, and a live ordinary command-`0x19` mode-1/current-null child observation exist; pre-gate command, runtime resources, internal focus, and instrumented duplicate-child count remain absent. |
+| `ENC-UI-02` | Empire context-free index | Empire shell/rail with the same index overlay `0x2862`, baked text resource `0x1843`, and background selector `2`. | **Partial acquisition / Open:** F7 and pre/post behavioral `0x131` evidence exist; no direct `FUN_004fcee0` value, runtime resources, focus, or instrumented child identity/count. |
+| `ENC-UI-03` | Alliance commands `0x6f..0x75` | Seven fixed x slots; proven full/range collections and stable ordering. | **Partial acquisition / Open:** visible frames cover all seven selected categories. Reviewed static evidence fixes command order, profile candidate counts 347/200/38/14/15/10/69, and source-order preservation for comparator ties. Complete runtime-admitted membership/order, empty/gap outcomes, selected resources, and focus remain absent. |
+| `ENC-UI-04` | Empire commands `0x6f..0x75` | Same command/range contract with faction-specific icon resources where mapped. | **Partial acquisition / Open:** visible frames cover all seven selected categories. Reviewed static evidence supplies the same fixed order, candidate counts, and tie rule. Complete runtime-admitted membership/order, empty/gap outcomes, selected resources, and focus remain absent. |
+| `ENC-UI-05` | Normal, pointer-over, captured press, canceled press, selected, disabled | Source bitmap slots and capture behavior above. | **Partial acquisition / Open:** selected Category/Close sequences exist; exhaustive mode/navigation/disabled states and timing remain absent. |
+| `ENC-UI-06` | Index selection by click, double-click, and Return | Static emitter paths produce `0x29b`, repeat-click `0x29d`, and double-click/Return `0x309`; the receiver conditionally maps `0x309` to `0x67` only with non-null selected/current rows. | **Partial acquisition / Open:** click/double-click/Return pixels exist; list PageDown/Return produced live canonical key `5963` / packed identity `0x14000002`. Delivered notification identity, internal focus, and pointer-click/double-click selected-resource joins remain absent. |
+| `ENC-UI-07` | Class-context topic across all five direct contextual callers | Canonical definition-derived row opens; body focus. | **Missing acquisition / Open:** r41 visibly opened `Corellian Corvette` from `Corellian Corvette 1` inside expanded Fleet 1 and Close preserved the fleet surface. Reviewed static inference connects the typed Fleet owner/row wrapper through popup command `0x100`, `FUN_00486fb0`, `FUN_0041d6b0`, and `FUN_00429f30`; only the create branch passes wrappers to `FUN_0045d400`, while an existing window is reused. Profile metadata joins class `0x14000045` to title `10053`, lookup `5957`, and `EDATA.047`. Live command/notification, selected resources, canonical current key, focus, and the other four callers remain absent. |
+| `ENC-UI-08` | Direct entity-context topic across all five direct contextual callers | Same canonical-row topic flow. | **Missing acquisition / Open:** all five caller/control, entity/definition/current-key, and focus subcases remain absent. |
+| `ENC-UI-09` | Special-range entity fallback and non-special miss | Proven fallback may resolve; non-special retry cannot invent another key. | **Missing acquisition / Open:** both fallback branches and a non-special miss lack a source-backed setup. |
+| `ENC-UI-10` | Unavailable/stale context | Index mode, no fabricated current topic. | **Missing acquisition / Open:** unavailable/stale title/list/mode/focus fixture absent. |
+| `ENC-UI-11` | Same applicable topic as Alliance and Empire | Text identity fixed; both use topic background selector `1` and shared overlay `0x2861`, while faction shell/rail and the proven faction art key differ. | **Partial acquisition / Open:** paired visible topic exists; runtime image/text identities and composition trace remain absent. |
+| `ENC-UI-12` | Representative system selectors 1, 24, 25, 26 | Keys `0x2b5c`, `0x2b75`, `0x2b73`, `0x2b74`; text identity fixed. | **Partial acquisition / Open:** Alliance selectors 1/24/25/26 are source-joined to live current identities/body IDs with nonnull art and inspected images. Empire counterparts and a direct original-loader selected-filename/composition trace remain absent. |
+| `ENC-UI-13` | System side-view admitted/excluded | Exact type-`0xf2` ancestry predicate controls list presence. | **Missing acquisition / Open:** admitted/excluded pair, view identity, and ancestry chain absent. |
+| `ENC-UI-14` | First enabled topic | Backward disabled; a null `0x83` neighbor branches before the `this+0x148` write and retains current; disablement is separate. | **Partial acquisition / Open:** explicit Left in full and filtered collections retained current canonical key `5696` / packed identity `0x1c000002` in equal snapshots. Internal Win32 focus and complete after-action desktop pairs remain absent; native frames are intact but immediate desktop frames caught a Wine/Xvfb repaint gap. |
+| `ENC-UI-15` | Middle topic and disabled intermediate row | Both directions enabled; navigation skips disabled row. | **Partial acquisition / Open:** middle topic exists; disabled-row setup and skip identity trace absent. |
+| `ENC-UI-16` | Last enabled topic | Forward disabled; a null `0x84` neighbor retains `this+0x148`; disablement is separate. | **Partial acquisition / Open:** explicit Right retained the full last key `6802` / identity `0x38000002` and filtered last key `5699` / identity `0x1c000002` in equal snapshots. Internal Win32 focus and complete after-action desktop pairs remain absent; native frames are intact but immediate desktop frames caught a Wine/Xvfb repaint gap. |
+| `ENC-UI-17` | General current-topic null-art branch; no supported-profile fixture | No EData blit when art is null; header/body remain independently populated. Reviewed corpus accounting proves 347/347 supported-profile rows have effective art (331 direct/system plus 16 complete viewer-faction pairs) across 186 bound files. | **Missing historical acquisition / Open; supported profile corpus-not-applicable:** no original-profile no-art topic is demanded. `EDATA.192` is unbound/deferred, not a fixture. The general branch remains untested and E26 mod-null is separate. |
+| `ENC-UI-18` | Short, wrapped, explicit-newline, long-token, and scrolling body | Read-only `0x2410` layout, scrollbar only when needed; Up/Down/Page keys scroll. | **Partial acquisition / Open:** r41 Chewbacca showed first movement on discrete Down 4 and reversal on Up 4; Up 5-8 were interrupted by Message Index and rejected. A separate down-arrow click moved immediately; an attempted pointer drag showed no motion and is not drag proof. Static metadata joins Chewbacca to `0x38000343`, title `10819`, lookup `6723`, `EDATA.081`. Newline/long-token/body Page/font/extent/internal-focus and successful drag cases remain absent. |
+| `ENC-UI-19` | Topic Return, Tab, Escape, and `0xfb` | Return has no local topic action; Tab consumed; static command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. | **Partial acquisition / Open:** visible Return/Tab/Escape/Close results exist; r7 Escape has a two-snapshot command-`0x19` child-absent observation, and r41 Close restored the visible Fleet 1 surface. Runtime `0xfb` command/notification and internal focus restoration remain absent. |
+| `ENC-UI-20` | Index Left from a middle category, the first category, and across hidden predecessor candidates | Select first visible predecessor; immediate null reselects the tree's first child; running off the start only after hidden candidates retains current; list focus remains. | **Partial acquisition / Open:** visible middle/first cases exist; hidden predecessor and complete command/list/focus trace remain absent. |
+| `ENC-UI-21` | Index Right from a middle category, the last category, and across hidden successor candidates | Select first visible successor; immediate null at the last child wraps to the tree's first child; running off the end only after hidden candidates retains current; list focus remains. | **Partial acquisition / Open:** visible middle/last-wrap cases exist; hidden successor/leftmost and complete command/list/focus trace remain absent. |
+
+The acquisition rollup remains 15 partial / 6 missing / 0 accepted. That is a
+historical acquisition and row-acceptance count, not an applicability count.
+`ENC-UI-17` remains in the historical missing bucket while its original-topic
+capture is explicitly corpus-not-applicable for the supported profile; the
+general null-art branch stays untested without blocking on a fictional topic.
+
+Coordinator-verified r41 evidence is additive to, not part of, the original
+198-PNG manifest: 75 raw full-desktop frames plus 75 exact same-acquisition
+client crops have sorted identity digest
+`36f046e7c9d9672887df3027827811ed5605a0876365b34726d2f6539c55d28e`.
+The r41 report/checker SHA-256 values are
+`60fa5c5ae076c07360b7cc0a97185181fa34691357c8b1d23deda997ade9abf8`
+and `0ff4fcb8e3346d4bea002a53caf7b741b9fdf8e518bd05355eae22fc92f362ba`.
+The independently reviewed r42 report/source-note/checker hashes are
+`3c955d02f686b004ffa143ef21774f6033c7eaf69d1f35ab06da430d93ce455b`,
+`9147007d8bff711d9d78b37589f92b11ab576ee53f7d91db7d7aa95ce68ea7c0`,
+and `9b53a58dada0265dd5d2841964e2cd440336aa6ba0942cb1ecd792808b0ae68e`.
+The independently reviewed r43 Fleet route report/source/checker/review hashes
+are `fd32ddc0e98a8b451d42a3c1544ef41adece418f3ec3f4a294244a0b7fb24cc9`,
+`85a7a02df550b084aaebef67565a9bb3cdee348c42e2b4886c1c1db1095b51e9`,
+`8ed791fdb84bb85ccf371555bce99d0e35e675ce5fc054ae22e87d0a2a75fd95`,
+and `e40d6772bb21103b85eff9bad9d92e40160c21bcffd7b963e007e60a93c9748a`.
+Its static route does not establish a live command occurrence, selected
+resources, canonical DAT identity, notification delivery, or Win32 focus.
+
+E51 r7 adds a bounded read-only observer and immutable interaction runs without
+changing row acceptance. The metadata summary is
+`/data/projects/open-rebellion/agent-work/original-game-capture/E51/reachable-captures-r7-summary.json`
+(SHA-256
+`bb39f107c4b2cf44c04391559b4a9c893f3044739b3f3ffe4e8e5bd3f2b1afaa`).
+It retains exact process identity, two equal snapshots per checkpoint, current
+keys/packed identities, endpoint links, selector joins, locale, actions, and
+full/native frame hashes. It also explicitly records that source-expected
+focus is not a live Win32 `GetFocus` observation and that the original art
+loader's chosen filename was not read.
+
+The immutable r7 snapshot field `current_topic.dat_id` is a superseded label
+for `(row + 0x68) & 0x00ffffff`, not a general original DAT identity. Future
+observer output calls it `packed_handle_low24`. Original DatId attribution
+requires a unique canonical-key/profile join; the System DatIds in the r7
+summary remain source-proven only through the accepted E39 join. Qualification
+artifact `ui-state-packed-handle-field-provenance-r8.json` has SHA-256
+`ab6b32ab15d771bb403f4ef179b27faabf89ca4c6a5b4524f94d06776d180b5c`;
+it preserves every raw snapshot/run and records no recapture.
+
+The source-guided exceptional investigation remains open for exact named
+prerequisites: all five contextual caller routes (`0x00438800`, `0x004443a0`,
+`0x00467f10`, `FUN_0046c3c0`, `FUN_00486fb0`); both
+`FUN_0045fd90` association branches and a non-special miss; a legitimate
+stale/unavailable context; a System view with type-`0xf2` ancestry; and a
+connected writer/configuration hiding a category.
+Retained fresh-viewer cache runs had zero System exclusions, all four proven
+selector topics had art, no suitable owned save was present, and all seven
+categories were visible. Those bounded observations are not universal absence
+proof and do not authorize fabricated fixtures.
 
 Guide 018 leads the index composition, guide 019 leads a character topic, and
 guide 027 leads a ship topic with stat-like authored text. Their SHA-256 values
@@ -339,22 +405,30 @@ They are A3 and cannot close any matrix row.
 
 ## Explicit gaps and change control
 
-- No `ENC-UI-*` row has an A0 capture. E51 must run them against the identified
-  unmodified executable and retain screenshots, inputs, focus, and resource
-  provenance.
-- The seven localized category labels are not joined to command IDs. Use the
-  stable commands/ranges until a connected string/resource trace proves names.
+- E51 supplies the bounded partial A0 set linked above. It accepts no complete
+  row: 15 are partial acquisitions and six are missing, so
+  `runtime_capture_required` remains true.
+- E51 visually joins the inspected English labels to commands `0x6f..0x75`
+  through its recorded click sequence. Their backing localized string-resource
+  identities remain unjoined; other profiles must not inherit these labels
+  without evidence.
 - Five direct callers of `FUN_0041d6b0` are source-proven, but the visible
   originating control/surface for handlers `0x00438800`, `0x004443a0`, and
   `0x00467f10`, and for every dispatch into generic `FUN_00486fb0`, has not
   been named. Capture the caller address and control rather than assigning a
   name from neighboring code.
-- The button path proves no separate hover bitmap; original cursor/strobe
-  timing and exact pressed/disabled pixels still require A0.
-- No legitimate null-art topic trigger is yet connected. Preserve the source
-  paint branch and do not create a fake no-art catalog entry to satisfy it.
-- Exact line breaks and scrollbar pixels depend on the original font/resource
-  metrics and require A0 even though the wrap/scroll algorithm is static-proven.
+- The button path proves no separate hover bitmap. E51 captures selected
+  Category and Close pointer/press/cancel states, but exhaustive mode and
+  navigation control coverage in both factions remains open.
+- The supported profile needs no null-art fixture: all 347 bound rows have an
+  effective selection. Preserve the generic source paint branch as untested,
+  do not create a fake original topic, and keep E26 mod-null separate.
+- Unused lookup IDs `7188` and `11284` are not unused files:
+  `EDATA.142`/`EDATA.143` are bound through lookup IDs `7200`/`11296`.
+- E51 captures a real long-body scrollbar change with current identity
+  retained. Two source-bounded PageDown attempts changed the selected list row,
+  so exact body Page-key, explicit-newline, long-token, extent, font-resource,
+  and internal-focus cases remain open.
 - The category keyboard path supports skipping hidden child windows, but no
   original encyclopedia state that hides a category has yet been connected.
   E51 should exercise hidden-child branches only after recovering such a
