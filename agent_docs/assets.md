@@ -33,7 +33,9 @@ Original BMPs from game's installed directories:
 | Systems (planets) | ~200 | EData/ | 138+ |
 | DLL UI | 2,326 BMPs and 3,988 advisor frames | GOKRES/STRATEGY/TACTICAL/COMMON/ALSPRITE/EMSPRITE/REBDLOG.DLL | Resource IDs |
 
-**Prerequisite**: `data/base/EData/` must contain extracted BMPs from a legal game copy. Extracted game data also at `~/Desktop/Programming/star-wars-rebellion/GData/`.
+**Prerequisite**: ignored local staging must come from a legally owned game
+copy. Use `data/base/encyclopedia/assets/` for the validated canonical runtime
+copies; never record a contributor's installation path in tracked files.
 
 ### Faithful-HD contract
 
@@ -446,15 +448,93 @@ Adapted from WWW's `scripts/model-compare.html` — Three.js side-by-side viewer
 ## Pipeline 3: Encyclopedia Content
 
 The original encyclopedia text lives in `ENCYTEXT.DLL`; `TEXTSTRA.DLL`
-supplies entity names. The former `data/encyclopedia.json` sketch with newly
-written descriptions is superseded by the draft
-[Encyclopedia Data Extraction, Modding, and Display design](../docs/plans/2026-09-27-design-encyclopedia-data-pipeline.md).
+supplies proven display strings, and the selected DAT files preserve
+family-qualified entity identities. The former `data/encyclopedia.json`
+lore-writing sketch is retired. Do not author replacement base prose or infer
+topics from image filenames.
 
-The proposal extends the existing Go staging tool to extract original text,
-image mappings and EData artwork into ignored `data/base/encyclopedia/`, adds a
-versioned catalog and native mod overrides, and uses the existing runtime pack
-for browser display. This is a design under review, not an implemented schema
-or a completed encyclopedia feature.
+The implemented pipeline is:
+
+1. `tools/stage-ui-assets` selects an exact supported DLL/DAT profile, decodes
+   the verified text snapshot, stages byte-exact BMP inputs, and publishes an
+   ignored canonical directory through a recoverable ownership transaction.
+2. `catalog.json` and `manifest.json` form the immutable validated base.
+   `source-report.json`, `raw/`, and unreferenced supplied art remain local
+   evidence and are not runtime inputs.
+3. The pack builder includes only `catalog.json`, `manifest.json`, and
+   manifest-referenced art under ORPK v3 kind 0. The loose browser mirror is
+   published from the same retained verified generation.
+4. Native overlays keep `mod.toml`, add root `encyclopedia.json`, and read
+   confined BMP/PNG replacements from `encyclopedia/assets/`. The runtime
+   computes hashes, facts, and generated image IDs; authors do not maintain
+   them and never mutate the base manifest.
+5. Native reloads are serialized transactions over per-mod last-good
+   snapshots. Text/image edits are content-only, disabling rebuilds from base,
+   and no encyclopedia bytes enter `GameWorld`, saves, replay, or simulation
+   RNG.
+
+Normative contracts and contributor guidance:
+
+- [approved v1 decisions](../docs/reference/asset-library/encyclopedia-schema-decisions.md)
+- [catalog schema](../docs/reference/asset-library/schemas/encyclopedia-catalog.schema.json),
+  [manifest schema](../docs/reference/asset-library/schemas/encyclopedia-manifest.schema.json),
+  and [overlay schema](../docs/reference/asset-library/schemas/encyclopedia-overlay.schema.json)
+- [synthetic conformance fixtures](../tests/fixtures/encyclopedia/)
+- [staging and verification guide](../tools/stage-ui-assets/README.md)
+- [mod-author walkthrough](../README_MOD.md#encyclopedia-text-and-artwork)
+
+The identified source profile accounts for 348 decoded text resources as 347
+bound topics plus source-proven-unused resource `7176`. V1 has no runtime
+aliases and no unresolved text record. All 347 bound rows have source-proven
+text identities. Separately, effective art mapping in this supported profile
+covers all 347 bound rows: 331 direct image identities plus 16 source-proven
+viewer-faction selectors. Original no-art is therefore `N/A` for 347/347 bound
+rows. `EDATA.192` remains inventory-only deferred art under
+`orlocal-2kq`: neither its existence nor decoding proves an alternate topic,
+campaign predicate, or display route.
+
+### Runtime content rules
+
+- Membership arrays retain source membership and registry tie order. After
+  overlays and whole-record requested/default language selection, enabled rows
+  are stable-sorted by the effective title. A mod rename may change display
+  order without corrupting the base.
+- Windows-1252-representable titles use ASCII-only case folding with high bytes
+  unchanged. Unrepresentable titles use pinned Unicode 15.1 per-scalar
+  lowercase UTF-8 without normalization and sort after representable titles.
+  This deterministic extension is not a claim of original Unicode CRT parity.
+- Missing requested and default topic records disable that topic. Missing both
+  category labels disables the category with `missing_localized_label`; that is
+  a deliberate robust port divergence from the original empty-label behavior.
+- Sixteen immutable source-backed topics allow complete Alliance/Empire image
+  pairs. Both keys are required, each value is a confined path or null, and no
+  overlay can grant capability to a static topic. Static replacement and
+  explicit null remain valid; mod null overrides both base and approved HD.
+- Mod image IDs hex-encode the exact existing mod-name UTF-8 bytes. There is no
+  kebab-case rewrite, case fold, Unicode normalization, or separate fixed name
+  ceiling. Checked allocation and the global retained-byte ledger govern actual
+  candidates; confined art paths remain ASCII and at most 256 bytes.
+- The one 512 MiB retained-byte cap covers live base/mod buffers, one serialized
+  candidate, in-flight reads, and retained identity/name/path bytes. It is not
+  split into per-mod quotas and is not a total process/GPU-memory claim. The
+  independent 32 MiB/image, 16-million-pixel, and 128 MiB effective-image-set
+  limits remain in force.
+
+### Current delivery boundary
+
+The accepted native 14-step feature-only walkthrough inspected live text and
+image replacement, malformed-edit last-good/recovery, disable/base restoration,
+dependency failure, stable topic selection, bounded texture/byte ownership,
+and original/faithful-HD/mod/null precedence. Browser v1 remains immutable
+base-only and does not discover or watch mods. Player-facing production routes
+and `REBELLION_REQUIRE_ENCYCLOPEDIA=1` remain pending E32; any release command
+must be revalidated by E36 against the final artifact.
+
+Original geometry and strict `OBJ-01` parity are not complete. P62 transports
+the 187 validated owned images and P64 proves the bounded original index shell,
+but original topic-surface/A0 evidence remains separate. A successful stage,
+decode, mod reload, or feature-only walkthrough must not be reported as that
+visual acceptance.
 
 ---
 

@@ -83,7 +83,8 @@ strings, or cutscenes:
 
 ```sh
 go run ./tools/stage-ui-assets --encyclopedia-report-only \
-  --source "/path/to/Star Wars - Rebellion"
+  --source "/path/to/owned-install" \
+  --edata "/path/to/owned-install/EData"
 ```
 
 The default destination is `data/base/encyclopedia-research/`. Override it with
@@ -127,6 +128,12 @@ destination containing runtime `catalog.json` or `manifest.json`, even with
 checkpoint does not bind strings or images to topics and does not produce a
 runtime-loadable catalog.
 
+For the identified source profile the reconciled text accounting is 348
+decoded ENCYTEXT records: 347 bound topics plus source-proven-unused resource
+`7176`. There are zero v1 runtime aliases and zero unresolved text records.
+`EDATA.192` is separate deferred artwork inventory under `orlocal-2kq`; it is
+not the 348th topic, an alias, or evidence for an alternate-art selector.
+
 Verify an existing report without reading an original installation or writing
 anything:
 
@@ -144,6 +151,11 @@ staging rerun may perform validated recovery. Byte-identical reruns are no-ops,
 including with `--force`; changed owned output requires `--force`; unknown user
 files always block replacement and are never deleted.
 
+`--verify` is read-only: it does not acquire the writer lock, repair a journal,
+rename a backup, remove a candidate, or read an owned installation. If it sees
+an active/interrupted publication it reports the recovery command; only a
+staging invocation may perform validated recovery.
+
 The default research destination is covered by `data/base/*` in `.gitignore`.
 Keep custom research destinations outside tracked paths: original prose, raw
 resources, and generated reports must not be committed or distributed.
@@ -155,7 +167,8 @@ checking or invoking `ffmpeg`/`ffprobe`:
 
 ```sh
 go run ./tools/stage-ui-assets --encyclopedia-only \
-  --source "/path/to/Star Wars - Rebellion" \
+  --source "/path/to/owned-install" \
+  --edata "/path/to/owned-install/EData" \
   --encyclopedia-output ./data/base/encyclopedia
 ```
 
@@ -206,14 +219,22 @@ is present, verification additionally checks its complete generated ownership
 and raw/decoded evidence. Report-only and canonical roots are never silently
 reinterpreted as one another.
 
+The manifest authenticates immutable generated base content. In particular,
+`catalog_sha256`, `files["catalog.json"]`, and the SHA-256 of the exact
+`catalog.json` bytes must agree. It never self-hashes and never receives mod
+files, generated mod image IDs, or effective runtime facts. Authors edit
+`mods/<name>/encyclopedia.json`; they never edit this manifest or maintain
+image hashes. See the [mod-author guide](../../README_MOD.md) and the approved
+[v1 schemas](../../docs/reference/asset-library/schemas/).
+
 ### Normal browser builds
 
 `scripts/build-wasm.sh` can run the focused canonical stage before compiling
 when an owned source root is supplied explicitly:
 
 ```sh
-REBELLION_ENCYCLOPEDIA_SOURCE="/path/to/Star Wars - Rebellion" \
-REBELLION_EDATA_DIR="/path/to/Star Wars - Rebellion/EData" \
+REBELLION_ENCYCLOPEDIA_SOURCE="/path/to/owned-install" \
+REBELLION_EDATA_DIR="/path/to/owned-install/EData" \
 FORCE_REBUILD=1 \
 ./scripts/build-wasm.sh
 ```
@@ -236,7 +257,10 @@ Before the later production-route gate, a completely absent canonical stage
 warns and publishes a pack without the namespace. A report-only, partial, or
 corrupt stage always fails. Tests and downstream release tooling can select the
 future strict policy with `REBELLION_REQUIRE_ENCYCLOPEDIA=1`; it is deliberately
-not the default here.
+not the default here. **Pending release policy:** do not use that flag to claim
+a production-ready encyclopedia package until E32 enables the policy and E36
+revalidates the final artifact. The commands in this section are developer
+build commands, not an E36 release sign-off.
 
 The pack and mirror use one sibling transaction record and an exclusive writer
 lock. Changed publications back up both prior artifacts, publish both
@@ -270,10 +294,40 @@ It copies the existing flattened DLL/DAT inputs, passes the owned EData root
 through Go's `--edata`, and propagates the force and rollout policy flags. It
 does not depend on optional DAT JSON dumps.
 
+For Docker Compose, point `STAR_WARS_REBELLION_DIR` in `.env` at a read-only
+owned installation; inside the builder the mount is `/original-game`. If art
+is mounted elsewhere, set `REBELLION_EDATA_DIR` to that declared directory.
+`--edata`/`REBELLION_EDATA_DIR` is an input only: neither the Go stage nor the
+packer recursively copies arbitrary EData files into the runtime namespace.
+
 Normal full staging runs the same canonical stage before media prerequisites.
 For the current rollout, entirely absent encyclopedia-specific inputs emit a
 warning and let the remaining assets stage. Any partial, corrupt, mixed, or
 unsupported encyclopedia input fails instead of being skipped.
+
+Native runtime lookup is paired to the selected DAT root. Selecting a `GData`
+directory uses its sibling `encyclopedia/`; selecting a flattened DAT directory
+uses its child `encyclopedia/`. The loader API supports an explicit root, and
+`REBELLION_ENCYCLOPEDIA_DIR` is reserved for that override, but the current
+application caller does not yet read the variable. Until that wiring lands,
+place the verified catalog in one of the two implemented layouts. A pairing
+mismatch is repaired by restaging from the same DLL/DAT/EData profile—not by
+editing `manifest.json` or copying a manifest across installations.
+
+### Replacement, ownership, and recovery
+
+`--force` is deliberately narrow. A byte-identical rerun is a no-op with or
+without it. Changed generated output requires it, but it never authorizes
+deleting an unknown file, following an unsafe link, replacing a mod directory,
+or bypassing profile/digest/schema checks. Publication validates a complete
+sibling candidate first and restores the previous validated set after a
+failure. Preserve reported journal/backup/candidate paths and rerun the exact
+staging command with `--force`; do not manually combine generations.
+
+Report-only and canonical products are not interchangeable. Use report-only
+when you need raw/research evidence without runtime bindings; use canonical
+mode when you need a runtime-loadable base. A report-only directory cannot be
+packaged or silently promoted by `--verify`.
 
 ## Output layout
 
@@ -381,11 +435,12 @@ Successful runs and help exit with status 0. Errors exit with status 1 and an
 - **Verification fails:** inspect the reported file or directory. Rerun
   extraction to restore missing files; use `--force` for differing files.
 
-This tool stages UI resources, audio, cutscenes, original text strings, and
-opt-in raw tactical meshes and textures. Its separate tactical converter
+This tool stages UI resources, audio, cutscenes, original text strings,
+canonical/research encyclopedia content (including validated supplied EData),
+and opt-in raw tactical meshes and textures. Its separate tactical converter
 decodes staged binary-X geometry and type-303 indexed images and palettes into
 a deterministic content-addressed runtime store. It does not extract SPT/BIN/FDT control data,
-briefing animation, DAT tables, or EData images. It does not generate the browser
+briefing animation, or DAT tables. It does not generate the browser
 manifest or runtime pack. The repository's
 [WASM build script](../../scripts/build-wasm.sh) consumes `data/base/ui/` for
 browser packaging. See the

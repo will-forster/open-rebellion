@@ -42,18 +42,32 @@ cargo build -p dat-dumper --release
 Both `data/base/json/` and the game data itself are gitignored — this is
 local reference material, not something to commit.
 
-### Inspecting canonical encyclopedia identities
+### Stage and inspect canonical encyclopedia identities
 
 The asset staging tool can build a readable, strictly validated encyclopedia
-catalog from a supported owned installation:
+catalog from a supported owned installation. Use placeholders for local roots;
+do not copy an installation path into a mod or a committed document:
 
 ```bash
+OWNED_INSTALL="/path/to/owned-install"
+CATALOG_ROOT="$PWD/data/base/encyclopedia"
+
 go run ./tools/stage-ui-assets --encyclopedia-only \
-  --source "/path/to/Star Wars - Rebellion" \
-  --encyclopedia-output data/base/encyclopedia
+  --source "$OWNED_INSTALL" \
+  --edata "$OWNED_INSTALL/EData" \
+  --encyclopedia-output "$CATALOG_ROOT"
 
 go run ./tools/stage-ui-assets --encyclopedia-only --verify \
-  --encyclopedia-output data/base/encyclopedia
+  --encyclopedia-output "$CATALOG_ROOT"
+
+# List canonical topic IDs without printing original prose.
+jq -r '.topics | keys[]' "$CATALOG_ROOT/catalog.json"
+
+# Show family-qualified bindings for one selected topic.
+TOPIC_ID="original:5696"
+jq --arg id "$TOPIC_ID" \
+  '.bindings[] | select(.topic_id == $id)' \
+  "$CATALOG_ROOT/catalog.json"
 ```
 
 Inspect `data/base/encyclopedia/catalog.json` for canonical topic IDs,
@@ -68,6 +82,12 @@ unreferenced `assets/` files are local research evidence rather than mod inputs.
 Do not edit or distribute generated base prose/art. Author content belongs in a
 mod's separate `encyclopedia.json` and confined `encyclopedia/assets/` paths
 and must never replace the generated base directory.
+
+The identified profile accounts for all 348 decoded ENCYTEXT records: 347 are
+bound topics and resource `7176` is source-proven unused. There are no v1
+runtime aliases or unresolved text records. `EDATA.192` is a separate,
+inventory-only deferred artwork record; file presence does not create a topic,
+selector, or supported alternate-art rule.
 
 ### Finding an entity's `dat_id`
 
@@ -130,7 +150,7 @@ description = "What this mod does."
 
 | Field | Required | Notes |
 |---|---|---|
-| `name` | Yes | kebab-case, unique across all installed mods |
+| `name` | Yes | Must be unique. Kebab-case is the authoring convention, but the current resolver preserves the exact UTF-8 bytes and does not enforce that spelling. |
 | `version` | Yes | Semver, e.g. `"1.2.0"` |
 | `author` | No | Display only |
 | `description` | No | Display only |
@@ -198,6 +218,18 @@ not put a hash, dimensions, `image_id`, or base path into the patch. Paths are
 relative to that mod's directory, use `/`, and must remain within
 `encyclopedia/assets/`.
 
+The generated identity is
+`mod:v1:<lowercase-hex-of-exact-UTF8-mod-name>:<path>`. It is not an authoring
+field. For example, `demo` becomes
+`mod:v1:64656d6f:encyclopedia/assets/interceptor.png`, while `MyMod` becomes
+`mod:v1:4d794d6f64:encyclopedia/assets/interceptor.png`. Names are not
+case-folded or Unicode-normalized. There is no independent fixed mod-name
+length limit; checked allocation and the single retained-byte budget decide
+whether an encyclopedia candidate can construct its identity. Paths are a
+separate, ASCII-only contract: 25–256 bytes, slash-separated, beginning with
+`encyclopedia/assets/`, with no empty, `.`, `..`, absolute, drive, colon, or
+backslash component, and ending in lowercase `.bmp` or `.png`.
+
 Presence matters:
 
 - Omitting a field inherits the preceding effective value.
@@ -210,9 +242,86 @@ Presence matters:
   and is accepted only for a source-proven faction-capable topic. Do not infer
   that capability from a name or existing picture.
 
+A complete pair has this shape; either side may be `null`, but neither key may
+be omitted:
+
+```json
+[
+  {
+    "id": "original:7184",
+    "localized": {
+      "1033": {
+        "image": {
+          "alliance": {"path": "encyclopedia/assets/mission-alliance.png"},
+          "empire": {"path": "encyclopedia/assets/mission-empire.png"}
+        }
+      }
+    }
+  }
+]
+```
+
+Permission comes from the immutable validated base topic capability. A mod can
+use a pair in a newly added language for one of those proven topics, and can
+restore the pair after an earlier mod supplied static or null art. A static
+topic can never gain pair capability from an earlier overlay. Any missing,
+unsafe, corrupt, oversized, or mismatched side rejects that mod's entire batch.
+
+Only `localized.<LANGID>.title`, `body`, and `image` are accepted. V1 has no
+aliases, custom topics, categories, bindings, author-supplied IDs, hashes, or
+provenance fields. See the normative
+[`encyclopedia-overlay.schema.json`](docs/reference/asset-library/schemas/encyclopedia-overlay.schema.json)
+and the contributor-authored
+[`overlay fixtures`](tests/fixtures/encyclopedia/fixtures/overlays/).
+Validate the checked-in synthetic schema and relationship corpus with:
+
+```sh
+npm --prefix tools/interface-parity ci
+node tools/interface-parity/validate-encyclopedia-fixtures.mjs
+```
+
+That command validates the repository fixtures; it is not a substitute for
+the native runtime validating a mod's exact retained bytes. `jq empty
+mods/my-mod/encyclopedia.json` is useful as a syntax check, but it likewise
+does not prove schema, image, provider, budget, or base-capability validity.
+
+### Language, ordering, and limits
+
+All overlays are applied before choosing a language. The runtime selects the
+complete requested LANGID record, or the complete catalog default record; it
+never combines a title from one language with a body or art from another.
+Deleting the requested-language record restores whole-record fallback. If both
+requested and default records are absent, the topic is disabled with a
+diagnostic. Category labels fall back independently; when both labels are
+missing the category is disabled. That last behavior is a deliberate robust
+port divergence from the original's empty-label display. A present empty label
+remains empty.
+
+Catalog membership arrays provide source membership and stable tie order, not
+display-title order. After overlays, language choice, and art resolution, rows
+are stable-sorted by their effective displayed titles. Windows-1252-
+representable titles sort first using strict encoding and ASCII-only `A`–`Z`
+folding; high bytes are unchanged. Other titles use pinned Unicode 15.1
+per-scalar lowercase UTF-8 without normalization and sort afterward. Equal
+keys retain registry order. This is a deterministic compatibility policy, not
+a claim that the original CRT implements Unicode sorting.
+
+Safety limits are implementation budgets, not original-game limits:
+
+- 16 MiB and depth 8 for one overlay, with at most 10,000 patches;
+- 64 KiB UTF-8 per title and 1 MiB UTF-8 per body;
+- 32 MiB and 16,000,000 pixels per image;
+- 128 MiB for the effective logical image set; and
+- one 512 MiB retained-byte cap for live base/mod buffers, one serialized
+  candidate, in-flight reads, and retained identity/name/path bytes.
+
+The 512 MiB cap is not split into per-mod quotas and is not a total process or
+GPU-memory promise. Reload work is serialized; a rejected candidate releases
+its reservations and leaves the previous valid publication live.
+
 When two enabled mods edit the same field, dependency order applies first and
 the later mod wins. Declare a dependency when that precedence is intentional;
-unrelated mods use the runtime's deterministic name order. A malformed edit is
+unrelated ready mods use lexicographic exact-name order. A malformed edit is
 reported with its mod/topic/path while the last accepted contribution remains
 visible if that mod is still eligible. Fixing the file recovers automatically.
 Disabling or removing a mod rebuilds from immutable base plus the remaining
@@ -232,15 +341,40 @@ native reload never writes to `data/base/encyclopedia`. If a supported owned
 installation changes, restage and verify the base rather than editing manifest
 hashes by hand.
 
+Native loading pairs `manifest.binding_sources` with the exact selected DAT
+bytes. With a selected `.../GData` directory it looks for a sibling
+`.../encyclopedia`; with a flattened DAT root it looks for a child
+`.../encyclopedia`. The lower-level loader accepts an explicit override root,
+but the application does **not currently read** the reserved
+`REBELLION_ENCYCLOPEDIA_DIR` environment variable. Do not rely on that variable
+until its caller wiring lands. A `binding_source_mismatch` means the catalog
+belongs to different DAT bytes: restage from the same owned installation rather
+than editing a digest or copying a catalog from another install.
+
 ## 5. Installing and testing
 
 1. Drop your mod directory under `mods/`.
-2. Launch the game — mods are auto-discovered on startup.
-3. Press **Tab** to open the Mod Manager panel and enable your mod (or edit
-   `mods/config.toml` directly: `enabled = ["my-mod"]`).
-4. **Native builds only**: editing an enabled mod's files hot-reloads it
-   immediately, no restart needed (`ModWatcher`, backed by `notify`). This
-   doesn't work in the browser/WASM build yet.
+2. Launch the native build. Mods are discovered on startup.
+3. Press **Tab** to open the Mod Manager and enable the mod. The runtime toggle
+   persists `mods/config.toml` and immediately rebuilds encyclopedia content.
+   Editing `config.toml` behind an already-running process does not toggle its
+   live state; restart or use the Mod Manager.
+4. Edit `encyclopedia.json` or a declared image. The native watcher coalesces
+   text, image-only, and atomic-save rename events into a content-only refresh;
+   it never reapplies world patches. A malformed intermediate edit preserves
+   the eligible last-good view, and a valid replacement recovers without
+   rewriting author or base hashes.
+5. Disable the mod in the Mod Manager. The runtime rebuilds from immutable base
+   plus the remaining enabled snapshots, so the original content returns and a
+   disabled contribution cannot be resurrected from a cumulative cache.
+
+The 14-step native contributor workflow above has passed inspected feature-only
+acceptance for both original-parity and faithful-HD precedence, including
+malformed-edit recovery, dependency failure, image-only replacement, explicit
+null, stable selection, and bounded retained textures/bytes. Player-facing
+production encyclopedia routes remain gated pending E32 and final E36 artifact
+revalidation. Browser v1 remains immutable base-only and provides no local mod
+discovery, toggle, or watcher.
 
 Load order is dependency-first: if mod B depends on mod A, A's patches apply
 before B's, and B can override anything A set for the same entity/field.
@@ -258,3 +392,11 @@ if the entities the save references have since changed shape.
 - `agent_docs/mod-runtime.md` — `ModRuntime`/`ModLoader`/`ModWatcher` internals
 - `crates/rebellion-data/src/mods.rs` — implementation
 - `mods/examples/star-destroyer-rebalance/` — minimal working example
+- `docs/reference/asset-library/encyclopedia-schema-decisions.md` — approved
+  identity, sorting, localization, budget, and capability decisions
+- `docs/reference/asset-library/schemas/encyclopedia-overlay.schema.json` —
+  strict author-facing v1 wire schema
+- `tests/fixtures/encyclopedia/fixtures/overlays/` — synthetic positive and
+  negative examples
+- `tools/stage-ui-assets/README.md` — extraction, verification, container, and
+  packaging boundaries
