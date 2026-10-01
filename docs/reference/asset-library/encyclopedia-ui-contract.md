@@ -370,13 +370,13 @@ resource identities, and compare exact client bounds and state pixels.
 
 | ID | Required state(s) | Static expectation | E51 acquisition / acceptance / remaining proof |
 |---|---|---|---|
-| `ENC-UI-01` | Alliance context-free index | `0x6f` full cache; Alliance shell/rail; shared index overlay `0x2862`, baked text resource `0x1843`, background selector `2`; list focus. | **Partial acquisition / Open:** F7, post-gate `0x131`, duplicate-F7 visible-child evidence, and a live ordinary command-`0x19` mode-1/current-null child observation exist; pre-gate command, runtime resources, internal focus, and instrumented duplicate-child count remain absent. |
+| `ENC-UI-01` | Alliance context-free index | `0x6f` full cache; Alliance shell/rail; shared index overlay `0x2862`, baked text resource `0x1843`, background selector `2`; list focus. | **Partial acquisition / Open:** F7, post-gate `0x131`, duplicate-F7 visible-child evidence, and a live ordinary command-`0x19` mode-1/current-null child observation exist. R56 adds two equal bounded target-thread samples focused on the validated initial-index child. Pre-gate command, runtime resources, and instrumented duplicate-child count remain absent. |
 | `ENC-UI-02` | Empire context-free index | Empire shell/rail with the same index overlay `0x2862`, baked text resource `0x1843`, and background selector `2`. | **Partial acquisition / Open:** F7 and pre/post behavioral `0x131` evidence exist; no direct `FUN_004fcee0` value, runtime resources, focus, or instrumented child identity/count. |
 | `ENC-UI-03` | Alliance commands `0x6f..0x75` | Seven fixed x slots; proven full/range collections and stable ordering. | **Partial acquisition / Open:** visible frames cover all seven selected categories. Reviewed static evidence fixes command order, profile candidate counts 347/200/38/14/15/10/69, and source-order preservation for comparator ties. Complete runtime-admitted membership/order, empty/gap outcomes, selected resources, and focus remain absent. |
 | `ENC-UI-04` | Empire commands `0x6f..0x75` | Same command/range contract with faction-specific icon resources where mapped. | **Partial acquisition / Open:** visible frames cover all seven selected categories. Reviewed static evidence supplies the same fixed order, candidate counts, and tie rule. Complete runtime-admitted membership/order, empty/gap outcomes, selected resources, and focus remain absent. |
 | `ENC-UI-05` | Normal, pointer-over, captured press, canceled press, selected, disabled | Source bitmap slots and capture behavior above. | **Partial acquisition / Open:** selected Category/Close sequences exist; exhaustive mode/navigation/disabled states and timing remain absent. |
 | `ENC-UI-06` | Index selection by click, double-click, and Return | Static emitter paths produce `0x29b`, repeat-click `0x29d`, and double-click/Return `0x309`; the receiver conditionally maps `0x309` to `0x67` only with non-null selected/current rows. | **Partial acquisition / Open:** click/double-click/Return pixels exist; list PageDown/Return produced live canonical key `5963` / packed identity `0x14000002`. Delivered notification identity, internal focus, and pointer-click/double-click selected-resource joins remain absent. |
-| `ENC-UI-07` | Class-context topic across all five direct contextual callers | Canonical definition-derived row opens; body focus. | **Missing acquisition / Open:** r41 visibly opened `Corellian Corvette` from `Corellian Corvette 1` inside expanded Fleet 1 and Close preserved the fleet surface. r47 selected real Recruitment and Espionage mission-definition rows, opened their matching articles through the visible mission-dialog Encyclopedia control, and Close retained the mission and Personnel windows. r53 selected Alliance Escort Carrier in Build Selection, opened its matching article, and Close retained Build Selection and Chandrila Shipyards. Reviewed static inference connects the Fleet route through popup command `0x100` / `FUN_00486fb0`, the mission route through `FUN_0046c3c0` command `0x67`, and the corrected r49–r52 build route through `0x00438800` command `0x67`; each is a class wrapper plus empty entity companion route through `FUN_0041d6b0` / `FUN_00429f30`, with wrappers consumed only on create. The build-controller same-instance join is fresh-created/key-check-equal only. The r46 Personnel entity/order setup is distinct and r47 did not isolate Alt+M; r53 did not isolate Alt+B as dialog cause. Live command/notification, selected resources, canonical current keys, focus, and the other two callers remain absent. |
+| `ENC-UI-07` | Class-context topic across all five direct contextual callers | Canonical definition-derived row opens; body focus. | **Missing acquisition / Open:** bounded visible class results exist for Fleet/Corellian Corvette, mission Recruitment/Espionage, Build Selection/Alliance Escort Carrier, and r58 Character Status/Leia. Reviewed static evidence names all five owners: Fleet `FUN_00486fb0`, mission `FUN_0046c3c0`, Build Selection `0x00438800`, r55 Character Status `0x004443a0`, and r57 Message Index Research Report `0x00467f10`. R59's complete visible Manufacturing list was empty, so Research Report remains fixture-blocked rather than successfully captured. Create/reuse and fresh-created/key-check limits remain as documented. The Personnel entity, mission-definition class, and resolved Character Status class are distinct; Alt+M, Alt+B, and F6 causality remain unisolated. Live command/notification, selected resources, canonical current keys, action-specific focus, and an eligible Research Report row/article/close sequence remain absent. |
 | `ENC-UI-08` | Direct entity-context topic across all five direct contextual callers | Same canonical-row topic flow. | **Missing acquisition / Open:** all five caller/control, entity/definition/current-key, and focus subcases remain absent. |
 | `ENC-UI-09` | Special-range entity fallback and non-special miss | Proven fallback may resolve; non-special retry cannot invent another key. | **Missing acquisition / Open:** both fallback branches and a non-special miss lack a source-backed setup. |
 | `ENC-UI-10` | Unavailable/stale context | Index mode, no fabricated current topic. | **Missing acquisition / Open:** unavailable/stale title/list/mode/focus fixture absent. |
@@ -388,7 +388,7 @@ resource identities, and compare exact client bounds and state pixels.
 | `ENC-UI-16` | Last enabled topic | Forward disabled; a null `0x84` neighbor retains `this+0x148`; disablement is separate. | **Partial acquisition / Open:** explicit Right retained the full last key `6802` / identity `0x38000002` and filtered last key `5699` / identity `0x1c000002` in equal snapshots. Internal Win32 focus and complete after-action desktop pairs remain absent; native frames are intact but immediate desktop frames caught a Wine/Xvfb repaint gap. |
 | `ENC-UI-17` | General current-topic null-art branch; no supported-profile fixture | No EData blit when art is null; header/body remain independently populated. Reviewed corpus accounting proves 347/347 supported-profile rows have effective art (331 direct/system plus 16 complete viewer-faction pairs) across 186 bound files. | **Missing historical acquisition / Open; supported profile corpus-not-applicable:** no original-profile no-art topic is demanded. `EDATA.192` is unbound/deferred, not a fixture. The general branch remains untested and E26 mod-null is separate. |
 | `ENC-UI-18` | Short, wrapped, explicit-newline, long-token, and scrolling body | Read-only `0x2410` layout, scrollbar only when needed; Up/Down/Page keys scroll. | **Partial acquisition / Open:** r41 Chewbacca showed first movement on discrete Down 4 and reversal on Up 4; Up 5-8 were interrupted by Message Index and rejected. A separate down-arrow click moved immediately; an attempted pointer drag showed no motion and is not drag proof. Static metadata joins Chewbacca to `0x38000343`, title `10819`, lookup `6723`, `EDATA.081`. Newline/long-token/body Page/font/extent/internal-focus and successful drag cases remain absent. |
-| `ENC-UI-19` | Topic Return, Tab, Escape, and `0xfb` | Return has no local topic action; Tab consumed; static command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. | **Partial acquisition / Open:** visible Return/Tab/Escape/Close results exist; r7 Escape has a two-snapshot command-`0x19` child-absent observation; r41 Close restored Fleet 1; r47 Close restored the Recruitment and Espionage mission dialogs with the Personnel window retained; and r53 Close restored Build Selection on Alliance Escort Carrier over Chandrila Shipyards. Runtime `0xfb` command/notification and internal focus restoration remain absent. |
+| `ENC-UI-19` | Topic Return, Tab, Escape, and `0xfb` | Return has no local topic action; Tab consumed; static command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. | **Partial acquisition / Open:** visible Return/Tab/Escape/Close results exist; r7 Escape has a two-snapshot command-`0x19` child-absent observation; r41 Close restored Fleet 1; r47 Close restored the Recruitment and Espionage mission dialogs with the Personnel window retained; r53 Close restored Build Selection on Alliance Escort Carrier over Chandrila Shipyards; and r58 Close returned to Personnel with Leia selected while Character Status was no longer visible. R58 does not prove hidden destruction order. Runtime `0xfb` command/notification and internal focus restoration remain absent. |
 | `ENC-UI-20` | Index Left from a middle category, the first category, and across hidden predecessor candidates | Select first visible predecessor; immediate null reselects the tree's first child; running off the start only after hidden candidates retains current; list focus remains. | **Partial acquisition / Open:** visible middle/first cases exist; hidden predecessor and complete command/list/focus trace remain absent. |
 | `ENC-UI-21` | Index Right from a middle category, the last category, and across hidden successor candidates | Select first visible successor; immediate null at the last child wraps to the tree's first child; running off the end only after hidden candidates retains current; list focus remains. | **Partial acquisition / Open:** visible middle/last-wrap cases exist; hidden successor/leftmost and complete command/list/focus trace remain absent. |
 
@@ -477,6 +477,31 @@ Launcher and exact-prefix stop both returned zero; the launcher was reaped and
 the guard was cancelled with its PID absent. Guard wait/reap exit remains
 unknown; lifecycle-shell exit `143` is not a guard-exit substitute.
 
+Accepted r55 and r57 close the two source-owner naming gaps without closing a
+runtime row. The Character Status source note SHA-256 is
+`ff7a0c7b58d0e1d4d29ebbf9fe022281b7766a2e24e32e2b447e47c0fe6b2b97`;
+the Message Index Research Report source-note SHA-256 is
+`5703716043c4db73e3d4c1d59fa84954b079f532da2ca7e0f057efc725b3170b`.
+R56 separately records one bounded Wine initial-index focus observation at
+SHA-256
+`5de023bb410b25abf34d81bbb08e922a32e83cae19b099955fd71af8d38ea4bf`:
+two equal target-thread samples focused the validated index child, and helper
+and game cleanup completed within bounds. It supplies no loader-resource,
+notification, selected-key, contextual-action, or Windows proof. The older r35
+quarantine remains immutable at
+`ab5d3c77ea52326b7152ee80b3120887146dd07e2549deb2687dc4ad129f24a7`.
+
+R58's accepted visible manifest SHA-256 is
+`1198943b9f390124cc247a13f02740d710917ecf9f57dbc0d9e96acf114154d7`:
+Character Status / Leia opened a matching article and encyclopedia-only close
+returned to Personnel with Leia selected. Hidden Status destruction/order is
+not observed. R59's verified-inconclusive manifest SHA-256 is
+`d1af9b876dc93f05b5c6e1ed67a8c7690915930c8dd35fe68d18435a235c5403`:
+Message Index appeared later and Manufacturing's complete visible list was
+empty. It proves no F6 causality or Research Report article/close behavior.
+Its lifecycle records retain supervisor `143`; launcher and guard exit/reap
+remain unknown, and incomplete launcher output is not reinterpreted.
+
 E51 r7 adds a bounded read-only observer and immutable interaction runs without
 changing row acceptance. The metadata summary is
 `/data/projects/open-rebellion/agent-work/original-game-capture/E51/reachable-captures-r7-summary.json`
@@ -498,10 +523,10 @@ artifact `ui-state-packed-handle-field-provenance-r8.json` has SHA-256
 it preserves every raw snapshot/run and records no recapture.
 
 The source-guided exceptional investigation remains open for exact named
-prerequisites: the other two unrenamed contextual caller routes (`0x004443a0`
-and `0x00467f10`); runtime command/resource/current-key/focus proof for the
-visibly exercised `0x00438800`, `FUN_0046c3c0`, and `FUN_00486fb0` class
-routes; both
+prerequisites: runtime command/resource/current-key/action-focus proof for the
+visibly exercised `0x00438800`, `0x004443a0`, `FUN_0046c3c0`, and
+`FUN_00486fb0` class routes; a legitimate eligible Research Report for the
+source-proven `0x00467f10` route; both
 `FUN_0045fd90` association branches and a non-special miss; a legitimate
 stale/unavailable context; a System view with type-`0xf2` ancestry; and a
 connected writer/configuration hiding a category.
@@ -527,12 +552,13 @@ They are A3 and cannot close any matrix row.
   identities remain unjoined; other profiles must not inherit these labels
   without evidence.
 - Five direct callers of `FUN_0041d6b0` are source-proven. The Fleet/generic
-  `FUN_00486fb0`, mission-dialog `FUN_0046c3c0`, and Build Selection
-  `0x00438800` class-context routes now have reviewed static chains and visible
-  results, but still lack live command/notification, resource/current-key,
-  and target-thread-focus proof. The visible owners for handlers `0x004443a0`
-  and `0x00467f10` remain unresolved; capture caller address and control rather
-  than assigning a name from neighboring code.
+  `FUN_00486fb0`, mission-dialog `FUN_0046c3c0`, Build Selection `0x00438800`,
+  Character Status `0x004443a0`, and Message Index Research Report
+  `0x00467f10` class-context routes now have reviewed static chains. The first
+  four have bounded visible results; r59 found no eligible Research Report.
+  All still lack live command/notification, resource/current-key, and
+  action-specific target-thread-focus proof. R56 focus applies only to the
+  initial index child.
 - The r46 Alt+M chain is a conditional mission-setup path, distinct from the
   downstream mission-definition encyclopedia control. An uncontaminated
   selected-character / Alt+M / bounded-after capture would close that causal
