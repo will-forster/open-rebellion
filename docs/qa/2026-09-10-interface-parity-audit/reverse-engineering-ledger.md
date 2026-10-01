@@ -156,7 +156,7 @@ and a next proof in the [machine-readable ledger](reverse-engineering-ledger.jso
 | RE-GID-01 | Filters, legends, marker rules, pan, zoom, and selection | static-partial; default GID and source frame runtime-corroborated | Recover menu interior and geometry, expanded legend, remaining filter predicates and overlays, and exact map input |
 | RE-OVR-01 | Galaxy Overview | untriaged | Recover geometry, category formulas, resources, and destinations |
 | RE-MSG-01 | Messages, Agent menus, alerts, and reports | static-partial; rail controls recovered | Decompile `FUN_0042a240`, map unread states and the original index window, then join reports, audio, and navigation |
-| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; upstream index shell and ten control pairs runtime-corroborated; original Wine compatibility captures partial/blocked with bounded endpoint/current-row, Fleet-context and mission-context evidence; unproven alternate art deferred to `orlocal-2kq` | Preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md); complete E51's named partial/missing `ENC-UI-01..21` subcases with selected resources, internal focus, notifications, the three unrenamed caller routes, entity/faction/context fixtures and complete desktop pairs; complete topic composition and outer-window comparison |
+| RE-ENC-01 | Encyclopedia index and topics | semantic and UI/control static recovery complete; upstream index shell and ten control pairs runtime-corroborated; original Wine compatibility captures partial/blocked with bounded endpoint/current-row, Fleet-context, mission-context, and Build Selection class-context evidence; unproven alternate art deferred to `orlocal-2kq` | Preserve the [P63 mapping](../../../ghidra/notes/encyclopedia-window.md); complete E51's named partial/missing `ENC-UI-01..21` subcases with selected resources, internal focus, notifications, the two unrenamed caller routes, entity/faction/context fixtures and complete desktop pairs; complete topic composition and outer-window comparison |
 | RE-OBJ-01 | System, sector, and object-window constructors | static-partial; sector and system shells runtime-corroborated | Complete system item compositions and commands, then map the remaining object families |
 | RE-ADV-01 | Type-302 advisor and briefing frame decoding | runtime-corroborated | Extend the verified advisor decoder/transport to briefings and compare with A0 captures |
 | RE-ADV-02 | SPT/BIN/FDT action semantics, cadence, and sound | static-partial | Replace inferred priority thirds with authored action mappings |
@@ -274,6 +274,22 @@ Personnel entity may build order `0x240`; and only a nonempty
 `FUN_004f5380` legal-mission result admits the mission dialog. The live entity
 and later mission-definition class row are not interchangeable identities.
 
+Accepted r49–r52 evidence identifies `0x00438800` as the ordinary Build
+Selection dialog's class-context handler. Its complete command-`0x67` table
+branch reaches the selected row `+0x54`, supplies a class wrapper plus empty
+entity companion, and reaches `FUN_0041d6b0` / `FUN_00429f30`; only the create
+branch supplies those wrappers to `FUN_0045d400`. The r50/r51 independent
+reviews rejected type-only instance identity. The corrected conclusion is
+conditional: for the ordinary fresh-created collection on the key-check/equal
+edge, range `0049e130–0049e196` (SHA-256
+`2e279e7bf11780e1c28ecfd66dbd02329794b35bfb813969456ae43ab88dcc70`)
+returns an exact same-collection node and trampoline `00568ee0–00568ee5`
+(SHA-256
+`ad754bd90725bde9c206591c56972f8678048a6af3b94433e5587eb7acd98c1e`)
+reaches the exact-node leftmost fallback. The `0x00439ae4` bypass,
+duplicate-key or malformed serialized state, and already-open-window retarget
+are outside that result.
+
 Index focus belongs to the `CoolDragList`; Return emits the same `0x309`
 activation as a double-click and enters topic mode. In index mode Left uses
 `FUN_005f5c60` predecessor traversal and Right uses the threaded successor;
@@ -383,6 +399,24 @@ while hotkey causality remains unisolated. Cleanup removed the owned
 game/window after exact prefix stop, but the supervisor exit 143 and unknown
 launcher exit status remain recorded rather than normalized.
 
+Coordinator-accepted r53 adds 35 raw full frames and 35 exact
+same-acquisition crops under `visible-r53-1/`. Its report/checker/manifest/
+action-journal hashes are
+`596b732d5925632a6a855ce35252592dfdb609706ecd902a977b867004b101d4`,
+`d05db1e6d73babf700c5e6276049e84f399e6ac42f7e5a36d499c9016dd29cd8`,
+`6b0fe05f26222a4f88a69637900680403ffc0cb634cb1896d4f07647dde73dbe`,
+and `baefeb1e52ca31d4ca67e1de792cdbea8b3e9e522144db476b4c2769ca82274c`.
+In one Alliance / Chandrila run, the first post-shortcut frame showed no
+candidate dialog; a later visible yard click opened Build Selection. Selected
+Alliance Escort Carrier opened the matching article and ordinary encyclopedia
+close retained Build Selection and Chandrila Shipyards. This is visible
+class-context evidence only, not live Alt+B causality, command/notification,
+canonical key/DatId, selected resource, or target-thread-focus proof. Launcher
+and exact-prefix stop returned zero; the launcher was reaped; the guard was
+cancelled and its PID is absent. The guard wait/reap exit status remains
+unknown, and lifecycle-shell exit `143` is not substituted for it. The r35
+quarantine remains authoritative.
+
 The prior r44 four-file metadata state remains a historical checkpoint at
 `1c3140059d8bd69d94715e47c907667c0fe29801`; its checker and hashes are not
 relabeled as current. The additive r48 checker (`check-r48-metadata.py`,
@@ -392,8 +426,8 @@ validates the old Git objects and the current four-file/evidence/row closure
 separately.
 
 The remaining gates are named rather than inferred: runtime command/resource/
-current-key/focus proof for the observed Fleet and mission class routes; the
-three unrenamed contextual owners; all controlled entity-context routes;
+current-key/focus proof for the observed Fleet, mission, and build class
+routes; the two unrenamed contextual owners; all controlled entity-context routes;
 fallback and unavailable contexts; the admitted /
 excluded type-`0xf2` ancestry pair, Empire-side System-selector counterparts,
 exhaustive control states, full keyboard/body-layout cases, and connected
@@ -410,6 +444,16 @@ compatibility capture does not establish original-Windows rendering parity,
 port parity, or final acceptance. Guide captures 018, 019, and 027 remain A3
 leads only. Any A0 contradiction must reopen source/schema review before
 consumers change.
+
+The smallest source-only next investigation is one finite owner trace for
+`0x004443a0` or `0x00467f10`; it needs no new runtime access. Correlating any
+of the three visible class routes with live command, notification, resource,
+current-key, or target-thread focus needs a separately reviewed non-invasive
+observer, and r35 quarantine is a genuine gate rather than reusable authority.
+Exceptional fallback/unavailable/hidden cases need a legitimate owned
+save/scenario or connected source fixture. Original-Windows parity needs an
+authenticated original-Windows capture environment; Wine evidence cannot
+supply it.
 
 A separately labeled metadata-only replay resolved the two comparator globals
 without attaching them retroactively to the screenshots. For exact process PID

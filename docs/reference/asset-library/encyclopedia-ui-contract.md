@@ -75,10 +75,12 @@ shell and, when non-null, forwards both typed context wrappers to
 `FUN_00429f30` at call address `0x0041d6c5`. An exhaustive direct `call rel32`
 cross-reference scan of the inspected executable proves five callers:
 
-1. The unrenamed handler at `0x00438800`, command `0x67`, reads the selected
-   row from the control at `this + 0x114`, takes its typed identity at row
-   `+0x54`, constructs an empty companion wrapper, and calls the trampoline at
-   `0x004388ff`.
+1. The Build Selection handler at `0x00438800`, command `0x67`, reads the
+   selected row from the control at `this + 0x114`, takes its typed class
+   identity at row `+0x54`, constructs an empty entity companion wrapper, and
+   calls the trampoline at `0x004388ff`. The surface name and class/entity
+   distinction are accepted only through the corrected r49–r52 chain below,
+   not inferred from proximity or visible text.
 2. The unrenamed handler at `0x004443a0`, command `0x66`, rejects an empty
    identity and an identity whose high byte is `0xf1`, closes its current
    surface, and calls the trampoline at `0x0044445d` with the retained context
@@ -99,10 +101,10 @@ cross-reference scan of the inspected executable proves five callers:
 The same scan finds only the trampoline plus the two shell sites at
 `0x00423667` and `0x00423b5a` calling `FUN_00429f30` directly. This bounds the
 direct-call graph; it does not claim that an unresolved indirect function
-pointer has a friendly surface name. The visible owning surface for the three
-unrenamed handlers and every possible dispatch into `FUN_00486fb0` is not
-renamed from proximity alone. A0 capture must retain the originating control,
-command/event, and typed identity for each route.
+pointer has a friendly surface name. The visible owning surfaces for the two
+still-unrenamed handlers and every possible dispatch into `FUN_00486fb0` are
+not renamed from proximity alone. A0 capture must retain the originating
+control, command/event, and typed identity for each route.
 
 Accepted r45 evidence resolves the mission caller's typed contract without
 changing that five-caller bound. `FUN_0046c3c0` command `0x67` copies the
@@ -128,6 +130,31 @@ visibly change the Personnel surface, and a later distinct double-click
 preceded dialog appearance, so r47 does not causally prove the hotkey path.
 Neither the visible control nor pixels prove command/notification/resource,
 canonical current-key, DatId, or target-thread-focus identity.
+
+Accepted r49–r52 evidence identifies the first contextual caller as the
+ordinary Build Selection dialog and retains the complete command-`0x67`
+dispatch. The selected row supplies a class wrapper and the companion is an
+empty entity wrapper; `FUN_00429f30` consumes them only on its create branch.
+The r50/r51 reviews reject type-only instance inference. The repaired proof is
+limited to the ordinary fresh-created collection and the key-check/equal edge:
+`0049e130–0049e196` (SHA-256
+`2e279e7bf11780e1c28ecfd66dbd02329794b35bfb813969456ae43ab88dcc70`)
+returns exact nodes from the same collection and `00568ee0–00568ee5`
+(SHA-256
+`ad754bd90725bde9c206591c56972f8678048a6af3b94433e5587eb7acd98c1e`)
+reaches the exact-node leftmost fallback. The bypass at `0x00439ae4`,
+duplicate-key or malformed serialized state, and an already-open encyclopedia
+are not covered by that identity conclusion.
+
+Coordinator-accepted r53 Wine-visible evidence exercises the resulting class
+surface in one Alliance / Chandrila run. Under `visible-r53-1/`, Alliance Escort
+Carrier is selected in Build Selection, its visible Encyclopedia control opens
+the matching article, and ordinary close retains Build Selection and Chandrila
+Shipyards. The first post-shortcut frame showed no candidate dialog; a later
+visible yard click opened Build Selection, so the evidence does not attribute
+dialog creation to Alt+B. These pixels do not observe the internal command,
+notification, canonical current key/DatId, selected title/body/art resources,
+or target-thread focus.
 
 `FUN_0045d400` resolves the supplied class/entity context to the canonical
 cached topic described by the source contract. A resolved current row selects
@@ -349,7 +376,7 @@ resource identities, and compare exact client bounds and state pixels.
 | `ENC-UI-04` | Empire commands `0x6f..0x75` | Same command/range contract with faction-specific icon resources where mapped. | **Partial acquisition / Open:** visible frames cover all seven selected categories. Reviewed static evidence supplies the same fixed order, candidate counts, and tie rule. Complete runtime-admitted membership/order, empty/gap outcomes, selected resources, and focus remain absent. |
 | `ENC-UI-05` | Normal, pointer-over, captured press, canceled press, selected, disabled | Source bitmap slots and capture behavior above. | **Partial acquisition / Open:** selected Category/Close sequences exist; exhaustive mode/navigation/disabled states and timing remain absent. |
 | `ENC-UI-06` | Index selection by click, double-click, and Return | Static emitter paths produce `0x29b`, repeat-click `0x29d`, and double-click/Return `0x309`; the receiver conditionally maps `0x309` to `0x67` only with non-null selected/current rows. | **Partial acquisition / Open:** click/double-click/Return pixels exist; list PageDown/Return produced live canonical key `5963` / packed identity `0x14000002`. Delivered notification identity, internal focus, and pointer-click/double-click selected-resource joins remain absent. |
-| `ENC-UI-07` | Class-context topic across all five direct contextual callers | Canonical definition-derived row opens; body focus. | **Missing acquisition / Open:** r41 visibly opened `Corellian Corvette` from `Corellian Corvette 1` inside expanded Fleet 1 and Close preserved the fleet surface. r47 selected real Recruitment and Espionage mission-definition rows, opened their matching articles through the visible mission-dialog Encyclopedia control, and Close retained the mission and Personnel windows. Reviewed static inference connects the Fleet route through popup command `0x100` / `FUN_00486fb0` and the mission route through `FUN_0046c3c0` command `0x67` with a class wrapper and empty entity companion; both reach `FUN_0041d6b0` / `FUN_00429f30`, and only the create branch passes wrappers to `FUN_0045d400`. The r46 Personnel entity/order setup is distinct and r47 did not isolate Alt+M. Live command/notification, selected resources, canonical current keys, focus, and the other three callers remain absent. |
+| `ENC-UI-07` | Class-context topic across all five direct contextual callers | Canonical definition-derived row opens; body focus. | **Missing acquisition / Open:** r41 visibly opened `Corellian Corvette` from `Corellian Corvette 1` inside expanded Fleet 1 and Close preserved the fleet surface. r47 selected real Recruitment and Espionage mission-definition rows, opened their matching articles through the visible mission-dialog Encyclopedia control, and Close retained the mission and Personnel windows. r53 selected Alliance Escort Carrier in Build Selection, opened its matching article, and Close retained Build Selection and Chandrila Shipyards. Reviewed static inference connects the Fleet route through popup command `0x100` / `FUN_00486fb0`, the mission route through `FUN_0046c3c0` command `0x67`, and the corrected r49–r52 build route through `0x00438800` command `0x67`; each is a class wrapper plus empty entity companion route through `FUN_0041d6b0` / `FUN_00429f30`, with wrappers consumed only on create. The build-controller same-instance join is fresh-created/key-check-equal only. The r46 Personnel entity/order setup is distinct and r47 did not isolate Alt+M; r53 did not isolate Alt+B as dialog cause. Live command/notification, selected resources, canonical current keys, focus, and the other two callers remain absent. |
 | `ENC-UI-08` | Direct entity-context topic across all five direct contextual callers | Same canonical-row topic flow. | **Missing acquisition / Open:** all five caller/control, entity/definition/current-key, and focus subcases remain absent. |
 | `ENC-UI-09` | Special-range entity fallback and non-special miss | Proven fallback may resolve; non-special retry cannot invent another key. | **Missing acquisition / Open:** both fallback branches and a non-special miss lack a source-backed setup. |
 | `ENC-UI-10` | Unavailable/stale context | Index mode, no fabricated current topic. | **Missing acquisition / Open:** unavailable/stale title/list/mode/focus fixture absent. |
@@ -361,7 +388,7 @@ resource identities, and compare exact client bounds and state pixels.
 | `ENC-UI-16` | Last enabled topic | Forward disabled; a null `0x84` neighbor retains `this+0x148`; disablement is separate. | **Partial acquisition / Open:** explicit Right retained the full last key `6802` / identity `0x38000002` and filtered last key `5699` / identity `0x1c000002` in equal snapshots. Internal Win32 focus and complete after-action desktop pairs remain absent; native frames are intact but immediate desktop frames caught a Wine/Xvfb repaint gap. |
 | `ENC-UI-17` | General current-topic null-art branch; no supported-profile fixture | No EData blit when art is null; header/body remain independently populated. Reviewed corpus accounting proves 347/347 supported-profile rows have effective art (331 direct/system plus 16 complete viewer-faction pairs) across 186 bound files. | **Missing historical acquisition / Open; supported profile corpus-not-applicable:** no original-profile no-art topic is demanded. `EDATA.192` is unbound/deferred, not a fixture. The general branch remains untested and E26 mod-null is separate. |
 | `ENC-UI-18` | Short, wrapped, explicit-newline, long-token, and scrolling body | Read-only `0x2410` layout, scrollbar only when needed; Up/Down/Page keys scroll. | **Partial acquisition / Open:** r41 Chewbacca showed first movement on discrete Down 4 and reversal on Up 4; Up 5-8 were interrupted by Message Index and rejected. A separate down-arrow click moved immediately; an attempted pointer drag showed no motion and is not drag proof. Static metadata joins Chewbacca to `0x38000343`, title `10819`, lookup `6723`, `EDATA.081`. Newline/long-token/body Page/font/extent/internal-focus and successful drag cases remain absent. |
-| `ENC-UI-19` | Topic Return, Tab, Escape, and `0xfb` | Return has no local topic action; Tab consumed; static command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. | **Partial acquisition / Open:** visible Return/Tab/Escape/Close results exist; r7 Escape has a two-snapshot command-`0x19` child-absent observation; r41 Close restored Fleet 1; and r47 Close restored the Recruitment and Espionage mission dialogs with the Personnel window retained. Runtime `0xfb` command/notification and internal focus restoration remain absent. |
+| `ENC-UI-19` | Topic Return, Tab, Escape, and `0xfb` | Return has no local topic action; Tab consumed; static command `0xfb` dispatches to the same vtable `+0x30` close method as Escape. | **Partial acquisition / Open:** visible Return/Tab/Escape/Close results exist; r7 Escape has a two-snapshot command-`0x19` child-absent observation; r41 Close restored Fleet 1; r47 Close restored the Recruitment and Espionage mission dialogs with the Personnel window retained; and r53 Close restored Build Selection on Alliance Escort Carrier over Chandrila Shipyards. Runtime `0xfb` command/notification and internal focus restoration remain absent. |
 | `ENC-UI-20` | Index Left from a middle category, the first category, and across hidden predecessor candidates | Select first visible predecessor; immediate null reselects the tree's first child; running off the start only after hidden candidates retains current; list focus remains. | **Partial acquisition / Open:** visible middle/first cases exist; hidden predecessor and complete command/list/focus trace remain absent. |
 | `ENC-UI-21` | Index Right from a middle category, the last category, and across hidden successor candidates | Select first visible successor; immediate null at the last child wraps to the tree's first child; running off the end only after hidden candidates retains current; list focus remains. | **Partial acquisition / Open:** visible middle/last-wrap cases exist; hidden successor/leftmost and complete command/list/focus trace remain absent. |
 
@@ -422,6 +449,34 @@ the later post-double-click dialog frame `057` is
 The source-only hotkey chain and accepted downstream visible mission-context
 result are therefore recorded separately.
 
+The accepted r49 report/source/checker/review hashes are
+`a3b3033417ff76eb187259aa3a18109a814dcf7ae75da5dc1f01d823162b5d46`,
+`095f8d20b6da3727294348abb93bf7869ff664f29b94206cee70b51fc85156ef`,
+`ea1d2f5d679f31a5f7950ad098c1a718117c8b5ae321715ce622ba0a0737a3d2`,
+and `b4f93ebe5e02e4c05ba246a4f2217bfd2a1e4ecdb1b34ac4584e541cf84a893a`.
+The corrected r50 review, r51 review, and r52 report/source/checker hashes are
+`69e98d13601cd4f977c6d106580c65cae89c8d4626e310a03032cbfd33e61fa8`,
+`786facd40953ad8d8d7c48276ac4894d1283b44319f1224d8e6ab06820373610`,
+`bbfb800a56a9b088c4deb33cef5e6b7b338b6fd7c849dc48b854e68ca4853e62`,
+`9c9728cc9b5de81348b4973dedaaccd67d5e3efefdccec7238825aed47832c36`,
+and `3050238e9e25c9a18a29717f092bb7932eb2a6ae3bd9f7ee623ad16d64af8552`.
+
+Coordinator-accepted r53 adds 35 raw full frames and 35 exact
+same-acquisition crops under `visible-r53-1/`. Its report/checker/manifest/
+action-journal hashes are
+`596b732d5925632a6a855ce35252592dfdb609706ecd902a977b867004b101d4`,
+`d05db1e6d73babf700c5e6276049e84f399e6ac42f7e5a36d499c9016dd29cd8`,
+`6b0fe05f26222a4f88a69637900680403ffc0cb634cb1896d4f07647dde73dbe`,
+and `baefeb1e52ca31d4ca67e1de792cdbea8b3e9e522144db476b4c2769ca82274c`.
+Key full-frame hashes for selected Alliance Escort Carrier, matching article,
+and surviving Build Selection are respectively
+`3abec7b2221f0819160e46e21bf9e3451dd762a31e90b584b064a22143a751ea`,
+`3899decfb20b1b1e937e2d432c539444afbb439feb63a33876356f59b00a5b00`,
+and `4c49f5fe41a59cbfc117f038c87e42f4cda245ed7cd5f9be926f99d6f606d505`.
+Launcher and exact-prefix stop both returned zero; the launcher was reaped and
+the guard was cancelled with its PID absent. Guard wait/reap exit remains
+unknown; lifecycle-shell exit `143` is not a guard-exit substitute.
+
 E51 r7 adds a bounded read-only observer and immutable interaction runs without
 changing row acceptance. The metadata summary is
 `/data/projects/open-rebellion/agent-work/original-game-capture/E51/reachable-captures-r7-summary.json`
@@ -443,9 +498,10 @@ artifact `ui-state-packed-handle-field-provenance-r8.json` has SHA-256
 it preserves every raw snapshot/run and records no recapture.
 
 The source-guided exceptional investigation remains open for exact named
-prerequisites: the three unrenamed contextual caller routes (`0x00438800`,
-`0x004443a0`, `0x00467f10`); runtime command/resource/current-key/focus proof
-for the visibly exercised `FUN_0046c3c0` and `FUN_00486fb0` class routes; both
+prerequisites: the other two unrenamed contextual caller routes (`0x004443a0`
+and `0x00467f10`); runtime command/resource/current-key/focus proof for the
+visibly exercised `0x00438800`, `FUN_0046c3c0`, and `FUN_00486fb0` class
+routes; both
 `FUN_0045fd90` association branches and a non-special miss; a legitimate
 stale/unavailable context; a System view with type-`0xf2` ancestry; and a
 connected writer/configuration hiding a category.
@@ -471,11 +527,11 @@ They are A3 and cannot close any matrix row.
   identities remain unjoined; other profiles must not inherit these labels
   without evidence.
 - Five direct callers of `FUN_0041d6b0` are source-proven. The Fleet/generic
-  `FUN_00486fb0` and mission-dialog `FUN_0046c3c0` class-context routes now
-  have reviewed static chains and visible results, but still lack live
-  command/notification, resource/current-key, and target-thread-focus proof.
-  The visible owners for handlers `0x00438800`, `0x004443a0`, and
-  `0x00467f10` remain unresolved; capture caller address and control rather
+  `FUN_00486fb0`, mission-dialog `FUN_0046c3c0`, and Build Selection
+  `0x00438800` class-context routes now have reviewed static chains and visible
+  results, but still lack live command/notification, resource/current-key,
+  and target-thread-focus proof. The visible owners for handlers `0x004443a0`
+  and `0x00467f10` remain unresolved; capture caller address and control rather
   than assigning a name from neighboring code.
 - The r46 Alt+M chain is a conditional mission-setup path, distinct from the
   downstream mission-definition encyclopedia control. An uncontaminated
