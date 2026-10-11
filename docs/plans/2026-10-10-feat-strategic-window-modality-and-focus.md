@@ -186,8 +186,15 @@ opened above modeless windows, outside-modal clicks, focused text entry,
 Escape or close-button dismissal, parent/child transitions, and post-close
 focus restoration.
 
-Wine evidence is sufficient for this local implementation gate. It is not
-represented as native-Windows acceptance.
+The sanitized
+[`strategic-windowing-runtime-evidence.md`](../../ghidra/notes/strategic-windowing-runtime-evidence.md)
+ledger records the observations retained in the repository and the missing
+capture queue. Workstream 1 remains open until every API-shaping scenario has
+a reproducible action sequence and artifact hashes.
+
+Reproducible Wine evidence may satisfy this local implementation gate once its
+actions and hashes are retained. It is not represented as native-Windows
+acceptance.
 
 ### Uncertainty rule
 
@@ -203,11 +210,10 @@ Add `crates/rebellion-windowing` to the workspace as a small Rust library.
 ### Dependency direction
 
 ```text
-rebellion-windowing
-        ↑
-rebellion-render  ←  rebellion-core
-        ↑
 rebellion-app
+└── rebellion-render
+    ├── rebellion-core
+    └── rebellion-windowing
 ```
 
 `rebellion-windowing` must not depend on `rebellion-app`,
@@ -235,7 +241,7 @@ The crate owns:
 - pointer and keyboard eligibility;
 - pointer capture ownership when a recovered interaction needs it;
 - reconciliation when a renderer-owned window disappears;
-- a per-frame routing snapshot that prevents same-frame input fallthrough;
+- a per-dispatch routing snapshot that prevents same-event input fallthrough;
 - invariant validation and deterministic transition results.
 
 The crate does not own:
@@ -290,28 +296,31 @@ manager.apply(WindowCommand::Raise(id));
 manager.apply(WindowCommand::Close(id));
 manager.reconcile(visible_ids);
 
-let frame = manager.begin_frame();
-frame.paint_order();
-frame.keyboard_owner();
-frame.pointer_allows(id);
-frame.active_modal();
+let presentation = manager.presentation();
+presentation.paint_order();
+presentation.active_modal();
+
+let routing = manager.begin_dispatch(event_id);
+routing.keyboard_owner();
+routing.pointer_allows(id);
 ```
 
 All transitions are deterministic values that can be unit-tested without
 drawing. Render modules continue to return feature actions; the adapter adds
 window commands rather than mutating a second focus stack.
 
-### Frame lease and no-fallthrough rule
+### Dispatch lease and no-fallthrough rule
 
-At the start of a frame, the manager creates an immutable routing snapshot.
-The window that owns an input event according to that snapshot retains the
-lease for the rest of the frame even if handling the event closes it. The
-newly exposed window or cockpit may become eligible on the next frame, but it
-cannot receive the same press, release, Escape, Enter, or typed character.
+At the start of each physical input dispatch, the manager creates an immutable
+routing snapshot. The window that owns that event retains the lease for the
+entire dispatch even if handling it closes the window. The newly exposed
+window or cockpit cannot receive that same press, release, Escape, Enter, or
+typed character.
 
-If the original trace demonstrates a different boundary than one render frame,
-the implementation must model the recovered native-message boundary while
-retaining the same externally visible guarantee.
+Independent events batched into one egui render frame receive independent
+dispatch snapshots. A press and release may be associated when the recovered
+capture or dismissal rule requires it, but a full render frame is not the
+native message boundary and must not suppress unrelated later input.
 
 ## Renderer integration
 
@@ -330,7 +339,7 @@ order.
 
 The adapter reports current top-level hit regions or hit candidates in the
 form selected by the implementation plan. The kernel chooses eligibility from
-its frame snapshot.
+its dispatch snapshot.
 
 When a strategic modal is active, the renderer installs a full strategic-canvas
 input barrier beneath the modal and above every blocked surface. It consumes
@@ -345,7 +354,7 @@ explicit action, but the manager must not silently discard the modal boundary.
 
 ### Keyboard routing
 
-The frame snapshot supplies one top-level keyboard owner. A focused edit or
+The dispatch snapshot supplies one top-level keyboard owner. A focused edit or
 list inside that window may consume keys before the window's general commands.
 Keys not consumed by that owner follow the recovered propagation rule. Until
 that rule is traced, they do not fall through to cockpit accelerators.
@@ -372,15 +381,17 @@ semantics, as justified by the original trace.
 
 ## Migration strategy
 
-The feature uses one topic branch and a sequence of independently reviewable
-commits. Local beads will preserve the following dependency order after the
-written implementation plan is approved.
+The feature uses a sequence of independently reviewable checkpoints. Local
+beads preserve the following dependency order after the written implementation
+plan is approved.
 
 ### Workstream 1: recover the contract
 
 Produce the Ghidra note, cited decompiles, runtime scenarios, and an explicit
-window classification matrix. This work blocks the production API and every
-parity claim.
+window classification matrix. The static trace is substantial, but the
+repository-visible runtime ledger remains incomplete. This workstream stays
+open and blocks final per-family policy and every parity claim until the
+API-shaping capture queue is reproducible and hashed.
 
 ### Workstream 2: build the pure kernel
 
@@ -397,20 +408,26 @@ global-focus meaning and per-family layer raising as each family migrates.
 ### Workstream 4: migrate strategic modals
 
 Integrate Status, all Finder families, Message, and Encyclopedia. Replace the
-handwritten application pointer and keyboard exceptions, add the outside-modal
-input barrier, and preserve focused child-control behavior.
+relevant handwritten application pointer and keyboard exceptions only after
+each reachable member of this proven manual set uses the shared authority. Add
+the outside-modal input barrier and preserve focused child-control behavior.
 
 ### Workstream 5: migrate owned children and Battle Summary
 
-Integrate the recovered transient/owned-dialog set and the tactical Battle
-Summary boundary. Do not classify a dialog by resemblance; use the research
-matrix.
+Integrate object and game menus, in-place Rename, Battle Summary, Battle Alert,
+Build Selection, Mission creation, and Move confirmation. Resolve duplicate
+and pointer-scope questions for each reachable dialog. Until then, any
+whole-view blocker outside the manual's proven minimum set is an explicit
+conservative port policy with its audit cell left open. Do not classify a
+dialog by resemblance; use the research matrix.
 
 ### Workstream 6: remove duplicate authorities and accept the feature
 
 Search for and remove obsolete `move_to_top`, private focus-order, pointer
 blocker, and keyboard-owner policies. Update documentation, deviations, audit
 JSON and Markdown, roadmap evidence, and the two-faction acceptance record.
+Feature-local exceptions are removed only after every reachable blocker they
+cover has migrated and its routing tests pass.
 
 Temporary shadow assertions may compare the new manager's predicted state to
 an existing family during its migration. Shadow state must be test/debug-only
@@ -454,7 +471,9 @@ Table-driven and behavior-sentence unit tests in `rebellion-windowing` cover:
 - nested or competing modal boundaries if the original permits them;
 - pointer and keyboard eligibility above and below a modal;
 - capture acquisition, retention, and release;
-- no same-frame click, key, or typed-character fallthrough;
+- no same-dispatch click, key, or typed-character fallthrough;
+- two independent events batched in one render frame receiving separate
+  routing decisions;
 - deterministic handling of stale renderer registrations;
 - failure-closed modality;
 - every recovered edge case represented in the Ghidra note.
@@ -492,8 +511,12 @@ For both Alliance and Empire, native and packaged browser journeys cover:
 8. closing with the original control and any traced keyboard route;
 9. verifying next-owner restoration on the following input boundary;
 10. transitions from Status or another parent into contextual Encyclopedia;
-11. Battle Summary blocking and dismissal;
-12. no page error, panic, failed request, missing-asset diagnostic, or stale
+11. Battle Alert, Build Selection, Mission creation, Move confirmation, and
+    Battle Summary under their individually evidenced or explicitly
+    provisional input policies;
+12. two independent physical inputs delivered in one render frame without
+    reusing a stale dispatch lease;
+13. no page error, panic, failed request, missing-asset diagnostic, or stale
     egui layer after repeated open/close cycles.
 
 Original-runtime Wine captures establish the expected visible sequences.
@@ -553,6 +576,8 @@ It must not be smuggled into this feature as opportunistic refactoring.
 The completed feature updates together:
 
 - `ghidra/notes/strategic-windowing-toolkit.md` and cited `.c` files;
+- `ghidra/notes/strategic-windowing-runtime-evidence.md` with exact action
+  sequences, artifact hashes, and remaining gaps;
 - `agent_docs/architecture.md` with the new crate and dependency direction;
 - `agent_docs/roadmap.md` with the verified feature boundary;
 - the affected interface-audit JSON and Markdown;
@@ -566,10 +591,11 @@ prefix, credential, or session material is committed.
 
 ## Delivery policy
 
-Work remains on `feat/strategic-window-modality-focus`, based on current
-`origin/main`. Each bead produces a focused commit on that branch. The branch
-is pushed only to the `will-forster` fork. No pull request is opened without
-first telling the user and receiving the expected handoff direction.
+Maintainer implementation follows the repository's current main-only policy:
+each verified feature checkpoint is committed and pushed directly to `main`,
+without retaining side branches. External contributors may submit reviewed
+pull requests, but this plan does not prescribe an ongoing fork branch as the
+canonical delivery path.
 
 The implementation is not complete merely because the crate exists. It is
 complete only when the relevant production windows use one authority, the
