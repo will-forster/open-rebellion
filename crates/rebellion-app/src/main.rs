@@ -281,9 +281,11 @@ fn story_cutscene_path(number: u32) -> String {
     format!("assets/references/ref-videos/{number}.webm")
 }
 
+const APP_WINDOW_TITLE: &str = "Open Rebellion — Star Wars Rebellion";
+
 fn window_conf() -> Conf {
     Conf {
-        window_title: "Open Rebellion — Star Wars Rebellion".to_string(),
+        window_title: APP_WINDOW_TITLE.to_owned(),
         window_width: 1280,
         window_height: 800,
         window_resizable: true,
@@ -2155,6 +2157,322 @@ fn native_app_active() -> bool {
         let app: ObjcId = msg_send![class!(NSApplication), sharedApplication];
         let active: BOOL = msg_send![app, isActive];
         active != NO
+    }
+}
+
+/// Samples whether the X11 input-focus window belongs to this application.
+/// miniquad 0.4 receives X11 FocusOut/FocusIn callbacks internally, but
+/// macroquad does not expose them to the application. X11's focused-window
+/// query plus the app window's `_NET_WM_PID`/`_NET_WM_NAME` identifies the
+/// same focus transition without a new runtime crate dependency.
+#[cfg(target_os = "linux")]
+struct LinuxX11FocusObserver {
+    _x11: macroquad::miniquad::native::module::Module,
+    display: *mut macroquad::miniquad::native::linux_x11::libx11::Display,
+    get_input_focus: unsafe extern "C" fn(
+        *mut macroquad::miniquad::native::linux_x11::libx11::Display,
+        *mut macroquad::miniquad::native::linux_x11::libx11::Window,
+        *mut std::ffi::c_int,
+    ) -> std::ffi::c_int,
+    get_window_property: unsafe extern "C" fn(
+        *mut macroquad::miniquad::native::linux_x11::libx11::Display,
+        macroquad::miniquad::native::linux_x11::libx11::Window,
+        macroquad::miniquad::native::linux_x11::libx11::Atom,
+        std::ffi::c_long,
+        std::ffi::c_long,
+        std::ffi::c_int,
+        macroquad::miniquad::native::linux_x11::libx11::Atom,
+        *mut macroquad::miniquad::native::linux_x11::libx11::Atom,
+        *mut std::ffi::c_int,
+        *mut std::ffi::c_ulong,
+        *mut std::ffi::c_ulong,
+        *mut *mut std::ffi::c_uchar,
+    ) -> std::ffi::c_int,
+    query_tree: unsafe extern "C" fn(
+        *mut macroquad::miniquad::native::linux_x11::libx11::Display,
+        macroquad::miniquad::native::linux_x11::libx11::Window,
+        *mut macroquad::miniquad::native::linux_x11::libx11::Window,
+        *mut macroquad::miniquad::native::linux_x11::libx11::Window,
+        *mut *mut macroquad::miniquad::native::linux_x11::libx11::Window,
+        *mut std::ffi::c_uint,
+    ) -> std::ffi::c_int,
+    free: unsafe extern "C" fn(*mut std::ffi::c_void) -> std::ffi::c_int,
+    close_display: unsafe extern "C" fn(
+        *mut macroquad::miniquad::native::linux_x11::libx11::Display,
+    ) -> std::ffi::c_int,
+    cardinal_atom: macroquad::miniquad::native::linux_x11::libx11::Atom,
+    pid_atom: macroquad::miniquad::native::linux_x11::libx11::Atom,
+    utf8_string_atom: macroquad::miniquad::native::linux_x11::libx11::Atom,
+    window_name_atom: macroquad::miniquad::native::linux_x11::libx11::Atom,
+    expected_title: Vec<u8>,
+    process_id: std::ffi::c_ulong,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxX11FocusObserver {
+    fn new(expected_title: &str) -> Result<Self, String> {
+        use std::ffi::CString;
+
+        type Display = macroquad::miniquad::native::linux_x11::libx11::Display;
+        type Atom = macroquad::miniquad::native::linux_x11::libx11::Atom;
+        let x11 = macroquad::miniquad::native::module::Module::load("libX11.so.6")
+            .or_else(|_| macroquad::miniquad::native::module::Module::load("libX11.so"))
+            .map_err(|error| format!("cannot load X11: {error}"))?;
+        let open_display: unsafe extern "C" fn(*const std::ffi::c_char) -> *mut Display = x11
+            .get_symbol("XOpenDisplay")
+            .map_err(|error| format!("cannot resolve XOpenDisplay: {error}"))?;
+        let intern_atom: unsafe extern "C" fn(
+            *mut Display,
+            *const std::ffi::c_char,
+            std::ffi::c_int,
+        ) -> Atom = x11
+            .get_symbol("XInternAtom")
+            .map_err(|error| format!("cannot resolve XInternAtom: {error}"))?;
+        let get_input_focus: unsafe extern "C" fn(
+            *mut Display,
+            *mut macroquad::miniquad::native::linux_x11::libx11::Window,
+            *mut std::ffi::c_int,
+        ) -> std::ffi::c_int = x11
+            .get_symbol("XGetInputFocus")
+            .map_err(|error| format!("cannot resolve XGetInputFocus: {error}"))?;
+        let get_window_property = x11
+            .get_symbol("XGetWindowProperty")
+            .map_err(|error| format!("cannot resolve XGetWindowProperty: {error}"))?;
+        let query_tree = x11
+            .get_symbol("XQueryTree")
+            .map_err(|error| format!("cannot resolve XQueryTree: {error}"))?;
+        let free: unsafe extern "C" fn(*mut std::ffi::c_void) -> std::ffi::c_int = x11
+            .get_symbol("XFree")
+            .map_err(|error| format!("cannot resolve XFree: {error}"))?;
+        let close_display: unsafe extern "C" fn(*mut Display) -> std::ffi::c_int = x11
+            .get_symbol("XCloseDisplay")
+            .map_err(|error| format!("cannot resolve XCloseDisplay: {error}"))?;
+
+        // SAFETY: the display handle and function pointers all come from the
+        // same live libX11 module, and the connection remains owned here.
+        let display = unsafe { open_display(std::ptr::null()) };
+        if display.is_null() {
+            return Err("XOpenDisplay returned null".to_owned());
+        }
+        let cardinal_name = CString::new("CARDINAL").expect("static atom name");
+        let pid_name = CString::new("_NET_WM_PID").expect("static atom name");
+        let utf8_name = CString::new("UTF8_STRING").expect("static atom name");
+        let window_name = CString::new("_NET_WM_NAME").expect("static atom name");
+        // SAFETY: `display` is a valid XOpenDisplay result; atom strings are
+        // NUL-terminated and remain alive for the call.
+        let (cardinal_atom, pid_atom, utf8_string_atom, window_name_atom) = unsafe {
+            (
+                intern_atom(display, cardinal_name.as_ptr(), 0),
+                intern_atom(display, pid_name.as_ptr(), 0),
+                intern_atom(display, utf8_name.as_ptr(), 0),
+                intern_atom(display, window_name.as_ptr(), 0),
+            )
+        };
+        if cardinal_atom == 0 || pid_atom == 0 || utf8_string_atom == 0 || window_name_atom == 0 {
+            // SAFETY: this is the owned display returned above.
+            unsafe { close_display(display) };
+            return Err("XInternAtom returned None for required focus properties".to_owned());
+        }
+
+        Ok(Self {
+            _x11: x11,
+            display,
+            get_input_focus,
+            get_window_property,
+            query_tree,
+            free,
+            close_display,
+            cardinal_atom,
+            pid_atom,
+            utf8_string_atom,
+            window_name_atom,
+            expected_title: expected_title.as_bytes().to_vec(),
+            process_id: std::process::id() as std::ffi::c_ulong,
+        })
+    }
+
+    fn focused_window_pid(
+        &self,
+        window: macroquad::miniquad::native::linux_x11::libx11::Window,
+    ) -> Option<u32> {
+        self.window_property(window, self.pid_atom, self.cardinal_atom, 32, 1)
+            .and_then(|property| {
+                let bytes = property
+                    .get(..std::mem::size_of::<std::ffi::c_ulong>())?
+                    .try_into()
+                    .ok()?;
+                Some(std::ffi::c_ulong::from_ne_bytes(bytes) as u32)
+            })
+    }
+
+    fn focused_window_title(
+        &self,
+        window: macroquad::miniquad::native::linux_x11::libx11::Window,
+    ) -> Option<Vec<u8>> {
+        self.window_property(window, self.window_name_atom, self.utf8_string_atom, 8, 256)
+    }
+
+    fn window_property(
+        &self,
+        window: macroquad::miniquad::native::linux_x11::libx11::Window,
+        property_atom: macroquad::miniquad::native::linux_x11::libx11::Atom,
+        requested_type: macroquad::miniquad::native::linux_x11::libx11::Atom,
+        requested_format: std::ffi::c_int,
+        requested_items: std::ffi::c_long,
+    ) -> Option<Vec<u8>> {
+        let mut actual_type = 0;
+        let mut actual_format = 0;
+        let mut item_count = 0;
+        let mut bytes_after = 0;
+        let mut property = std::ptr::null_mut();
+        // SAFETY: all pointers reference valid Xlib outputs or this live
+        // connection. The requested atom/format and returned storage are
+        // validated before copying, then freed through XFree.
+        let status = unsafe {
+            (self.get_window_property)(
+                self.display,
+                window,
+                property_atom,
+                0,
+                requested_items,
+                0,
+                requested_type,
+                &mut actual_type,
+                &mut actual_format,
+                &mut item_count,
+                &mut bytes_after,
+                &mut property,
+            )
+        };
+        if status != 0 || property.is_null() {
+            return None;
+        }
+        let size = match (actual_type == requested_type, actual_format) {
+            (true, format) if format == requested_format && item_count > 0 => {
+                let item_size = if format == 32 {
+                    std::mem::size_of::<std::ffi::c_ulong>()
+                } else {
+                    (format / 8) as usize
+                };
+                item_count as usize * item_size
+            }
+            _ => 0,
+        };
+        let value = if size > 0 {
+            // Xlib stores format-32 values in native `long` slots.
+            Some(unsafe { std::slice::from_raw_parts(property, size).to_vec() })
+        } else {
+            None
+        };
+        // SAFETY: `property` was allocated by XGetWindowProperty.
+        unsafe { (self.free)(property.cast()) };
+        value
+    }
+
+    fn window_belongs_to_process(
+        &self,
+        focused: macroquad::miniquad::native::linux_x11::libx11::Window,
+    ) -> Option<bool> {
+        let mut window = focused;
+        // Input focus may be on a child; walk its ancestors to the client
+        // window carrying _NET_WM_PID, with a hard bound against malformed trees.
+        for _ in 0..16 {
+            if let Some(pid) = self.focused_window_pid(window) {
+                if pid as std::ffi::c_ulong == self.process_id {
+                    return Some(true);
+                }
+            }
+            if let Some(title) = self.focused_window_title(window) {
+                if title == self.expected_title {
+                    return Some(true);
+                }
+            }
+            let mut root = 0;
+            let mut parent = 0;
+            let mut children = std::ptr::null_mut();
+            let mut child_count = 0;
+            // SAFETY: XQueryTree writes its outputs; any returned child array
+            // is released through XFree before continuing.
+            let status = unsafe {
+                (self.query_tree)(
+                    self.display,
+                    window,
+                    &mut root,
+                    &mut parent,
+                    &mut children,
+                    &mut child_count,
+                )
+            };
+            if !children.is_null() {
+                unsafe { (self.free)(children.cast()) };
+            }
+            if status == 0 || parent == 0 || parent == window {
+                // The game window always exposes its PID or title. If the
+                // focus chain is valid but neither identifies this app, it
+                // belongs to another/unidentifiable window and must fail
+                // closed as unfocused.
+                return Some(false);
+            }
+            window = parent;
+        }
+        Some(false)
+    }
+
+    fn sample(&self) -> Option<bool> {
+        let mut focused = 0;
+        let mut revert_to = 0;
+        // SAFETY: output pointers are valid and the display is owned by self.
+        if unsafe { (self.get_input_focus)(self.display, &mut focused, &mut revert_to) } == 0 {
+            return None;
+        }
+        if focused <= 1 {
+            return Some(false);
+        }
+        self.window_belongs_to_process(focused)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for LinuxX11FocusObserver {
+    fn drop(&mut self) {
+        // SAFETY: the connection was created by XOpenDisplay and is still
+        // paired with the live libX11 module stored in `_x11`.
+        unsafe { (self.close_display)(self.display) };
+    }
+}
+
+fn sampled_native_focus_losses(
+    active: Option<bool>,
+    counter: &mut strategic_windowing::FocusStateCounter,
+) -> Option<u32> {
+    active.map(|active| counter.sample(active))
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_x11_focus_tests {
+    use super::*;
+
+    #[test]
+    fn x11_focus_samples_count_real_process_focus_loss_once_and_ignore_unknown_samples() {
+        let mut counter = strategic_windowing::FocusStateCounter::default();
+        let mut watch = strategic_windowing::FocusLossWatch::default();
+        let losses = [
+            Some(true),
+            Some(false),
+            Some(false),
+            None,
+            Some(true),
+            Some(false),
+        ]
+        .map(|active| {
+            sampled_native_focus_losses(active, &mut counter).is_some_and(|count| watch.lost(count))
+        });
+
+        assert_eq!(
+            losses,
+            [false, true, false, false, false, true],
+            "X11 active -> helper focus must cancel once; unavailable samples must not alter the baseline"
+        );
     }
 }
 
@@ -9048,10 +9366,21 @@ async fn main() {
     let strategic_input_subscriber = macroquad::input::utils::register_input_subscriber();
     let mut strategic_raw_input = StrategicRawInputCollector::default();
     let mut focus_loss_watch = strategic_windowing::FocusLossWatch::default();
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let mut native_focus = strategic_windowing::FocusStateCounter::default();
     #[cfg(target_os = "macos")]
     let mut native_active_logged: Option<bool> = None;
+    #[cfg(target_os = "linux")]
+    let linux_x11_focus = match LinuxX11FocusObserver::new(APP_WINDOW_TITLE) {
+        Ok(observer) => {
+            macroquad::logging::info!("[windowing] x11_focus_observer=ready");
+            Some(observer)
+        }
+        Err(error) => {
+            macroquad::logging::warn!("[windowing] x11_focus_observer=unavailable error={}", error);
+            None
+        }
+    };
     // The systems whose battle the combat loop left for a later pass.
     let mut held_battles: Vec<SystemKey> = Vec::new();
     // One site's AI in-day steps (`FUN_0051dea0` `+0x20`) of a day, through
@@ -11695,10 +12024,10 @@ async fn main() {
                     fleet_window_state.drag_owner(),
                     defenses_window_state.drag_owner(),
                 );
-                // miniquad 0.4.8 passes focus loss to no input subscriber:
-                // the browser shell counts it, and on macOS each frame
-                // samples AppKit's active state. port: other native hosts
-                // report none.
+                // miniquad 0.4.8 passes focus changes to its own event
+                // handler, not macroquad input subscribers. The browser
+                // shell, AppKit, and Linux/X11 therefore provide explicit
+                // focus-loss samples here.
                 #[cfg(target_arch = "wasm32")]
                 let focus_losses = Some(browser_focus_losses());
                 #[cfg(target_os = "macos")]
@@ -11710,7 +12039,14 @@ async fn main() {
                     }
                     Some(native_focus.sample(active))
                 };
-                #[cfg(not(any(target_arch = "wasm32", target_os = "macos")))]
+                #[cfg(target_os = "linux")]
+                let focus_losses = sampled_native_focus_losses(
+                    linux_x11_focus
+                        .as_ref()
+                        .and_then(LinuxX11FocusObserver::sample),
+                    &mut native_focus,
+                );
+                #[cfg(not(any(target_arch = "wasm32", target_os = "macos", target_os = "linux")))]
                 let focus_losses: Option<u32> = None;
                 if focus_losses.is_some_and(|count| focus_loss_watch.lost(count)) {
                     macroquad::logging::info!(
