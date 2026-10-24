@@ -1,5 +1,18 @@
 import { clickWithRouteBarrier } from "./fleet-window.mjs";
 
+export async function waitForStatusCloseCommit({ waitForClose, advanceFrame }) {
+  const receipt = await waitForClose();
+  await advanceFrame();
+  return receipt;
+}
+
+export async function waitForStatusMenuCommit({ waitForMenu, readMenu, advanceFrame }) {
+  await waitForMenu();
+  const menu = await readMenu();
+  await advanceFrame();
+  return menu;
+}
+
 export async function clickStatusClose({
   page,
   point,
@@ -34,7 +47,7 @@ export async function clickStatusClose({
     emit("mouseup", 0);
   }, point);
   for (let frame = 0; frame < settleFrames; frame += 1) await nextFrame();
-  return waitForClose();
+  return waitForStatusCloseCommit({ waitForClose, advanceFrame: nextFrame });
 }
 
 export async function clickStatusDirect({ page, point, button = "left", advanceFrame, settleFrames = 3 }) {

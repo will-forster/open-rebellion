@@ -20,7 +20,7 @@ import { chromium } from "playwright-core";
 import { PNG } from "pngjs";
 import { launchBrowser } from "./browser-launch.mjs";
 import { sectorDoubleClick } from "./sector-double-click.mjs";
-import { appendStatusConsoleLine, clickStatusClose, clickStatusDirect, clickStatusWithRouteBarrier } from "./status-window-input.mjs";
+import { appendStatusConsoleLine, clickStatusClose, clickStatusDirect, clickStatusWithRouteBarrier, waitForStatusCloseCommit, waitForStatusMenuCommit } from "./status-window-input.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
@@ -213,8 +213,11 @@ async function click(page, point, routes, cursor, {
 async function chooseStatus(page, at, routes, cursor) {
   await page.evaluate(() => { window.__openRebellionInterfaceObjectMenu = undefined; });
   await click(page, at, routes, cursor, { button: "right", label: "open Status object menu" });
-  await page.waitForFunction(() => window.__openRebellionInterfaceObjectMenu?.status === "object-menu", null, { timeout: 10_000 });
-  const menu = await page.evaluate(() => window.__openRebellionInterfaceObjectMenu);
+  const menu = await waitForStatusMenuCommit({
+    waitForMenu: () => page.waitForFunction(() => window.__openRebellionInterfaceObjectMenu?.status === "object-menu", null, { timeout: 10_000 }),
+    readMenu: () => page.evaluate(() => window.__openRebellionInterfaceObjectMenu),
+    advanceFrame: () => frames(page, 1),
+  });
   assert.notEqual(menu.status_window_row, null, "the menu lists Status");
   const row = (menu.height - 2) / menu.rows;
   await click(
@@ -387,7 +390,10 @@ async function inspect(server, source, faction, testCase, executable) {
       await openStatus();
       await logged("Status opens it again", opened, 2);
       await page.keyboard.press("Escape");
-      closes.escape = (await logged("Escape closes it", closed, 2)).match(closed)[1];
+      closes.escape = (await waitForStatusCloseCommit({
+        waitForClose: () => logged("Escape closes it", closed, 2),
+        advanceFrame: () => frames(page, 1),
+      })).match(closed)[1];
       // 0x66 closes and opens the Encyclopedia.
       await openStatus();
       await logged("Status opens it a third time", opened, 3);

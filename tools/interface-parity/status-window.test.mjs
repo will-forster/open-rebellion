@@ -33,6 +33,7 @@ test("Status close batches its click and waits for semantic closure", async () =
     ["batch", { x: 511, y: 315 }],
     ["frame", 2],
     ["closed"],
+    ["frame", 3],
   ]);
   assert.equal(receipts, "status=closed");
 });
@@ -185,4 +186,29 @@ test("Status console capture keeps diagnostics out of the live route receipt str
     ["move", 290, 230],
     ["batch", { x: 290, y: 230, button: "left" }],
   ]);
+});
+
+test("Status waits one committed frame after its close receipt before the next action", async () => {
+  const { waitForStatusCloseCommit } = await import("./status-window-input.mjs");
+  const events = [];
+  const receipt = await waitForStatusCloseCommit({
+    waitForClose: async () => { events.push("closed-receipt"); return "closed"; },
+    advanceFrame: async () => { events.push("commit-frame"); },
+  });
+
+  assert.equal(receipt, "closed");
+  assert.deepEqual(events, ["closed-receipt", "commit-frame"]);
+});
+
+test("Status waits one committed frame after object-menu publication before selecting a row", async () => {
+  const { waitForStatusMenuCommit } = await import("./status-window-input.mjs");
+  const events = [];
+  const menu = await waitForStatusMenuCommit({
+    waitForMenu: async () => { events.push("menu-published"); },
+    readMenu: async () => { events.push("menu-read"); return { status_window_row: 5 }; },
+    advanceFrame: async () => { events.push("commit-frame"); },
+  });
+
+  assert.deepEqual(menu, { status_window_row: 5 });
+  assert.deepEqual(events, ["menu-published", "menu-read", "commit-frame"]);
 });
