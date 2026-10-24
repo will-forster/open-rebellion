@@ -1176,9 +1176,7 @@ fn menu_lifecycle_report(
     open: bool,
     input_ready: bool,
 ) -> Option<FixtureMenuLifecycle> {
-    request
-        .scenario
-        .uses_the_fleet_window()
+    (request.scenario == Scenario::MissionTargeting || request.scenario.uses_the_fleet_window())
         .then_some(FixtureMenuLifecycle {
             status: "menu-lifecycle",
             code: request.code,
@@ -2887,6 +2885,29 @@ mod tests {
                 true,
             ),
             None
+        );
+    }
+
+    #[test]
+    fn mission_targeting_fixture_reports_the_managed_menu_lifecycle_boundary() {
+        let mission_request = request(Scenario::MissionTargeting, CockpitFaction::Alliance);
+        assert_eq!(
+            menu_lifecycle_report(mission_request, true, true),
+            Some(FixtureMenuLifecycle {
+                status: "menu-lifecycle",
+                code: mission_request.code,
+                open: true,
+                input_ready: true,
+            })
+        );
+        assert_eq!(
+            menu_lifecycle_report(mission_request, false, false),
+            Some(FixtureMenuLifecycle {
+                status: "menu-lifecycle",
+                code: mission_request.code,
+                open: false,
+                input_ready: false,
+            })
         );
     }
 
