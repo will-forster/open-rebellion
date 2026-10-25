@@ -26,10 +26,17 @@ const dimensions = { width: 210, height: 261 };
 // Fixture code 55 is Scenario::BuildSelection (54) plus one.
 const scenarioCode = 55;
 // FUN_00438500: the side's title strip, 10801 for side 1, 10802 otherwise.
+// `galaxy` is the side's galaxy aperture, which centres the Stop
+// confirmation (fleet-window.mjs).
 const factions = [
-  { name: "alliance", byte: 1, title: 10801 },
-  { name: "empire", byte: 2, title: 10802 },
+  { name: "alliance", byte: 1, title: 10801, galaxy: { x: 55, y: 40, width: 485, height: 350 } },
+  { name: "empire", byte: 2, title: 10802, galaxy: { x: 120, y: 40, width: 480, height: 355 } },
 ];
+// FUN_00487cc0 confirms 0x213 in the move confirmation window, 424 by 331,
+// whose checkmark is control 0x14 at (355, 244), 51 by 35 (FUN_0044f5e0;
+// manufacturing-build-selection.md, "Stop asks first").
+const confirmation = { width: 424, height: 331 };
+const checkmark = { x: 355 + 25.5, y: 244 + 17.5 };
 // FUN_00438620 controls: (x, y, width, height, normal bitmap, native size).
 const controls = [
   { x: 79, y: 90, width: 65, height: 18, id: 10606, native: [65, 18] },
@@ -125,7 +132,10 @@ async function startServer() {
   return server;
 }
 
-function decodeIndexedBmp(bytes, expectedWidth, expectedHeight) {
+// A CoolStrobeButton's bitmap is blitted keyed on its first stored pixel's
+// palette index (FUN_00602d30 -> FUN_005fd0f0, unless +0xc4 bit 0x80): those
+// pixels get alpha 0 and leave what lies under them.
+function decodeIndexedBmp(bytes, expectedWidth, expectedHeight, keyed = false) {
   assert.equal(bytes.toString("ascii", 0, 2), "BM", "source resource is not a BMP");
   const dataOffset = bytes.readUInt32LE(10);
   const headerSize = bytes.readUInt32LE(14);
@@ -147,7 +157,7 @@ function decodeIndexedBmp(bytes, expectedWidth, expectedHeight) {
       png.data[destination] = bytes[palette + 2];
       png.data[destination + 1] = bytes[palette + 1];
       png.data[destination + 2] = bytes[palette];
-      png.data[destination + 3] = 255;
+      png.data[destination + 3] = keyed && paletteIndex === bytes[dataOffset] ? 0 : 255;
     }
   }
   return png;
@@ -158,8 +168,11 @@ function blitClipped(destination, source, x, y, width = source.width, height = s
   for (let row = 0; row < Math.min(height, source.height); row += 1) {
     if (y + row >= destination.height) break;
     const columns = Math.min(width, source.width, destination.width - x);
-    const start = row * source.width * 4;
-    destination.data.set(source.data.subarray(start, start + columns * 4), ((y + row) * destination.width + x) * 4);
+    for (let column = 0; column < columns; column += 1) {
+      const from = (row * source.width + column) * 4;
+      if (source.data[from + 3] === 0) continue;
+      destination.data.set(source.data.subarray(from, from + 4), ((y + row) * destination.width + x + column) * 4);
+    }
   }
 }
 
@@ -172,11 +185,14 @@ function resource(source, id, width, height) {
   return decodeIndexedBmp(fs.readFileSync(path.join(source, `${id}.bmp`)), width, height);
 }
 
+const button = (source, id, width, height) =>
+  decodeIndexedBmp(fs.readFileSync(path.join(source, `${id}.bmp`)), width, height, true);
+
 function composeExpected(source, faction) {
   const expected = resource(source, 10800, dimensions.width, dimensions.height);
   blitClipped(expected, resource(source, faction.title, 240, 17), 2, 2);
   for (const control of controls) {
-    blitClipped(expected, resource(source, control.id, ...control.native), control.x, control.y,
+    blitClipped(expected, button(source, control.id, ...control.native), control.x, control.y,
       control.width, control.height);
   }
   return expected;
@@ -341,8 +357,17 @@ async function inspect(server, source, faction, executable) {
     assert.ok(built.product.length > 0, "the band names its product");
     fs.writeFileSync(path.join(directory, "confirmed-screen.png"), await page.screenshot({ animations: "disabled" }));
 
-    // Stop (0x213) clears the band (manual p. 84).
+    // Stop (0x213) asks first, then clears the band (manual p. 84).
     const stopMenu = await bandOrder(page, built, "stop_row", directory, "stop");
+    await page.waitForFunction(() => window.__openRebellionInterfaceProduction?.bands
+      ?.find(({ area }) => area === "troops")?.queued > 0, null, { timeout: 10_000 });
+    fs.writeFileSync(path.join(directory, "stop-confirmation-screen.png"),
+      await page.screenshot({ animations: "disabled" }));
+    await click(page, {
+      x: Math.round(faction.galaxy.x + faction.galaxy.width / 2 - confirmation.width / 2 + checkmark.x),
+      y: Math.round(faction.galaxy.y + faction.galaxy.height / 2 - confirmation.height / 2 + checkmark.y),
+    });
+    await page.mouse.move(2, 2);
     await page.waitForFunction(() => window.__openRebellionInterfaceProduction?.bands
       ?.find(({ area }) => area === "troops")?.queued === 0, null, { timeout: 10_000 });
     fs.writeFileSync(path.join(directory, "stopped-screen.png"), await page.screenshot({ animations: "disabled" }));

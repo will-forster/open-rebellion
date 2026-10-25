@@ -830,6 +830,9 @@ mod tests {
             current_system: None,
             current_fleet: None,
             en_route: false,
+            adrift: false,
+            abode: None,
+            escape_due: None,
             heritage_known: false,
             is_killed: false,
             recruited: true,
@@ -933,7 +936,7 @@ mod tests {
             fighters,
             characters: Vec::new(),
             is_alliance: true,
-            has_death_star: false,
+            bombarding: false,
         });
         world.systems[system].fleets.push(fleet);
         (world, fleet)

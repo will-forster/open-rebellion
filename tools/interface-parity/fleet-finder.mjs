@@ -438,31 +438,47 @@ const cases = [
     name: "sector-occlusion",
     // A Finder empty-list double click must belong only to the top-level
     // Finder, even when the same pixels cover another planet in the original
-    // modeless sector window.
+    // modeless sector window. The All tab lists every starting fleet the
+    // player sees (FUN_0051aa50 seeds them), which can fill the list, so the
+    // case stages its empty rows on the other side's tab: there the player
+    // sees the fixture's one enemy fleet at the primary system.
     async run(page) {
       const opened = await openFinder(page);
-      // Use the shorter side tab so the fixture always has actual empty list
-      // space, even when the Alliance's All tab fills all eight visible rows.
-      const shorterTab = [
+      const origin = { x: opened.controls.origin[0], y: opened.controls.origin[1] };
+      const otherTab = opened.player_is_alliance
+        ? { at: opened.controls.tabs[2], name: "imperial" }
+        : { at: opened.controls.tabs[1], name: "alliance" };
+      await click(page, point(otherTab.at));
+      const other = await until(page, `the ${otherTab.name} tab shows`, (o, a) => o.tab === a, otherTab.name);
+      assert.ok(other.rows.length > 0 && other.rows.every((row) => row.is_alliance !== other.player_is_alliance),
+        JSON.stringify(other.rows));
+      // Prefer the opposite-side tab to prove the covered enemy fleet remains
+      // untouched. If that list fills the Finder, use the shorter tab to find
+      // a genuinely empty row while preserving the same occlusion assertion.
+      const tabs = [
         { tab: "alliance", index: 1, count: opened.rows.filter((row) => row.is_alliance).length },
         { tab: "imperial", index: 2, count: opened.rows.filter((row) => !row.is_alliance).length },
-      ].sort((left, right) => left.count - right.count)[0];
-      await click(page, point(opened.controls.tabs[shorterTab.index]));
-      const filtered = await until(
-        page,
-        `the ${shorterTab.tab} tab is shown`,
-        (o, tab) => o.tab === tab,
-        shorterTab.tab,
-      );
-      const origin = { x: filtered.controls.origin[0], y: filtered.controls.origin[1] };
-      const firstEmptyRowY = origin.y + 138 + filtered.rows.length * 20 + 2;
+      ].sort((left, right) => left.count - right.count);
+      let filtered = other;
       const listBottom = origin.y + 303;
-      const target = filtered.sector_planets.find((planet) => {
-        const [x, y] = planet.center;
-        return planet.system_dat_id !== filtered.selected_system_dat_id
-          && x >= origin.x + 36 && x < origin.x + 386
-          && y >= firstEmptyRowY && y < listBottom;
-      });
+      const findTarget = (state) => {
+        const firstEmptyRowY = origin.y + 138 + state.rows.length * 20 + 2;
+        return state.sector_planets.find((planet) => {
+          const [x, y] = planet.center;
+          return planet.system_dat_id !== state.selected_system_dat_id
+            && x >= origin.x + 36 && x < origin.x + 386
+            && y >= firstEmptyRowY && y < listBottom;
+        });
+      };
+      let target = findTarget(filtered);
+      if (!target) {
+        const fallback = tabs[0];
+        if (fallback.tab !== otherTab.name) {
+          await click(page, point(opened.controls.tabs[fallback.index]));
+          filtered = await until(page, `the ${fallback.tab} tab is shown`, (o, a) => o.tab === a, fallback.tab);
+          target = findTarget(filtered);
+        }
+      }
       assert.ok(target, `no covered sector planet lies under empty Finder space: ${JSON.stringify(filtered)}`);
 
       await sectorDoubleClick(page, point(target.center), () => frames(page));
@@ -472,19 +488,25 @@ const cases = [
         "an empty Finder double click changed the covered sector selection");
       assert.deepEqual(closed.sector_open, filtered.sector_open,
         "an empty Finder double click changed the covered sector windows");
-      return { opened, filtered, target, closed };
+      return { opened, other, filtered, target, closed };
     },
   },
   {
     name: "fleet-overlap",
     // Opening a result creates the original Fleet window. Reopening the
     // Finder must keep its covered right-side controls above that modeless
-    // Foreground window.
+    // Foreground window. The case opens the fixture's own fleet at the
+    // primary system, whose planet sits in the sector window's first column,
+    // so its Fleet window reaches under the Finder's tabs whatever other
+    // starting fleets (FUN_0051aa50) the list shows first.
     async run(page) {
       const opened = await openFinder(page);
-      await click(page, point(opened.controls.rows[0]));
-      const chosen = await until(page, "the first fleet is chosen", (o) => o.chosen === 0);
-      const row = chosen.rows[0];
+      const index = opened.rows.findIndex((row) => row.system_dat_id === opened.selected_system_dat_id
+        && row.is_alliance === opened.player_is_alliance);
+      assert.ok(index >= 0 && opened.controls.rows[index], JSON.stringify(opened.rows));
+      await click(page, point(opened.controls.rows[index]));
+      const chosen = await until(page, "the primary system's fleet is chosen", (o, a) => o.chosen === a, index);
+      const row = chosen.rows[index];
       await click(page, point(chosen.controls.display));
       const fleet = await until(page, "Display opens the Fleet window", (o) => !o.open);
       assertOpened(fleet, row);

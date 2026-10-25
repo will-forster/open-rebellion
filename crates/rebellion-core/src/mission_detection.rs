@@ -54,6 +54,7 @@ const PHASE_BETRAYAL: u8 = 9;
 /// and the phase 10 roll. The original draws each roll inline from its
 /// global generator; the port seeds a SplitMix64 per mission and tick from
 /// one caller roll, so the caller's budget stays fixed.
+#[cfg_attr(test, derive(Clone))]
 pub(crate) struct MissionRng {
     state: u64,
 }
@@ -212,13 +213,14 @@ fn walk(world: &GameWorld, location: SystemKey, flags: Flags, kinds: Kinds) -> V
     }
     if flags.fleets {
         for (fleet_key, fleet) in &world.fleets {
-            if fleet.location != location {
+            // FUN_00587640.c:103,109: fleets and their ships in mode 1.
+            if fleet.location != location || !fleet.usable() {
                 continue;
             }
             let side = faction_of(fleet.is_alliance);
             if kinds.ships {
                 for (index, ship) in fleet.capital_ships.iter().enumerate() {
-                    if !ship.alive {
+                    if !ship.usable() {
                         continue;
                     }
                     let detection = world
@@ -235,6 +237,12 @@ fn walk(world: &GameWorld, location: SystemKey, flags: Flags, kinds: Kinds) -> V
             }
             if kinds.fighters {
                 for (index, entry) in fleet.fighters.iter().enumerate() {
+                    // FUN_00587640.c:136: each usable ship's squadrons.
+                    if entry.carrier != 0
+                        && !crate::carriage::carried_by_usable_ship(fleet, entry.carrier)
+                    {
+                        continue;
+                    }
                     let detection = world
                         .fighter_classes
                         .get(entry.class)
@@ -589,7 +597,10 @@ impl Run<'_> {
 
     /// `FUN_0058a1c0`'s walks: every team character (families `0x30..0x37`,
     /// then `0x38..0x3b`), then every team special force, not decoying, faces
-    /// a random defender (`FUN_00588650`) until none is left.
+    /// a random defender (`FUN_00588650`) until none is left. The families
+    /// below `0x38` are the major characters (MJCHARSD) and the rest the
+    /// minor ones (MNCHARSD); a loaded character's id has no family byte,
+    /// so its file decides.
     ///
     /// port: a member holding a key at `+0x9c` takes `FUN_00588d30`, which is
     /// not read; the port holds no such key.
@@ -605,16 +616,14 @@ impl Run<'_> {
             team: true,
             decoys: false,
         };
-        let family = |member: &MissionMember| {
+        let major = |member: &MissionMember| {
             member
                 .character()
                 .and_then(|key| self.world.characters.get(key))
-                .map_or(0, |c| c.dat_id.raw() >> 24)
+                .is_some_and(|c| c.is_major)
         };
         let characters = self.members(mission, lists);
-        let (early, late): (Vec<_>, Vec<_>) = characters
-            .into_iter()
-            .partition(|member| family(member) < 0x38);
+        let (early, late): (Vec<_>, Vec<_>) = characters.into_iter().partition(major);
         let special_forces = self.members(
             mission,
             Lists {
@@ -887,6 +896,7 @@ mod tests {
             hidden: false,
             detection_phases: true,
             can_resign,
+            return_policy: 1,
             rules: MissionTargetRules {
                 own_side_target: true,
                 other_side_target: true,
@@ -957,14 +967,13 @@ mod tests {
         let key = world.troops.insert(TroopUnit {
             class_dat_id: class,
             is_alliance,
-            regiment_strength: 1,
         });
         world.systems[at].ground_units.push(key);
         key
     }
 
     /// A loyal Alliance agent of family `family` with the given espionage
-    /// and combat.
+    /// and combat: a major character (MJCHARSD) below family `0x38`.
     fn skilled(
         world: &mut GameWorld,
         at: SystemKey,
@@ -975,6 +984,7 @@ mod tests {
         let pair = |base| SkillPair { base, variance: 0 };
         MissionMember::Character(world.characters.insert(Character {
             dat_id: DatId::new(family << 24 | 1),
+            is_major: family < 0x38,
             name: "Agent".into(),
             is_alliance: true,
             loyalty: pair(100),
@@ -1029,14 +1039,16 @@ mod tests {
                 hull_current: 1,
                 damage_counters: 0,
                 alive: true,
+                completed: true,
                 name: None,
                 tag: 0,
                 repair_timer: None,
+                transit: None,
             }],
             fighters: vec![],
             characters: vec![],
             is_alliance,
-            has_death_star: false,
+            bombarding: false,
         })
     }
 
@@ -1340,9 +1352,11 @@ mod tests {
             hull_current: 0,
             damage_counters: 0,
             alive: false,
+            completed: true,
             name: None,
             tag: 0,
             repair_timer: None,
+            transit: None,
         });
         world.fleets[fleet]
             .fighters
@@ -1468,6 +1482,72 @@ mod tests {
         );
     }
 
+    /// `FUN_00587640.c:103,109,136`: fleets, their ships and each ship's
+    /// squadrons are all walked in mode 1, so nothing unfinished or on its
+    /// own leg defends, nor does a fleet with no usable ship. A squadron with
+    /// no carrier rides the fleet itself (port).
+    #[test]
+    fn only_usable_fleets_ships_and_their_squadrons_defend_for_either_side() {
+        for is_alliance in [true, false] {
+            let (mut world, here) = world_with(imperial());
+            let ship = |tag, completed, travelling| {
+                let mut ship = ShipInstance::new(crate::ids::CapitalShipKey::default(), 1, is_alliance);
+                ship.tag = tag;
+                ship.completed = completed;
+                if travelling {
+                    ship.transit = Some(crate::world::ShipTransit {
+                        from: here,
+                        to: here,
+                        arrival_tick: 9,
+                    });
+                }
+                ship
+            };
+            let entry = |carrier| crate::world::FighterEntry {
+                class: crate::ids::FighterKey::default(),
+                count: 1,
+                carrier,
+            };
+            let standing = world.fleets.insert(Fleet {
+                location: here,
+                capital_ships: vec![ship(1, true, false), ship(2, false, false), ship(3, true, true)],
+                fighters: vec![entry(1), entry(2), entry(0)],
+                characters: vec![],
+                is_alliance,
+                bombarding: false,
+            });
+            world.fleets.insert(Fleet {
+                location: here,
+                capital_ships: vec![ship(4, true, true)],
+                fighters: vec![entry(4)],
+                characters: vec![],
+                is_alliance,
+                bombarding: false,
+            });
+            // The system's own squadron is walked only with the system flag.
+            world.systems[here].add_squadrons(crate::ids::FighterKey::default(), 1, is_alliance);
+            let fleets = Flags {
+                fleets: true,
+                ..Flags::default()
+            };
+
+            let ids: Vec<DefenderId> = walk(&world, here, fleets, ALL)
+                .iter()
+                .map(|defender| defender.id)
+                .collect();
+
+            assert_eq!(
+                ids,
+                [
+                    DefenderId::Ship(standing, 0),
+                    DefenderId::Fighter(standing, 0, 0),
+                    DefenderId::Fighter(standing, 2, 0),
+                ],
+                "{is_alliance}"
+            );
+        }
+    }
+
     #[test]
     fn an_exposed_team_faces_defenders_in_character_family_order_then_special_forces() {
         // FUN_0058a1c0: team characters of families 0x30..0x37, then
@@ -1499,6 +1579,38 @@ mod tests {
     }
 
     #[test]
+    fn loaded_major_characters_face_defenders_before_loaded_minor_ones() {
+        // FUN_0058a1c0 walks families 0x30..0x37 (MJCHARSD) before
+        // 0x38..0x3b (MNCHARSD); a loaded character's id is its record
+        // index alone (load_game_data), its file marked by is_major.
+        for (minor_id, major_id) in [(0x340, 0x240), (0x39b, 0x281)] {
+            let (mut world, here) = world_with(imperial());
+            imperial_regiment(&mut world, here);
+            table(&mut world, FOILTB, 100);
+            table(&mut world, RLEVADTB, 0);
+            let late = skilled(&mut world, here, 0x38, 0, 0);
+            let early = skilled(&mut world, here, 0x30, 0, 0);
+            for (member, raw) in [(late, minor_id), (early, major_id)] {
+                world.characters[character(member)].dat_id = DatId::new(raw);
+            }
+            let mut mission = sabotage(vec![late, early], here, 2);
+
+            let out = run_once(&mut mission, &world);
+
+            let order: Vec<MissionMember> = out
+                .iter()
+                .filter_map(|effect| match effect {
+                    MissionEffect::CharacterCaptured { character, .. } => {
+                        Some(MissionMember::Character(*character))
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(order, vec![early, late], "{minor_id:#x} {major_id:#x}");
+        }
+    }
+
+    #[test]
     fn an_alliance_defender_captures_for_the_alliance() {
         // Slot +0x20c: the captor is the defender's side.
         let (mut world, here) = world_with(ControlKind::Controlled(Faction::Alliance));
@@ -1526,6 +1638,51 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn the_system_general_s_combat_comes_off_a_member_s_evasion_roll_for_either_side() {
+        // FUN_005888f0: RLEVADTB reads the member's combat less that of the
+        // defender side's officer, a General for a regiment (rank slot
+        // +0x1bc, at the system by FUN_00509330). The band passes only at
+        // 60 - 50.
+        for side in [Faction::Empire, Faction::Alliance] {
+            let defends_alliance = side == Faction::Alliance;
+            let pair = |base| SkillPair { base, variance: 0 };
+            let (mut world, here) = world_with(ControlKind::Controlled(side));
+            regiment(&mut world, here, defends_alliance, 0);
+            table(&mut world, FOILTB, 100);
+            band(&mut world, RLEVADTB, 10, 10);
+            world.characters.insert(Character {
+                is_alliance: defends_alliance,
+                is_empire: !defends_alliance,
+                command_kind: CommandKind::General,
+                combat: pair(50),
+                current_system: Some(here),
+                ..Default::default()
+            });
+            let member = MissionMember::Character(world.characters.insert(Character {
+                is_alliance: !defends_alliance,
+                is_empire: defends_alliance,
+                loyalty: pair(100),
+                combat: pair(60),
+                current_system: Some(here),
+                ..Default::default()
+            }));
+            let mut mission = sabotage(vec![member], here, 2);
+            if defends_alliance {
+                mission.faction = MissionFaction::Empire;
+            }
+
+            let out = run_once(&mut mission, &world);
+
+            assert_eq!(mission.resigning, vec![member], "{side:?}");
+            assert!(
+                !out.iter()
+                    .any(|effect| matches!(effect, MissionEffect::CharacterCaptured { .. })),
+                "{side:?}"
+            );
+        }
     }
 
     #[test]

@@ -11,6 +11,8 @@ use egui_macroquad::egui;
 use rebellion_core::dat::Faction;
 use rebellion_core::fog::FogState;
 use rebellion_core::ids::{DatId, SectorKey, SystemKey};
+use rebellion_core::saved_interface::{SavedWindow, SavedWindowKind};
+use rebellion_core::world::System;
 use rebellion_core::world::{ControlKind, GameWorld};
 use rebellion_windowing::{
     ContentReport, ContentStatus, ExistingEffect, RoutingSnapshot, SubjectId, WindowId, WindowKind,
@@ -25,6 +27,7 @@ use crate::object_menu::MenuObject;
 use crate::panels::command_palette::InterfaceCommand;
 use crate::quadrant_icons::{self, quadrant_icon, Quadrant};
 use crate::theme::game_font;
+use crate::windowing::GalaxyChild;
 use crate::windowing_input::{
     FrameInputRouter, InputEventId, InputRecipient, PointerButtonId, PointerPhase,
 };
@@ -92,6 +95,10 @@ struct OpenSectorWindow {
     /// Where a left press on an icon began a drag, as a canvas point
     /// (`+0x14c`/`+0x150`, set by `FUN_004593e0` case `0x201`).
     drag_from: Option<(i16, i16)>,
+    /// Its place in the galaxy view's z-order (`window_focus`): 0 at open,
+    /// as `FUN_00429ce0` sets a new sector window to `HWND_BOTTOM`, and new
+    /// only when the view activates it.
+    z: u64,
 }
 
 /// Validated Sector content held aside until the shared manager accepts its
@@ -285,6 +292,7 @@ impl SectorWindowState {
                     column: prepared.column,
                     selection: None,
                     drag_from: None,
+                    z: 0,
                 });
                 Some(id)
             }
@@ -326,6 +334,7 @@ impl SectorWindowState {
                     column: prepared.column,
                     selection: None,
                     drag_from: None,
+                    z: 0,
                 };
                 Some(new)
             }
@@ -523,12 +532,35 @@ impl SectorWindowState {
             column,
             selection: None,
             drag_from: None,
+            z: 0,
         });
         true
     }
 
-    /// What a palette command asks of an already committed Sector window. The
-    /// app publishes that Sector first, then gives the action a double
+    /// The open windows as galaxy children, with their z serials.
+    pub fn children(&self) -> impl Iterator<Item = (u64, GalaxyChild)> + '_ {
+        self.windows
+            .iter()
+            .map(|window| (window.z, GalaxyChild::Sector(window.sector)))
+    }
+
+    /// Bring `sector`'s window to the top of the galaxy view's z-order, as
+    /// its activation does (`FUN_00422ce0` 0x467: `BringWindowToTop`).
+    /// False when it is not open.
+    pub fn raise(&mut self, sector: SectorKey) -> bool {
+        let Some(window) = self
+            .windows
+            .iter_mut()
+            .find(|window| window.sector == sector)
+        else {
+            return false;
+        };
+        window.z = 0;
+        self.focus(sector)
+    }
+
+    /// What a palette command asks of the sector windows. It opens the
+    /// sector window holding its system, then gives the action a double
     /// click (`FUN_004593e0` case `0x203`) or a right click (cases `0x204`
     /// and `0x205`) on the system's icon would, at the icon's center. The
     /// System window needs no icon, as a double click on the planet opens
@@ -612,13 +644,28 @@ impl SectorWindowState {
     /// bottom edges remain exclusive, as in the recovered Win32 rectangles.
     #[must_use]
     pub fn contains_screen_point(&self, layout: CockpitLayout, point: (f32, f32)) -> bool {
-        self.windows.iter().any(|window| {
-            let rect = window_screen_rect(self.faction, window.column, layout);
-            point.0 >= rect.min.x
-                && point.0 < rect.max.x
-                && point.1 >= rect.min.y
-                && point.1 < rect.max.y
-        })
+        self.contains_shown_screen_point(layout, point, &|_| true)
+    }
+
+    /// [`contains_screen_point`](Self::contains_screen_point) over the
+    /// windows `shown` passes.
+    #[must_use]
+    pub fn contains_shown_screen_point(
+        &self,
+        layout: CockpitLayout,
+        point: (f32, f32),
+        shown: &dyn Fn(GalaxyChild) -> bool,
+    ) -> bool {
+        self.windows
+            .iter()
+            .filter(|window| shown(GalaxyChild::Sector(window.sector)))
+            .any(|window| {
+                let rect = window_screen_rect(self.faction, window.column, layout);
+                point.0 >= rect.min.x
+                    && point.0 < rect.max.x
+                    && point.1 >= rect.min.y
+                    && point.1 < rect.max.y
+            })
     }
 
     #[must_use]
@@ -737,6 +784,76 @@ impl SectorWindowState {
 
     pub fn clear(&mut self) {
         self.windows.clear();
+    }
+
+    /// The open windows as a save keeps them, each with its z serial: the
+    /// sector by its DAT id (`FUN_0045d2b0`) and the window's top-left.
+    #[must_use]
+    pub fn saved_windows(&self, world: &GameWorld) -> Vec<(u64, SavedWindow)> {
+        self.windows
+            .iter()
+            .filter_map(|window| {
+                let sector = world.sectors.get(window.sector)?;
+                Some((
+                    window.z,
+                    SavedWindow {
+                        kind: SavedWindowKind::Sector {
+                            sector: sector.dat_id,
+                        },
+                        position: logical_origin(self.faction, window.column),
+                        shown: true,
+                    },
+                ))
+            })
+            .collect()
+    }
+
+    /// Rebuild a saved sector window (`FUN_00441190` type 1, `FUN_004591d0`)
+    /// above the sector windows already rebuilt. It comes back shown
+    /// whatever its saved flag: the type-1 branch clears the rail flag
+    /// (`0x441248` → `0x4413f1`), so only `+0x2c(5)` can follow. Under Wine
+    /// a sector window the GID menu had hidden came back shown (Empire
+    /// day-2 start, played on to day 8). It sits below every detail window,
+    /// as the loader sends sector windows to `HWND_BOTTOM`
+    /// (`FUN_00440f80.c:31-35`). The column is the one at the saved
+    /// position; false when the sector is not in the world or the record is
+    /// not a sector's.
+    pub fn restore_saved(
+        &mut self,
+        world: &GameWorld,
+        faction: CockpitFaction,
+        saved: &SavedWindow,
+    ) -> bool {
+        let SavedWindowKind::Sector { sector } = saved.kind else {
+            return false;
+        };
+        let Some(sector) = world
+            .sectors
+            .iter()
+            .find(|(_, value)| value.dat_id == sector)
+            .map(|(key, _)| key)
+        else {
+            return false;
+        };
+        self.prepare_faction(faction);
+        let column = [WindowColumn::Primary, WindowColumn::Secondary]
+            .into_iter()
+            .min_by_key(|column| {
+                (i32::from(logical_origin(faction, *column).0) - i32::from(saved.position.0)).abs()
+            })
+            .unwrap_or(WindowColumn::Primary);
+        self.windows
+            .retain(|window| window.sector != sector && window.column != column);
+        self.windows.push(OpenSectorWindow {
+            id: None,
+            subject: None,
+            sector,
+            column,
+            selection: None,
+            drag_from: None,
+            z: 0,
+        });
+        true
     }
 
     fn prepare_faction(&mut self, faction: CockpitFaction) {
@@ -946,8 +1063,18 @@ pub fn draw_sector_windows(
     cache: &mut BmpCache,
     missions: &rebellion_core::missions::MissionState,
     uprisings: &rebellion_core::uprising::UprisingState,
+    shown: &dyn Fn(GalaxyChild) -> bool,
 ) -> Vec<SectorWindowAction> {
-    draw_sector_windows_with_snapshot(
+    let hidden: Vec<_> = state
+        .windows
+        .iter()
+        .copied()
+        .filter(|window| !shown(GalaxyChild::Sector(window.sector)))
+        .collect();
+    state
+        .windows
+        .retain(|window| shown(GalaxyChild::Sector(window.sector)));
+    let actions = draw_sector_windows_with_snapshot(
         ctx,
         world,
         movement,
@@ -961,7 +1088,9 @@ pub fn draw_sector_windows(
         None,
         &[],
         None,
-    )
+    );
+    state.windows.extend(hidden);
+    actions
 }
 
 /// Draw manager-owned Sector content in frozen bottom-to-top order and admit
@@ -1933,7 +2062,7 @@ fn draw_sector_window(
                     ui.painter(),
                     ctx,
                     cache,
-                    planet_resource_id(system.dat_id),
+                    planet_picture(system),
                     planet_rect,
                 );
                 // FUN_0045bbb0 keys a flame over the planet picture, before
@@ -1953,14 +2082,18 @@ fn draw_sector_window(
                         0.0,
                     );
                 }
-                paint_status_bars(
-                    &ui.painter().with_clip_rect(window_rect),
-                    world,
-                    system,
-                    player,
-                    logical_rect(window_rect, layout.scale, planet_x, planet_y, 37.0, 37.0),
-                    layout.scale,
-                );
+                // FUN_0045bbb0.c:94: a destroyed system leaves before the
+                // status bars.
+                if !system.is_destroyed {
+                    paint_status_bars(
+                        &ui.painter().with_clip_rect(window_rect),
+                        world,
+                        system,
+                        player,
+                        logical_rect(window_rect, layout.scale, planet_x, planet_y, 37.0, 37.0),
+                        layout.scale,
+                    );
+                }
                 // FUN_004593e0: the name at the planet's height plus 11
                 // (FUN_00459e30 item +0x34), centred, font 10.
                 ui.painter().text(
@@ -2072,6 +2205,16 @@ fn draw_sector_window(
         result.focus = true;
     }
     result
+}
+
+/// [`window_logical_position`] in whole canvas pixels, as a save keeps it.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The column origins are small whole numbers."
+)]
+fn logical_origin(faction: CockpitFaction, column: WindowColumn) -> (i16, i16) {
+    let (x, y) = window_logical_position(faction, column);
+    (x as i16, y as i16)
 }
 
 fn window_logical_position(faction: CockpitFaction, column: WindowColumn) -> (f32, f32) {
@@ -2226,6 +2369,20 @@ fn sector_planet_position(
 }
 
 pub(crate) use rebellion_core::tactical::planet_picture_id;
+
+/// STRATEGY 10240 (`0x2800`), the asteroid field a destroyed system shows
+/// in place of its planet (`FUN_0045bbb0.c:51`, `:88-95`).
+const DESTROYED_PLANET: u32 = 0x2800;
+
+/// The sector window's picture of `system`: [`DESTROYED_PLANET`] once the
+/// view's destroyed bit (`+0x50` bit 3) is set, else its planet.
+fn planet_picture(system: &System) -> u32 {
+    if system.is_destroyed {
+        DESTROYED_PLANET
+    } else {
+        planet_resource_id(system.dat_id)
+    }
+}
 
 pub(crate) fn planet_resource_id(dat_id: DatId) -> u32 {
     let picture = planet_picture_id(dat_id);
@@ -2598,10 +2755,6 @@ mod tests {
         assert_eq!(
             system_name_color(ControlKind::Uprising(Faction::Empire)),
             egui::Color32::from_rgb(0, 255, 0)
-        );
-        assert_eq!(
-            system_name_color(ControlKind::Contested),
-            egui::Color32::from_rgb(0, 255, 255)
         );
         assert_eq!(
             system_name_color(ControlKind::Uncontrolled),
@@ -3647,6 +3800,18 @@ mod tests {
     }
 
     #[test]
+    fn a_destroyed_system_shows_the_asteroid_field() {
+        // FUN_0045bbb0.c:88-95 swaps the picture to STRATEGY 0x2800.
+        let mut system = System {
+            dat_id: DatId::new(263),
+            ..System::default()
+        };
+        assert_eq!(planet_picture(&system), 10224);
+        system.is_destroyed = true;
+        assert_eq!(planet_picture(&system), 10240);
+    }
+
+    #[test]
     fn a_planet_sits_at_its_share_of_the_window_from_the_sector_origin() {
         // FUN_00459e30 0x45a3d4..0x45a44c: trunc(rel / 1024 * 13 * 235) and
         // trunc(rel / 1024 * 10 * 360). The bottom row lands at 298, so its
@@ -3654,6 +3819,23 @@ mod tests {
         assert_eq!(sector_planet_position(317, 248, 322, 260), (14.0, 42.0));
         assert_eq!(sector_planet_position(317, 248, 373, 272), (167.0, 84.0));
         assert_eq!(sector_planet_position(317, 248, 322, 333), (14.0, 298.0));
+    }
+
+    #[test]
+    fn a_new_sector_window_sits_at_the_bottom_until_the_view_activates_it() {
+        // FUN_00429ce0 sets each new sector window to HWND_BOTTOM; the
+        // view's activation (FUN_00422ce0 0x467) brings one to the top.
+        let (world, first, second) = fixture_world();
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut state = SectorWindowState::default();
+            assert!(state.open_for_system(&world, first, faction));
+            assert!(state.open_for_system(&world, second, faction));
+            let sector = world.systems[first].sector;
+            assert!(state.raise(sector));
+            assert!(state.windows.iter().any(|window| window.sector == sector));
+            // Cross-family focus and paint order are covered by the manager
+            // routing snapshot tests, not renderer-local z state.
+        }
     }
 
     #[test]
@@ -3671,6 +3853,102 @@ mod tests {
             state.windows.last().unwrap().sector,
             world.systems[first].sector
         );
+    }
+
+    #[test]
+    fn a_saved_sector_window_comes_back_in_its_column_shown_and_at_the_bottom() {
+        // FUN_0045d2b0 saves the sector; FUN_00441190 rebuilds type 1 shown
+        // whatever its flag (0x441248 → 0x4413f1), and FUN_00440f80 sends it
+        // to HWND_BOTTOM (FUN_00440f80.c:31-35). Under Wine a sector window
+        // hidden by the GID menu came back shown (Empire day-2 start, played
+        // on to day 8).
+        let (world, first, second) = fixture_world();
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut state = SectorWindowState::default();
+            assert!(state.open_for_system(&world, first, faction));
+            assert!(state.open_for_system(&world, second, faction));
+            assert!(state.raise(world.systems[second].sector));
+            let mut saved = state.saved_windows(&world);
+            saved.sort_by_key(|(z, _)| *z);
+            let layout: Vec<_> = state
+                .windows
+                .iter()
+                .map(|window| (window.sector, window.column))
+                .collect();
+
+            let mut restored = SectorWindowState::default();
+            for (index, (_, window)) in saved.iter().enumerate() {
+                let window = SavedWindow {
+                    shown: index == 0,
+                    ..*window
+                };
+                assert!(
+                    restored.restore_saved(&world, faction, &window),
+                    "{faction:?}"
+                );
+            }
+
+            let back: Vec<_> = restored
+                .windows
+                .iter()
+                .map(|window| (window.sector, window.column))
+                .collect();
+            assert_eq!(back, layout, "{faction:?}");
+            assert!(restored.children().all(|(z, _)| z == 0), "{faction:?}");
+            assert_eq!(restored.faction, faction);
+        }
+    }
+
+    #[test]
+    fn a_restored_sector_window_keeps_one_window_per_sector_and_per_column() {
+        // At most one window per sector and per column (FUN_00429ce0,
+        // FUN_00600f90): restoring a sector again keeps one window, and a
+        // sector restored into a taken column replaces its window.
+        let (world, first, second) = fixture_world();
+        let saved = |system: SystemKey, position| SavedWindow {
+            kind: SavedWindowKind::Sector {
+                sector: world.sectors[world.systems[system].sector].dat_id,
+            },
+            position,
+            shown: true,
+        };
+        let mut state = SectorWindowState::default();
+        let faction = CockpitFaction::Alliance;
+        assert!(state.restore_saved(&world, faction, &saved(first, (60, 35))));
+        assert!(state.restore_saved(&world, faction, &saved(first, (300, 35))));
+        assert_eq!(state.window_count(), 1);
+        assert_eq!(state.windows[0].column, WindowColumn::Secondary);
+        assert!(state.restore_saved(&world, faction, &saved(second, (300, 35))));
+        assert_eq!(state.window_count(), 1);
+        assert_eq!(state.windows[0].sector, world.systems[second].sector);
+    }
+
+    #[test]
+    fn a_saved_sector_window_names_its_sector_by_dat_id() {
+        let (world, first, _) = fixture_world();
+        let mut state = SectorWindowState::default();
+        assert!(state.open_for_system(&world, first, CockpitFaction::Empire));
+        let sector = world.systems[first].sector;
+        assert_eq!(
+            state.saved_windows(&world)[0].1,
+            SavedWindow {
+                kind: SavedWindowKind::Sector {
+                    sector: world.sectors[sector].dat_id,
+                },
+                position: (120, 40),
+                shown: true,
+            }
+        );
+        let mut other = SectorWindowState::default();
+        let elsewhere = SavedWindow {
+            kind: SavedWindowKind::Sector {
+                sector: DatId::new(0x92ff_ffff),
+            },
+            position: (120, 40),
+            shown: true,
+        };
+        assert!(!other.restore_saved(&world, CockpitFaction::Empire, &elsewhere));
+        assert!(!other.any_open());
     }
 
     /// Add a one-system sector at map x `x` and return its system.
@@ -7294,6 +7572,7 @@ mod tests {
                     &mut cache,
                     missions,
                     &rebellion_core::uprising::UprisingState::default(),
+                    &|_| true,
                 ));
             });
         }
@@ -7353,6 +7632,7 @@ mod tests {
                     &mut cache,
                     &missions,
                     &rebellion_core::uprising::UprisingState::default(),
+                    &|_| true,
                 ));
             });
         }
@@ -7406,7 +7686,6 @@ mod tests {
         let troop = world.troops.insert(rebellion_core::world::TroopUnit {
             class_dat_id: DatId::new(0x1000_0002),
             is_alliance: true,
-            regiment_strength: 100,
         });
         world.systems[system].ground_units.push(troop);
         for (quadrant, at) in [
@@ -7538,6 +7817,7 @@ mod tests {
                     &mut cache,
                     &missions,
                     &rebellion_core::uprising::UprisingState::default(),
+                    &|_| true,
                 ));
             });
         }
@@ -7672,7 +7952,7 @@ mod tests {
             fighters: Vec::new(),
             characters: Vec::new(),
             is_alliance: true,
-            has_death_star: false,
+            bombarding: false,
         });
         world.systems[system].fleets.push(fleet);
     }
@@ -7752,6 +8032,7 @@ mod tests {
                         &mut cache,
                         &rebellion_core::missions::MissionState::new(),
                         &rebellion_core::uprising::UprisingState::default(),
+                        &|_| true,
                     );
                 },
             );
@@ -7892,7 +8173,6 @@ mod tests {
         let troop = world.troops.insert(rebellion_core::world::TroopUnit {
             class_dat_id: DatId::new(0x1000_0002),
             is_alliance: true,
-            regiment_strength: 100,
         });
         world.systems[system].ground_units.push(troop);
         assert_eq!(
@@ -8000,6 +8280,7 @@ mod tests {
                     &mut cache,
                     missions,
                     &rebellion_core::uprising::UprisingState::default(),
+                    &|_| true,
                 );
             });
         }
@@ -8046,7 +8327,6 @@ mod tests {
         let regiment = world.troops.insert(rebellion_core::world::TroopUnit {
             class_dat_id: DatId::new(0x1000_0001),
             is_alliance: true,
-            regiment_strength: 100,
         });
         world.systems[system].ground_units.push(regiment);
         let agent = world.characters.insert(rebellion_core::world::Character {
@@ -8176,6 +8456,7 @@ mod tests {
                     &mut cache,
                     &missions,
                     &rebellion_core::uprising::UprisingState::default(),
+                    &|_| true,
                 );
             });
         }

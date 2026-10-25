@@ -16,7 +16,9 @@ use rebellion_core::dat::{ExplorationStatus, Faction};
 use rebellion_core::fleet_join;
 use rebellion_core::fog::FogState;
 use rebellion_core::ids::{CharacterKey, DatId, FighterKey, FleetKey, SystemKey, TroopKey};
+use rebellion_core::missions::MissionTarget;
 use rebellion_core::movement::MovementState;
+use rebellion_core::saved_interface::{SavedWindow, SavedWindowKind};
 use rebellion_core::troop_transport::TroopTransportState;
 use rebellion_core::world::{ControlKind, Fleet, GameWorld};
 use rebellion_windowing::{
@@ -31,9 +33,11 @@ use crate::panels::fleets::{capital_ship_mini_id, fighter_mini_id};
 use crate::quadrant_icons::{quadrant_art, Quadrant};
 use crate::system_window::{
     canvas_point, character_mini_resource_id, clamp_window_to_galaxy, exact_clicked, fleet_label,
-    logical_rect, opposing_contents_visible, rect_contains, troop_mini,
+    logical_rect, opposing_contents_visible, rect_contains, surface_drag_grab, title_drag_step,
+    troop_mini, TitleDrag,
 };
 use crate::targeting::ReleaseTarget;
+use crate::windowing::GalaxyChild;
 use crate::windowing_input::{
     EscapeRoute, FrameInputRouter, InputEventId, InputRecipient, PointerButtonId, PointerPhase,
 };
@@ -116,13 +120,29 @@ const PERSONNEL_BACKDROP: u32 = 11500;
 /// STRATEGY 11513 (`0x2cf9`): the backdrop of a regiment's mini.
 const REGIMENT_BACKDROP: u32 = 11513;
 
+/// The mark `FUN_0042c3b0.c:412-431` draws for an object not completed
+/// (`+0x50` bit 2 clear): STRATEGY 11570 (`0x2d32`) for side bits `0x40`,
+/// the Alliance, else 11572 (`0x2d34`); the portrait's is one more (11571,
+/// 11573).
+const fn under_construction_mark(is_alliance: bool, portrait: bool) -> (DllSource, u32) {
+    let mini = if is_alliance { 11_570 } else { 11_572 };
+    (DllSource::Strategy, mini + portrait as u32)
+}
+
 /// The bitmaps `FUN_0042c3b0(.., 0, 1)` stacks into `object`'s list image,
 /// bottom first: a character's or special force's backdrop (STRATEGY
 /// 11500) or a regiment's (11513), blitted plain; the en route mark when
-/// `en_route` ([`en_route_mark`]), keyed; then the object's own GOKRES
-/// `mini`, keyed last (`FUN_0042c3b0.c:442`), so the mark shows around the
-/// object, not over it.
-pub(crate) fn mini_layers(object: MiniObject, mini: u32, en_route: bool) -> Vec<(DllSource, u32)> {
+/// `en_route` ([`en_route_mark`]), keyed; the side's under-construction
+/// mark when `under_construction` names the side of an unfinished object
+/// ([`under_construction_mark`], `FUN_0042c3b0.c:412-431`); then the
+/// object's own GOKRES `mini`, keyed last (`FUN_0042c3b0.c:442`), so the
+/// marks show around the object, not over it.
+pub(crate) fn mini_layers(
+    object: MiniObject,
+    mini: u32,
+    en_route: bool,
+    under_construction: Option<bool>,
+) -> Vec<(DllSource, u32)> {
     let backdrop = match object {
         MiniObject::Character | MiniObject::SpecialForce(_) => Some(PERSONNEL_BACKDROP),
         MiniObject::Regiment(_) => Some(REGIMENT_BACKDROP),
@@ -132,13 +152,14 @@ pub(crate) fn mini_layers(object: MiniObject, mini: u32, en_route: bool) -> Vec<
         .map(|id| (DllSource::Strategy, id))
         .into_iter()
         .chain(en_route.then(|| en_route_mark(object, mini)))
+        .chain(under_construction.map(|is_alliance| under_construction_mark(is_alliance, false)))
         .chain(std::iter::once((DllSource::Gokres, mini)))
         .collect()
 }
 
 /// A craft's GOKRES portrait (`FUN_0042c3b0(.., 1, ..)`: `class & 0xfff`),
 /// its mini less `0x4000`.
-const fn ship_portrait(mini: u32) -> u32 {
+pub(crate) const fn ship_portrait(mini: u32) -> u32 {
     mini - 0x4000
 }
 
@@ -146,6 +167,93 @@ const fn ship_portrait(mini: u32) -> u32 {
 /// portrait: its own GOKRES mark, `(class & 0xfff) + 0x1000`.
 const fn en_route_portrait_mark(portrait: u32) -> u32 {
     portrait + 0x1000
+}
+
+/// STRATEGY 11514 (`0x2cfa`): the backdrop of a regiment's portrait.
+const REGIMENT_PORTRAIT_BACKDROP: u32 = 11514;
+/// STRATEGY 11516 (`0x2cfc`): the en route mark of a regiment's portrait.
+const EN_ROUTE_REGIMENT_PORTRAIT: u32 = 11516;
+/// STRATEGY 11520 (`0x2d00`): the en route mark of a special force's
+/// portrait.
+const EN_ROUTE_SPECIAL_FORCE_PORTRAIT: u32 = 11520;
+
+/// The en route mark `FUN_0042c3b0(.., 1, 1)` draws under `object`'s
+/// `portrait`, as [`en_route_mark`] picks the mini's: the object's own
+/// GOKRES mark ([`en_route_portrait_mark`]) for craft and the same excepted
+/// classes, 11516 for other regiments and 11520 for other special forces.
+/// A character's (`0x2ced + 0xffffd313`) wraps to 0, so it draws none.
+pub(crate) fn portrait_en_route_mark(
+    object: MiniObject,
+    portrait: u32,
+) -> Option<(DllSource, u32)> {
+    let own = (DllSource::Gokres, en_route_portrait_mark(portrait));
+    match object {
+        MiniObject::Craft => Some(own),
+        MiniObject::Regiment(class) => Some(match class.raw() {
+            0x1000_0002 | 0x1000_0008 => own,
+            _ => (DllSource::Strategy, EN_ROUTE_REGIMENT_PORTRAIT),
+        }),
+        MiniObject::Character => None,
+        MiniObject::SpecialForce(class) => Some(match class.raw() {
+            0x3c00_0003 | 0x3c00_0005 => own,
+            _ => (DllSource::Strategy, EN_ROUTE_SPECIAL_FORCE_PORTRAIT),
+        }),
+    }
+}
+
+/// The bitmaps `FUN_0042c3b0(.., 1, 1)` stacks into `object`'s portrait,
+/// bottom first: a regiment's backdrop (STRATEGY 11514), blitted plain; the
+/// en route mark when `en_route` ([`portrait_en_route_mark`]); the burn
+/// marks when `damaged` (`+0x50` bit 9), the object's GOKRES
+/// `portrait + 0x2000`, which a character's or special force's wraps to 0
+/// (`0x2cee + 0xffffd312`, `FUN_0042c3b0.c:350-371`); the side's
+/// under-construction mark for an unfinished object
+/// ([`under_construction_mark`], `FUN_0042c3b0.c:412-431`); then the GOKRES
+/// `portrait`, keyed last.
+pub(crate) fn portrait_layers(
+    object: MiniObject,
+    portrait: u32,
+    en_route: bool,
+    damaged: bool,
+    under_construction: Option<bool>,
+) -> Vec<(DllSource, u32)> {
+    let backdrop = matches!(object, MiniObject::Regiment(_))
+        .then_some((DllSource::Strategy, REGIMENT_PORTRAIT_BACKDROP));
+    let burned = matches!(object, MiniObject::Craft | MiniObject::Regiment(_))
+        .then_some((DllSource::Gokres, portrait + 0x2000));
+    backdrop
+        .into_iter()
+        .chain(
+            en_route
+                .then(|| portrait_en_route_mark(object, portrait))
+                .flatten(),
+        )
+        .chain(burned.filter(|_| damaged))
+        .chain(under_construction.map(|is_alliance| under_construction_mark(is_alliance, true)))
+        .chain(std::iter::once((DllSource::Gokres, portrait)))
+        .collect()
+}
+
+/// The marks of `fleet`'s capital ship at `index`: en route while it is on
+/// its own leg or its fleet travels (`FUN_004f8240.c:17-31`), and the
+/// fleet's side when it is not completed, for its under-construction mark.
+fn ship_marks(
+    world: &GameWorld,
+    movement: &MovementState,
+    fleet: FleetKey,
+    index: usize,
+) -> (bool, Option<bool>) {
+    let Some((value, ship)) = world
+        .fleets
+        .get(fleet)
+        .and_then(|value| Some((value, value.capital_ships.get(index)?)))
+    else {
+        return (false, None);
+    };
+    (
+        movement.is_in_transit(fleet) || ship.transit.is_some(),
+        (!ship.completed).then_some(value.is_alliance),
+    )
 }
 
 /// The galaxy view rail's icon for a minimized Fleet window (`FUN_004a76e0`).
@@ -184,6 +292,19 @@ impl FleetWindowTab {
             Self::Troops => 2,
             Self::Personnel => 3,
         }
+    }
+
+    /// The tab's control id, `0x66..0x69`: what the window keeps at
+    /// `+0x194` and saves (`FUN_004a7300`).
+    #[must_use]
+    pub const fn control_id(self) -> u32 {
+        0x66 + self.index()
+    }
+
+    /// The tab whose control id is `id`.
+    #[must_use]
+    pub fn from_control_id(id: u32) -> Option<Self> {
+        Self::ALL.into_iter().find(|tab| tab.control_id() == id)
     }
 }
 
@@ -232,6 +353,8 @@ pub struct PreparedFleetWindow {
     logical_position: (i16, i16),
     selected: Option<FleetWindowEntry>,
     rename: Option<RenameEdit>,
+    /// The tab a new window opens on.
+    tab: FleetWindowTab,
 }
 
 impl PreparedFleetWindow {
@@ -263,6 +386,15 @@ impl PreparedFleetWindow {
             fresh: true,
         });
         Some(self)
+    }
+
+    /// Open on `tab`, as a saved window comes back on its saved tab
+    /// (`FUN_004a7290` reads `+0x194`). It does not change an existing
+    /// window.
+    #[must_use]
+    pub const fn with_tab(mut self, tab: FleetWindowTab) -> Self {
+        self.tab = tab;
+        self
     }
 }
 
@@ -443,6 +575,8 @@ pub struct FleetWindowState {
     pending_control_invalidations: Vec<FocusTarget>,
     drag: Option<ItemDrag>,
     drag_owner: Option<WindowId>,
+    /// A window drag in progress.
+    title_drag: Option<TitleDrag>,
 }
 
 impl Default for FleetWindowState {
@@ -453,6 +587,7 @@ impl Default for FleetWindowState {
             pending_control_invalidations: Vec::new(),
             drag: None,
             drag_owner: None,
+            title_drag: None,
         }
     }
 }
@@ -497,6 +632,85 @@ impl FleetWindowState {
             .map(|window| egui::LayerId::new(egui::Order::Foreground, area_id(window)))
     }
 
+    /// Carry a window drag one frame ([`TitleDrag`]): the window follows
+    /// the pointer while the button is down, and the release lets go.
+    fn update_title_drag(&mut self, ctx: &egui::Context, layout: CockpitLayout) {
+        if let Some(drag) = self.title_drag {
+            let window = self
+                .windows
+                .iter_mut()
+                .find(|window| area_id(window) == drag.area);
+            match (window, title_drag_step(ctx, layout, drag)) {
+                (Some(window), Ok(place)) => {
+                    if let Some(place) = place {
+                        window.logical_position = place;
+                    }
+                }
+                _ => self.title_drag = None,
+            }
+        }
+    }
+
+    /// The manager windows visible in `snapshot` as galaxy children, with
+    /// their rank in the manager-owned paint order.
+    pub fn children<'a>(
+        &'a self,
+        snapshot: &'a RoutingSnapshot,
+    ) -> impl Iterator<Item = (u64, GalaxyChild)> + 'a {
+        snapshot
+            .paint_order()
+            .iter()
+            .enumerate()
+            .filter_map(|(rank, id)| {
+                (snapshot.key(*id)?.kind == WindowKind::Fleet
+                    && self.windows.iter().any(|window| window.id == Some(*id)))
+                .then_some((rank as u64, GalaxyChild::Fleet(*id)))
+            })
+    }
+
+    /// The shown windows as a save keeps them, each with its z serial: the
+    /// subject system by its DAT id, the tab (`FUN_004a7300`) and the
+    /// window's top-left. A window on the rail (`minimized`) is left to the
+    /// rail's own record (`SystemWindowState::saved_rail`). Every other
+    /// window saves shown whatever this frame paints: `FUN_00440ea0` walks
+    /// the galaxy view's child windows, which the Game Options window
+    /// leaves in place, while the port suspends the strategic scene under
+    /// it.
+    #[must_use]
+    pub fn saved_windows(
+        &self,
+        world: &GameWorld,
+        minimized: impl Fn(WindowId) -> bool,
+    ) -> Vec<(u64, SavedWindow)> {
+        self.windows
+            .iter()
+            .filter_map(|window| {
+                let id = window.id.filter(|id| !minimized(*id))?;
+                Some((
+                    0,
+                    SavedWindow {
+                        kind: SavedWindowKind::Fleet {
+                            system: world.systems.get(window.system)?.dat_id,
+                            tab: window.tab.control_id(),
+                        },
+                        position: window.logical_position,
+                        shown: true,
+                    },
+                ))
+            })
+            .collect()
+    }
+
+    /// The tab's control id of `id`'s window, shown or minimized, for the
+    /// rail's saved Fleet windows.
+    #[must_use]
+    pub fn saved_tab(&self, id: WindowId) -> Option<u32> {
+        self.windows
+            .iter()
+            .find(|window| window.id == Some(id))
+            .map(|window| window.tab.control_id())
+    }
+
     /// Validates and prepares a Fleet content candidate without changing live
     /// content. The stable subject is the system's original DAT identity;
     /// selected fleet/ship remains content rather than window identity.
@@ -523,6 +737,7 @@ impl FleetWindowState {
             ),
             selected,
             rename: None,
+            tab: FleetWindowTab::CapitalShips,
         })
     }
 
@@ -536,6 +751,11 @@ impl FleetWindowState {
         let subject = prepared.spec.key.subject?;
         match *transition {
             WindowTransition::Opened { id } => {
+                // A fixture's direct window has no manager identity; the
+                // manager's own window for its system takes its place.
+                #[cfg(any(test, feature = "interface-test-fixtures"))]
+                self.windows
+                    .retain(|window| window.id.is_some() || window.system != prepared.system);
                 if self.windows.iter().any(|window| {
                     window.id == Some(id)
                         || window.subject == Some(subject)
@@ -563,7 +783,7 @@ impl FleetWindowState {
                     selected: prepared.selected,
                     selected_item: None,
                     expanded,
-                    tab: FleetWindowTab::CapitalShips,
+                    tab: prepared.tab,
                     rename: prepared.rename,
                 });
                 Some(id)
@@ -991,6 +1211,71 @@ impl FleetWindowState {
         Some(drop_target(world, player, window, &entries, local))
     }
 
+    /// The object a Mission order released at `point` over the Fleet window
+    /// egui draws as `layer` names (`+0x68`, `FUN_004a2f80`): the left
+    /// list's entry under the point, or the right list's item on any tab,
+    /// else the left list's selected entry (`FUN_004a2f80.c:28-58`).
+    /// `None` where the window gives its system. port: only a Death Star
+    /// ship and a regiment have a [`MissionTarget`]; a fleet entry, another
+    /// ship, a squadron or a character gives the system.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The hit test reads the lists the window paints from these states."
+    )]
+    #[must_use]
+    pub fn release_object(
+        &self,
+        world: &GameWorld,
+        movement: &MovementState,
+        fog: &FogState,
+        transport: &TroopTransportState,
+        layout: CockpitLayout,
+        layer: egui::LayerId,
+        point: egui::Pos2,
+    ) -> Option<MissionTarget> {
+        let window = self
+            .windows
+            .iter()
+            .find(|window| area_id(window) == layer.id)?;
+        let rect = window_screen_rect(window, layout);
+        let scale = layout.scale.max(f32::EPSILON);
+        let local = (
+            (point.x - rect.min.x) / scale,
+            (point.y - rect.min.y) / scale,
+        );
+        // The ship itself (families 0x14-0x1b), which FUN_00593500 takes;
+        // port: an untagged ship has no identity to name yet.
+        let ship_object = |fleet: FleetKey, index: usize| {
+            let ship = world.fleets.get(fleet)?.capital_ships.get(index)?;
+            (ship.alive && ship.tag != 0).then_some(MissionTarget::CapitalShip(ship.tag))
+        };
+        let entry_object = |entry: FleetWindowEntry| match entry {
+            FleetWindowEntry::Ship { fleet, index } => ship_object(fleet, index),
+            FleetWindowEntry::Fleet(_) => None,
+        };
+        if in_rect(LEFT_LIST, local) {
+            let player = cockpit_faction(self.faction);
+            let entries = left_entries(world, movement, fog, player, window);
+            let row = ((local.1 - LEFT_LIST.1) / LEFT_ITEM_HEIGHT) as usize;
+            return entries.get(row).copied().and_then(entry_object);
+        }
+        if in_rect(RIGHT_LIST, local) {
+            let row = ((local.1 - RIGHT_LIST.1) / RIGHT_ITEM_HEIGHT) as usize;
+            let items = right_items(world, transport, window.selected, window.tab);
+            return match items.get(row) {
+                Some(item) => match item.object? {
+                    ItemObject::Ship { fleet, index, .. } => ship_object(fleet, index),
+                    ItemObject::Regiment { troop, .. } => Some(MissionTarget::Troop(troop)),
+                    ItemObject::Fleet { .. }
+                    | ItemObject::Fighter { .. }
+                    | ItemObject::Character { .. } => None,
+                },
+                None => window.selected.and_then(entry_object),
+            };
+        }
+        None
+    }
+
     pub fn clear(&mut self) {
         self.windows.clear();
         self.pending_control_invalidations.clear();
@@ -1107,10 +1392,19 @@ impl FleetWindowState {
             ItemObject::Fighter { fleet, index, .. } => FleetWindowAction::DragSquadron {
                 fleet,
                 index,
+                confirmed: ctrl,
                 point,
             },
-            ItemObject::Fleet { fleet, .. } => FleetWindowAction::DragFleet { fleet, point },
-            ItemObject::Regiment { troop, .. } => FleetWindowAction::DragRegiment { troop, point },
+            ItemObject::Fleet { fleet, .. } => FleetWindowAction::DragFleet {
+                fleet,
+                confirmed: ctrl,
+                point,
+            },
+            ItemObject::Regiment { troop, .. } => FleetWindowAction::DragRegiment {
+                troop,
+                confirmed: ctrl,
+                point,
+            },
             ItemObject::Character { character, .. } => FleetWindowAction::DragCharacter {
                 character,
                 confirmed: ctrl,
@@ -1125,6 +1419,7 @@ impl FleetWindowState {
                 fleet,
                 index,
                 roster,
+                confirmed: ctrl,
                 point,
             },
         });
@@ -1215,15 +1510,19 @@ pub enum FleetWindowAction {
         logical_position: (i16, i16),
     },
     /// A left-list fleet dragged out of its list (`0x29a`): the galaxy view
-    /// hit-tests the screen point and issues `0x201` (`FUN_00422ce0`).
+    /// hit-tests the screen point and issues `0x201`, or `0x202` with Ctrl
+    /// held at the drop (`FUN_00422ce0`, `GetAsyncKeyState(0x11)`).
     DragFleet {
         fleet: FleetKey,
+        confirmed: bool,
         point: egui::Pos2,
     },
     /// A Troops tab regiment dragged out of its list (`0x29a`): the galaxy
-    /// view hit-tests the screen point and issues `0x201` (`FUN_00422ce0`).
+    /// view hit-tests the screen point and issues `0x201`, or `0x202` with
+    /// Ctrl (`FUN_00422ce0`).
     DragRegiment {
         troop: TroopKey,
+        confirmed: bool,
         point: egui::Pos2,
     },
     /// A Personnel tab character dragged out of its list: `0x201`, or
@@ -1233,19 +1532,22 @@ pub enum FleetWindowAction {
         confirmed: bool,
         point: egui::Pos2,
     },
-    /// A Fighters tab squadron dragged out of its list: the same `0x201`
-    /// (`TroopTransportState::move_squadron`).
+    /// A Fighters tab squadron dragged out of its list: the same `0x201`,
+    /// or `0x202` with Ctrl (`TroopTransportState::move_squadron`).
     DragSquadron {
         fleet: FleetKey,
         index: usize,
+        confirmed: bool,
         point: egui::Pos2,
     },
-    /// A Capital Ships tab item dragged out of its list: the same `0x201`
-    /// for the ship (`ghidra/notes/fleet-join-split.md`).
+    /// A Capital Ships tab item dragged out of its list: the same `0x201`,
+    /// or `0x202` with Ctrl, for the ship
+    /// (`ghidra/notes/fleet-join-split.md`).
     DragShip {
         fleet: FleetKey,
         index: usize,
         roster: u64,
+        confirmed: bool,
         point: egui::Pos2,
     },
     /// A right click on a list entry or item opens its object's pop-up menu
@@ -1517,8 +1819,7 @@ fn indicator_bitmaps(flags: u8) -> Vec<(u32, f32)> {
 
 /// The indicators on a fleet's left-list entry: the union of its ships'
 /// flags (`FUN_004a3d40` ORs `FUN_004a66a0` over them and paints
-/// `FUN_004a67a0` at y 33). port: with what the port holds on the fleet
-/// itself (`rebellion_core::carriage`).
+/// `FUN_004a67a0` at y 33).
 fn fleet_indicators(
     world: &GameWorld,
     transport: &TroopTransportState,
@@ -1530,16 +1831,6 @@ fn fleet_indicators(
     let mut flags = (0..value.capital_ships.len())
         .map(|index| carriage::ship_flags(world, transport, fleet, index))
         .fold(0, |all, flags| all | flags);
-    if value
-        .fighters
-        .iter()
-        .any(|entry| entry.carrier == 0 && entry.count > 0)
-    {
-        flags |= 1;
-    }
-    if transport.regiments_aboard(fleet, 0) > 0 {
-        flags |= 2;
-    }
     if !value.characters.is_empty() {
         flags |= 4;
     }
@@ -1844,17 +2135,15 @@ pub(crate) fn faction_side(faction: Faction) -> u8 {
     match faction {
         Faction::Alliance => 1,
         Faction::Empire => 2,
-        Faction::Neutral => 0,
+        Faction::Neutral => 3,
     }
 }
 
-/// hyp: `Contested` is side 3, and an uprising keeps its holder's side
-/// (`ghidra/notes/blockade-bit.md`, "Port").
+/// A system's side bits under `control`: 1, 2, or 3 for a neutral system
+/// (`FUN_0055a080` returns 1, 2 or 3; `FUN_0050b610`). hyp: an uprising
+/// keeps its holder's side (`ghidra/notes/blockade-bit.md`, "Port").
 pub(crate) fn control_side(control: ControlKind) -> u8 {
-    match control {
-        ControlKind::Contested => 3,
-        control => control.faction().map_or(0, faction_side),
-    }
+    control.faction().map_or(3, faction_side)
 }
 
 fn cockpit_faction(faction: CockpitFaction) -> Faction {
@@ -1901,6 +2190,8 @@ fn tab_rect(window: egui::Rect, scale: f32, tab: FleetWindowTab) -> egui::Rect {
 
 #[derive(Default)]
 struct WindowDrawResult {
+    /// Where a press on the window's own surface took hold ([`TitleDrag`]).
+    drag_grab: Option<egui::Vec2>,
     focus: bool,
     close: bool,
     minimize: bool,
@@ -1977,6 +2268,8 @@ pub fn draw_fleet_windows(
         None,
         &[],
         None,
+        true,
+        &|_| true,
     )
 }
 
@@ -1998,6 +2291,8 @@ pub fn draw_managed_fleet_windows(
     snapshot: &RoutingSnapshot,
     pointer_events: &[(InputEventId, PointerPhase)],
     router: &mut FrameInputRouter,
+    front: bool,
+    shown: &dyn Fn(GalaxyChild) -> bool,
 ) -> Vec<FleetWindowAction> {
     draw_fleet_windows_with_snapshot(
         ctx,
@@ -2012,6 +2307,8 @@ pub fn draw_managed_fleet_windows(
         Some(snapshot),
         pointer_events,
         Some(router),
+        front,
+        shown,
     )
 }
 
@@ -2032,10 +2329,13 @@ fn draw_fleet_windows_with_snapshot(
     snapshot: Option<&RoutingSnapshot>,
     pointer_events: &[(InputEventId, PointerPhase)],
     mut router: Option<&mut FrameInputRouter>,
+    front: bool,
+    shown: &dyn Fn(GalaxyChild) -> bool,
 ) -> Vec<FleetWindowAction> {
     if state.windows.iter().all(|window| window.id.is_none()) {
         state.prepare_faction(faction);
     }
+    state.update_title_drag(ctx, layout);
     let mut windows = Vec::new();
     if let Some(snapshot) = snapshot {
         windows.extend(snapshot.paint_order().iter().filter_map(|id| {
@@ -2061,7 +2361,12 @@ fn draw_fleet_windows_with_snapshot(
             .filter(|window| window.id.is_none())
             .cloned(),
     );
-    let focused_manager = snapshot.and_then(|frame| frame.focused().map(|focus| focus.window));
+    // A window the GID menu hides is neither painted nor live.
+    windows.retain(|window| window.id.is_none_or(|id| shown(GalaxyChild::Fleet(id))));
+    let focused_id = windows.last().and_then(|window| window.id);
+    let focused_manager = snapshot
+        .and_then(|frame| frame.focused().map(|focus| focus.window))
+        .or(focused_id);
     let focused_fixture_system = windows
         .last()
         .filter(|window| window.id.is_none())
@@ -2079,6 +2384,7 @@ fn draw_fleet_windows_with_snapshot(
         .map(FleetWindowAction::InvalidateControl)
         .collect();
     actions.extend(ended_drag.actions);
+    let escape = ctx.input(|input| input.key_pressed(egui::Key::Escape));
     for window in &windows {
         let rename_target = window.id.map(|window| FocusTarget {
             window,
@@ -2107,6 +2413,13 @@ fn draw_fleet_windows_with_snapshot(
             Some(id) => focused_manager == Some(id),
             None => focused_fixture_system == Some(window.system),
         };
+        let keyboard_permitted = match (window.id, router.as_deref()) {
+            (Some(id), Some(router)) => {
+                matches!(router.escape_route(), EscapeRoute::Window(owner) if owner == id)
+            }
+            (None, _) => focused,
+            (Some(_), None) => false,
+        };
         let result = draw_fleet_window(
             ctx,
             world,
@@ -2120,6 +2433,12 @@ fn draw_fleet_windows_with_snapshot(
             layout,
             cache,
         );
+        if let Some(grab) = result.drag_grab {
+            state.title_drag = Some(TitleDrag {
+                area: area_id(window),
+                grab,
+            });
+        }
         let system = window.system;
         let pointer_mutation = result.focus
             || result.close
@@ -2187,7 +2506,16 @@ fn draw_fleet_windows_with_snapshot(
                 });
             }
         }
-        if (result.close && pointer_permitted) || !world.systems.contains_key(system) {
+        // Escape with the keyboard closes the window as its close button does
+        // (slot +0x30, FUN_004a7390 -> FUN_004ac3a0); an open rename takes
+        // it instead (FUN_004aca40).
+        let escaped = escape
+            && window.rename.is_none()
+            && match window.id {
+                Some(_) => keyboard_permitted,
+                None => focused,
+            };
+        if (result.close && pointer_permitted) || escaped || !world.systems.contains_key(system) {
             if let Some(id) = window.id {
                 actions.push(FleetWindowAction::Close(id));
             } else {
@@ -2512,11 +2840,10 @@ fn draw_fleet_window(
                         // untraced, so its entry draws as unselected.
                         if let Some(class) = class {
                             if let Some(mini) = capital_ship_mini_id(class.dat_id) {
-                                let layers = mini_layers(
-                                    MiniObject::Craft,
-                                    mini,
-                                    movement.is_in_transit(fleet),
-                                );
+                                let (en_route, building) =
+                                    ship_marks(world, movement, fleet, index);
+                                let layers =
+                                    mini_layers(MiniObject::Craft, mini, en_route, building);
                                 for (source, bitmap) in layers {
                                     paint_native(
                                         &list_painter,
@@ -2649,12 +2976,10 @@ fn draw_fleet_window(
                         .and_then(|class| capital_ship_mini_id(class.dat_id));
                     if let Some(mini) = mini {
                         let portrait = ship_portrait(mini);
-                        // The mark goes under the portrait (`mini_layers`).
-                        let mut layers = Vec::new();
-                        if movement.is_in_transit(fleet) {
-                            layers.push(en_route_portrait_mark(portrait));
-                        }
-                        layers.push(portrait);
+                        // The marks go under the portrait (`portrait_layers`).
+                        let (en_route, building) = ship_marks(world, movement, fleet, index);
+                        let layers =
+                            portrait_layers(MiniObject::Craft, portrait, en_route, false, building);
                         // The panel is a 125 by 49 bitmap; the 50-row
                         // portrait loses its last row.
                         let panel = painter.with_clip_rect(logical_rect(
@@ -2665,12 +2990,12 @@ fn draw_fleet_window(
                             PICTURE_PANEL.2,
                             PICTURE_PANEL.3,
                         ));
-                        for id in layers {
+                        for (source, id) in layers {
                             paint_native(
                                 &panel,
                                 ctx,
                                 cache,
-                                DllSource::Gokres,
+                                source,
                                 id,
                                 local,
                                 scale,
@@ -2790,13 +3115,19 @@ fn draw_fleet_window(
                         );
                     }
                     if let Some(mini) = item.mini {
-                        let own = match item.object {
-                            Some(ItemObject::Character { character, .. }) => {
-                                world.characters.get(character).is_some_and(|c| c.en_route)
+                        let (own, building) = match item.object {
+                            Some(ItemObject::Character { character, .. }) => (
+                                world.characters.get(character).is_some_and(|c| c.en_route),
+                                None,
+                            ),
+                            Some(ItemObject::Ship { fleet, index, .. }) => {
+                                ship_marks(world, movement, fleet, index)
                             }
-                            _ => false,
+                            _ => (false, None),
                         };
-                        for (source, bitmap) in mini_layers(item.kind, mini, travelling || own) {
+                        for (source, bitmap) in
+                            mini_layers(item.kind, mini, travelling || own, building)
+                        {
                             paint_native(
                                 &right_painter,
                                 ctx,
@@ -2869,6 +3200,20 @@ fn draw_fleet_window(
                 }
             }
 
+            // The two lists (with their bars) and the tab strip are controls
+            // of their own (FUN_004a4b10); FUN_004a29c0 passes every other
+            // press to the base.
+            result.drag_grab = surface_drag_grab(
+                ctx,
+                &window_response,
+                local,
+                scale,
+                &[
+                    LEFT_LIST,
+                    RIGHT_LIST,
+                    (TAB_STRIP.0, TAB_STRIP.1, 131.0, 28.0),
+                ],
+            );
             if window_response.clicked() || clicked.iter().any(|&value| value) {
                 result.focus = true;
             }
@@ -3055,6 +3400,7 @@ fn paint_dotted(
 pub(crate) mod tests {
     use super::*;
     use crate::cockpit::CockpitViewport;
+    use rebellion_core::carriage::ProductRoom;
     use rebellion_core::dat::SectorGroup;
     use rebellion_core::ids::{DatId, TroopKey};
     use rebellion_core::world::{CapitalShipClass, Fleet, Sector, ShipInstance, System, TroopUnit};
@@ -3135,7 +3481,7 @@ pub(crate) mod tests {
             fighters: Vec::new(),
             characters: Vec::new(),
             is_alliance,
-            has_death_star: false,
+            bombarding: false,
         });
         world.systems[system].fleets.push(fleet);
         fleet
@@ -3145,7 +3491,6 @@ pub(crate) mod tests {
         let troop = world.troops.insert(TroopUnit {
             class_dat_id: DatId::new(0x1000_0001),
             is_alliance: true,
-            regiment_strength: 100,
         });
         world.systems[system].ground_units.push(troop);
         troop
@@ -3283,6 +3628,29 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_managed_open_takes_the_place_of_a_fixtures_direct_window() {
+        let (world, system) = world(ControlKind::Controlled(Faction::Alliance));
+        let mut manager = WindowManager::new();
+        let mut state = FleetWindowState::default();
+        assert!(state.open(&world, system, ORIGIN, CockpitFaction::Alliance, scaled()));
+
+        let prepared = state
+            .prepare_open(
+                &world,
+                system,
+                ORIGIN,
+                CockpitFaction::Alliance,
+                scaled(),
+                None,
+            )
+            .unwrap();
+        let (id, _) = commit_prepared_fleet_window(&mut manager, &mut state, prepared);
+
+        assert_eq!(state.window_count(), 1);
+        assert_eq!(state.window_id(system), Some(id));
+    }
+
+    #[test]
     fn fleet_window_shared_identity_preserves_content() {
         let (mut world, system) = world(ControlKind::Controlled(Faction::Alliance));
         let fleet = add_fleet(&mut world, system, true, 0);
@@ -3368,6 +3736,76 @@ pub(crate) mod tests {
             state.keyboard_owner(&manager.begin_frame()),
             Some((id, false))
         );
+    }
+
+    #[test]
+    fn a_saved_fleet_window_comes_back_in_place_on_its_tab() {
+        // FUN_004a7300 saves the subject system and the tab +0x194
+        // (0x66..0x69); FUN_00441190 rebuilds type 4 at the saved x and y
+        // and FUN_004a7290 reads the tab back.
+        for (faction, control) in [
+            (
+                CockpitFaction::Alliance,
+                ControlKind::Controlled(Faction::Alliance),
+            ),
+            (
+                CockpitFaction::Empire,
+                ControlKind::Controlled(Faction::Empire),
+            ),
+        ] {
+            let (world, system) = world(control);
+            let mut manager = WindowManager::new();
+            let mut state = FleetWindowState::default();
+            let prepared = state
+                .prepare_open(&world, system, ORIGIN, faction, scaled(), None)
+                .unwrap();
+            let (id, _) = commit_prepared_fleet_window(&mut manager, &mut state, prepared);
+            manager.apply(WindowCommand::Activate(id)).unwrap();
+            state.window_mut(system).unwrap().tab = FleetWindowTab::Troops;
+
+            let minimized = |manager: &WindowManager| {
+                let held = manager.presentation_history().to_vec();
+                move |id| held.contains(&id)
+            };
+            let saved = state.saved_windows(&world, minimized(&manager));
+            assert_eq!(
+                saved.iter().map(|(_, window)| *window).collect::<Vec<_>>(),
+                [SavedWindow {
+                    kind: SavedWindowKind::Fleet {
+                        system: world.systems[system].dat_id,
+                        tab: 0x68,
+                    },
+                    position: ORIGIN,
+                    shown: true,
+                }],
+                "{faction:?}"
+            );
+            manager.apply(WindowCommand::Minimize(id)).unwrap();
+            assert!(state.saved_windows(&world, minimized(&manager)).is_empty());
+            assert_eq!(state.saved_tab(id), Some(0x68));
+
+            let SavedWindowKind::Fleet { tab, .. } = saved[0].1.kind else {
+                unreachable!("a Fleet record");
+            };
+            let mut restored_manager = WindowManager::new();
+            let mut restored = FleetWindowState::default();
+            let prepared = restored
+                .prepare_open(&world, system, saved[0].1.position, faction, scaled(), None)
+                .unwrap()
+                .with_tab(FleetWindowTab::from_control_id(tab).unwrap());
+            commit_prepared_fleet_window(&mut restored_manager, &mut restored, prepared);
+            let window = restored.window_mut(system).unwrap();
+            assert_eq!(
+                (window.tab, window.logical_position),
+                (FleetWindowTab::Troops, ORIGIN),
+                "{faction:?}"
+            );
+        }
+        assert_eq!(
+            FleetWindowTab::ALL.map(FleetWindowTab::control_id),
+            [0x66, 0x67, 0x68, 0x69]
+        );
+        assert_eq!(FleetWindowTab::from_control_id(0x6a), None);
     }
 
     #[test]
@@ -3837,6 +4275,8 @@ pub(crate) mod tests {
                     &snapshot,
                     &pointer_events,
                     &mut router,
+                    true,
+                    &|_| true,
                 ));
             });
         }
@@ -3889,6 +4329,7 @@ pub(crate) mod tests {
                 FleetWindowAction::ReleasePointer(owner),
                 FleetWindowAction::DragFleet {
                     fleet,
+                    confirmed: false,
                     point: release,
                 },
             ]
@@ -4229,7 +4670,7 @@ pub(crate) mod tests {
             ),
             11537
         );
-        world.systems[system].control = ControlKind::Contested;
+        world.systems[system].control = ControlKind::Uncontrolled;
         assert_eq!(
             rail_icon(
                 &world,
@@ -4260,7 +4701,8 @@ pub(crate) mod tests {
         // 10299/10200, side 2 10201/10302, other 10303/10304.
         let (mut world, system) = world(ControlKind::Uncontrolled);
         let player = Faction::Alliance;
-        assert_eq!(title_side(&world, &[], player, system), 0);
+        // A neutral system is side 3 (FUN_0055a080, FUN_0050b610).
+        assert_eq!(title_side(&world, &[], player, system), 3);
         let enemy = add_fleet(&mut world, system, false, 0);
         assert_eq!(title_side(&world, &[enemy], player, system), 2);
         let own = add_fleet(&mut world, system, true, 0);
@@ -4326,7 +4768,9 @@ pub(crate) mod tests {
             FleetWindowTab::CapitalShips
         ));
 
-        transport.load(&mut world, fleet, &[troop]).unwrap();
+        transport
+            .load(&mut world, &ProductRoom::default(), fleet, &[troop])
+            .unwrap();
 
         assert!(tab_enabled(
             &world,
@@ -4655,6 +5099,27 @@ pub(crate) mod tests {
         faction: CockpitFaction,
         frames: Vec<Vec<egui::Event>>,
     ) -> Run {
+        run_holding(
+            world,
+            movement,
+            transport,
+            state,
+            faction,
+            frames,
+            egui::Modifiers::default(),
+        )
+    }
+
+    /// [`run_moving`] with `modifiers` held through every frame.
+    fn run_holding(
+        world: &GameWorld,
+        movement: &MovementState,
+        transport: &TroopTransportState,
+        state: &mut FleetWindowState,
+        faction: CockpitFaction,
+        frames: Vec<Vec<egui::Event>>,
+        modifiers: egui::Modifiers,
+    ) -> Run {
         let ctx = egui::Context::default();
         let mut cache = BmpCache::new();
         let fog =
@@ -4674,6 +5139,7 @@ pub(crate) mod tests {
                 )),
                 time: Some(index as f64 * 0.05),
                 events,
+                modifiers,
                 ..Default::default()
             };
             PAINTED.with(|painted| painted.borrow_mut().clear());
@@ -4774,7 +5240,27 @@ pub(crate) mod tests {
         from: (f32, f32),
         to: (f32, f32),
     ) -> (Vec<FleetWindowAction>, egui::Pos2, bool) {
-        let mut state = opened(world, system);
+        drag_holding(
+            world,
+            transport,
+            (system, fleet, CockpitFaction::Alliance),
+            tab,
+            (from, to),
+            egui::Modifiers::default(),
+        )
+    }
+
+    /// [`drag_from_tab`] as `faction`, with `modifiers` held at the release.
+    fn drag_holding(
+        world: &GameWorld,
+        transport: &TroopTransportState,
+        (system, fleet, faction): (SystemKey, FleetKey, CockpitFaction),
+        tab: FleetWindowTab,
+        (from, to): ((f32, f32), (f32, f32)),
+        modifiers: egui::Modifiers,
+    ) -> (Vec<FleetWindowAction>, egui::Pos2, bool) {
+        let mut state = FleetWindowState::default();
+        assert!(state.open(world, system, ORIGIN, faction, scaled()));
         if let Some(window) = state.window_mut(system) {
             window.selected = Some(FleetWindowEntry::Fleet(fleet));
             window.tab = tab;
@@ -4785,20 +5271,16 @@ pub(crate) mod tests {
             vec![press(start, true)],
             vec![egui::Event::PointerMoved(end)],
         ]);
-        let held = run(
-            world,
-            transport,
-            &mut state,
-            CockpitFaction::Alliance,
-            frames,
-        );
+        let held = run(world, transport, &mut state, faction, frames);
         let dragging = state.is_dragging();
-        let released = run(
+        let released = run_holding(
             world,
+            &MovementState::default(),
             transport,
             &mut state,
-            CockpitFaction::Alliance,
+            faction,
             vec![vec![egui::Event::PointerMoved(end), press(end, false)]],
+            modifiers,
         );
         let mut actions = held.actions;
         actions.extend(released.actions);
@@ -4809,7 +5291,7 @@ pub(crate) mod tests {
         actions
             .iter()
             .filter_map(|action| match *action {
-                FleetWindowAction::DragRegiment { troop, point } => Some((troop, point)),
+                FleetWindowAction::DragRegiment { troop, point, .. } => Some((troop, point)),
                 _ => None,
             })
             .collect()
@@ -4826,7 +5308,9 @@ pub(crate) mod tests {
         let fleet = add_fleet(&mut world, system, true, 2);
         let troop = add_troop(&mut world, system);
         let mut transport = TroopTransportState::default();
-        transport.load(&mut world, fleet, &[troop]).unwrap();
+        transport
+            .load(&mut world, &ProductRoom::default(), fleet, &[troop])
+            .unwrap();
         (world, transport, system, fleet, troop)
     }
 
@@ -4887,7 +5371,9 @@ pub(crate) mod tests {
         let fleet = add_fleet(&mut world, system, true, 4);
         let troops: Vec<_> = (0..4).map(|_| add_troop(&mut world, system)).collect();
         let mut transport = TroopTransportState::default();
-        transport.load(&mut world, fleet, &troops).unwrap();
+        transport
+            .load(&mut world, &ProductRoom::default(), fleet, &troops)
+            .unwrap();
 
         let (actions, _, held) = drag_from_tab(
             &world,
@@ -4950,9 +5436,124 @@ pub(crate) mod tests {
                 fleet,
                 index: 0,
                 roster: fleet_join::roster(&world, fleet).unwrap(),
+                confirmed: false,
                 point: release,
             }]
         );
+    }
+
+    // FUN_00422ce0 issues a list drop as 0x202 when GetAsyncKeyState(0x11)
+    // finds Ctrl down, else 0x201, for a type 4 (Fleet window) selection
+    // (move-order.md, "A drag is a move").
+    #[test]
+    fn a_fleet_ship_regiment_or_squadron_dropped_with_ctrl_held_is_a_confirmed_move_for_either_side(
+    ) {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let is_alliance = faction == CockpitFaction::Alliance;
+            let (mut world, system) = world(ControlKind::Controlled(if is_alliance {
+                Faction::Alliance
+            } else {
+                Faction::Empire
+            }));
+            let fleet = add_fleet(&mut world, system, is_alliance, 2);
+            let troop = add_troop(&mut world, system);
+            world.troops[troop].is_alliance = is_alliance;
+            let mut transport = TroopTransportState::default();
+            transport
+                .load(&mut world, &ProductRoom::default(), fleet, &[troop])
+                .unwrap();
+            let fighters = world.fighter_classes.insert(Default::default());
+            world.fleets[fleet]
+                .fighters
+                .push(rebellion_core::world::FighterEntry {
+                    class: fighters,
+                    count: 1,
+                    carrier: 0,
+                });
+            let drop = |tab, from, modifiers| {
+                drag_holding(
+                    &world,
+                    &transport,
+                    (system, fleet, faction),
+                    tab,
+                    (from, (300.0, 200.0)),
+                    modifiers,
+                )
+                .0
+                .into_iter()
+                .filter_map(|action| match action {
+                    FleetWindowAction::DragFleet { confirmed, .. } => Some(("fleet", confirmed)),
+                    FleetWindowAction::DragShip { confirmed, .. } => Some(("ship", confirmed)),
+                    FleetWindowAction::DragRegiment { confirmed, .. } => {
+                        Some(("regiment", confirmed))
+                    }
+                    FleetWindowAction::DragSquadron { confirmed, .. } => {
+                        Some(("squadron", confirmed))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+            };
+
+            for (tab, from, unit) in [
+                (FleetWindowTab::CapitalShips, (40.0, 40.0), "fleet"),
+                (FleetWindowTab::CapitalShips, FIRST_RIGHT_ITEM, "ship"),
+                (FleetWindowTab::Troops, FIRST_RIGHT_ITEM, "regiment"),
+                (FleetWindowTab::Fighters, FIRST_RIGHT_ITEM, "squadron"),
+            ] {
+                assert_eq!(
+                    drop(tab, from, egui::Modifiers::default()),
+                    [(unit, false)],
+                    "{faction:?}"
+                );
+                assert_eq!(
+                    drop(tab, from, egui::Modifiers::CTRL),
+                    [(unit, true)],
+                    "{faction:?}"
+                );
+            }
+        }
+    }
+
+    // FUN_0042c3b0.c:412-431 stacks the side's under-construction mark on a
+    // ship not completed (+0x50 bit 2 clear); the en-route mark follows its
+    // own leg or its fleet's (+0x50 bit 4).
+    #[test]
+    fn a_ships_marks_are_its_leg_and_its_sides_under_construction_mark_for_either_side() {
+        for is_alliance in [true, false] {
+            let (mut world, system) = world(ControlKind::Controlled(if is_alliance {
+                Faction::Alliance
+            } else {
+                Faction::Empire
+            }));
+            let fleet = add_fleet(&mut world, system, is_alliance, 0);
+            let movement = MovementState::default();
+            let marks = |world: &GameWorld| ship_marks(world, &movement, fleet, 0);
+
+            assert_eq!(marks(&world), (false, None), "{is_alliance}: completed");
+            world.fleets[fleet].capital_ships[0].completed = false;
+            assert_eq!(
+                marks(&world),
+                (false, Some(is_alliance)),
+                "{is_alliance}: unfinished"
+            );
+            world.fleets[fleet].capital_ships[0].transit =
+                Some(rebellion_core::world::ShipTransit {
+                    from: system,
+                    to: system,
+                    arrival_tick: 9,
+                });
+            assert_eq!(
+                marks(&world),
+                (true, Some(is_alliance)),
+                "{is_alliance}: on its own leg"
+            );
+            assert_eq!(
+                ship_marks(&world, &movement, fleet, 3),
+                (false, None),
+                "{is_alliance}: no such ship"
+            );
+        }
     }
 
     #[test]
@@ -4977,6 +5578,7 @@ pub(crate) mod tests {
                 .collect::<Vec<_>>(),
             [&FleetWindowAction::DragFleet {
                 fleet,
+                confirmed: false,
                 point: release,
             }]
         );
@@ -5244,6 +5846,116 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_mission_released_on_a_death_star_or_regiment_row_names_it() {
+        // FUN_004a2f80: the right list's item under the point on any tab,
+        // else the left list's selected entry; a fleet entry names its
+        // fleet, which no mission object takes (move-order.md, "Hit
+        // tests").
+        for is_alliance in [true, false] {
+            let (mut world, system) = world(ControlKind::Controlled(Faction::Alliance));
+            let fleet = add_fleet(&mut world, system, is_alliance, 2);
+            let class = world.fleets[fleet].capital_ships[0].class;
+            world.capital_ship_classes[class].family = 0x18;
+            let troop = add_troop(&mut world, system);
+            world.troops[troop].is_alliance = is_alliance;
+            let mut transport = TroopTransportState::default();
+            transport
+                .load(&mut world, &ProductRoom::default(), fleet, &[troop])
+                .unwrap();
+            let mut state = opened(&world, system);
+            state.windows[0].selected = Some(FleetWindowEntry::Fleet(fleet));
+            let layer = egui::LayerId::new(egui::Order::Foreground, area_id(&state.windows[0]));
+            let release = |state: &FleetWindowState, point| {
+                state.release_object(
+                    &world,
+                    &rebellion_core::movement::MovementState::default(),
+                    &fog(system),
+                    &transport,
+                    scaled(),
+                    layer,
+                    point,
+                )
+            };
+
+            assert_eq!(
+                release(&state, at(150.0, 140.0)),
+                Some(MissionTarget::CapitalShip(
+                    world.fleets[fleet].capital_ships[0].tag
+                )),
+                "{is_alliance}"
+            );
+            assert_eq!(release(&state, at(60.0, 40.0)), None);
+            state.windows[0].tab = FleetWindowTab::Troops;
+            assert_eq!(
+                release(&state, at(150.0, 140.0)),
+                Some(MissionTarget::Troop(troop))
+            );
+            assert_eq!(release(&state, at(150.0, 280.0)), None);
+            // port: a ship with no tag yet has no identity to name.
+            state.windows[0].tab = FleetWindowTab::CapitalShips;
+            world.fleets[fleet].capital_ships[0].tag = 0;
+            assert_eq!(
+                state.release_object(
+                    &world,
+                    &rebellion_core::movement::MovementState::default(),
+                    &fog(system),
+                    &transport,
+                    scaled(),
+                    layer,
+                    at(150.0, 140.0),
+                ),
+                None,
+                "{is_alliance}"
+            );
+        }
+    }
+
+    // FUN_0042c3b0.c:412-431: an object whose +0x50 bit 2 is clear takes
+    // STRATEGY 11570 (side bits 0x40, the Alliance) or 11572, its portrait
+    // 11571 or 11573, after the en route and damage marks and before its own
+    // bitmap (:442). The route-1 Empire save, its day-123 Death Star played
+    // on: the Fleet window lists the unfinished Death Star over a green grid.
+    #[test]
+    fn an_unfinished_ships_mini_and_portrait_stack_their_sides_under_construction_mark_for_either_side(
+    ) {
+        for (is_alliance, mini_mark, portrait_mark) in
+            [(true, 11_570, 11_571), (false, 11_572, 11_573)]
+        {
+            assert_eq!(
+                mini_layers(MiniObject::Craft, 18_312, false, Some(is_alliance)),
+                [
+                    (DllSource::Strategy, mini_mark),
+                    (DllSource::Gokres, 18_312)
+                ],
+                "{is_alliance}"
+            );
+            assert_eq!(
+                mini_layers(MiniObject::Craft, 18_312, true, Some(is_alliance)),
+                [
+                    (DllSource::Gokres, 18_312 + 0x1000),
+                    (DllSource::Strategy, mini_mark),
+                    (DllSource::Gokres, 18_312)
+                ],
+                "{is_alliance}"
+            );
+            assert_eq!(
+                portrait_layers(MiniObject::Craft, 1_928, false, true, Some(is_alliance)),
+                [
+                    (DllSource::Gokres, 1_928 + 0x2000),
+                    (DllSource::Strategy, portrait_mark),
+                    (DllSource::Gokres, 1_928)
+                ],
+                "{is_alliance}"
+            );
+            assert_eq!(
+                mini_layers(MiniObject::Craft, 18_312, false, None),
+                [(DllSource::Gokres, 18_312)],
+                "{is_alliance}: a completed ship"
+            );
+        }
+    }
+
+    #[test]
     fn opening_a_window_for_the_other_side_closes_the_first_sides_windows() {
         // port: the port keeps one player's windows at a time.
         let (world, system) = world(ControlKind::Uncontrolled);
@@ -5262,7 +5974,9 @@ pub(crate) mod tests {
         let fleet = add_fleet(&mut world, system, true, 2);
         let troop = add_troop(&mut world, system);
         let mut transport = TroopTransportState::default();
-        transport.load(&mut world, fleet, &[troop]).unwrap();
+        transport
+            .load(&mut world, &ProductRoom::default(), fleet, &[troop])
+            .unwrap();
         let mut state = opened(&world, system);
 
         let selected = run(
@@ -5451,7 +6165,9 @@ pub(crate) mod tests {
             let fleet = add_fleet(&mut world, system, true, 2);
             let troop = add_troop(&mut world, system);
             let mut transport = TroopTransportState::default();
-            transport.load(&mut world, fleet, &[troop]).unwrap();
+            transport
+                .load(&mut world, &ProductRoom::default(), fleet, &[troop])
+                .unwrap();
             let mut state = FleetWindowState::default();
             assert!(state.open(&world, system, ORIGIN, faction, scaled()));
             if let Some(window) = state.window_mut(system) {
@@ -5642,6 +6358,40 @@ pub(crate) mod tests {
         assert_eq!(mark(force(0x3c00_0001)), (DllSource::Strategy, 11_501));
     }
 
+    #[test]
+    fn each_kind_of_portrait_takes_its_own_en_route_mark() {
+        // FUN_0042c3b0(.., 1, 1): GOKRES (class & 0xfff) + 0x1000 by
+        // default, kept for the same classes as on the mini; 0x2cfc (11516)
+        // for other regiments, 0x2d00 (11520) for other special forces, and
+        // none for characters (0x2ced + 0xffffd313 wraps to 0).
+        let mark = |object| portrait_en_route_mark(object, 1_089);
+        let own = Some((DllSource::Gokres, 5_185));
+        let regiment = |raw| MiniObject::Regiment(DatId::new(raw));
+        let force = |raw| MiniObject::SpecialForce(DatId::new(raw));
+        assert_eq!(mark(MiniObject::Craft), own);
+        assert_eq!(mark(regiment(0x1000_0002)), own);
+        assert_eq!(mark(regiment(0x1000_0008)), own);
+        assert_eq!(
+            mark(regiment(0x1000_0001)),
+            Some((DllSource::Strategy, 11_516))
+        );
+        assert_eq!(mark(MiniObject::Character), None);
+        assert_eq!(mark(force(0x3c00_0003)), own);
+        assert_eq!(mark(force(0x3c00_0005)), own);
+        assert_eq!(
+            mark(force(0x3c00_0001)),
+            Some((DllSource::Strategy, 11_520))
+        );
+        // A character's or special force's burn marks wrap to 0 the same
+        // way (0x2cee + 0xffffd312, FUN_0042c3b0.c:367).
+        for object in [MiniObject::Character, force(0x3c00_0001)] {
+            assert_eq!(
+                portrait_layers(object, 1_089, false, true, None),
+                [(DllSource::Gokres, 1_089)]
+            );
+        }
+    }
+
     fn key(key: egui::Key) -> egui::Event {
         egui::Event::Key {
             key,
@@ -5739,6 +6489,8 @@ pub(crate) mod tests {
                 &snapshot,
                 &[],
                 &mut router,
+                true,
+                &|_| true,
             );
         });
         (actions, router, keyboard_events)
@@ -6376,6 +7128,27 @@ pub(crate) mod tests {
         );
         assert!(renames(&run_escape.actions).is_empty());
         assert!(!state.renaming());
+        assert!(
+            state.is_open(system),
+            "the edit's Escape leaves the window open"
+        );
+    }
+
+    #[test]
+    fn escape_closes_the_focused_fleet_window() {
+        // fleet-window.md, the window procedure's controls: the close button
+        // 0x65 and Escape both run slot +0x30 (FUN_004a7390 ->
+        // FUN_004ac3a0).
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, system) = world(ControlKind::Uncontrolled);
+            let transport = TroopTransportState::default();
+            let mut state = FleetWindowState::default();
+            assert!(state.open(&world, system, ORIGIN, faction, scaled()));
+            let mut frames = hover(at(-50.0, 0.0));
+            frames.push(vec![key(egui::Key::Escape)]);
+            let _ = run(&world, &transport, &mut state, faction, frames);
+            assert!(!state.is_open(system), "{faction:?}");
+        }
     }
 
     #[test]
@@ -6420,7 +7193,9 @@ pub(crate) mod tests {
             .collect();
         let troops: Vec<_> = (0..5).map(|_| add_troop(&mut world, system)).collect();
         let mut transport = TroopTransportState::default();
-        transport.load(&mut world, fleets[0], &troops).unwrap();
+        transport
+            .load(&mut world, &ProductRoom::default(), fleets[0], &troops)
+            .unwrap();
         let mut state = opened(&world, system);
         if let Some(window) = state.window_mut(system) {
             window.selected = Some(FleetWindowEntry::Fleet(fleets[0]));
@@ -6556,12 +7331,14 @@ pub(crate) mod tests {
         let mut transport = TroopTransportState::default();
         assert!(fleet_indicators(&world, &transport, fleet).is_empty());
         let fighters = world.fighter_classes.insert(Default::default());
+        // The squadron rides the fleet's ship (FUN_005039d0).
+        let carrier = carriage::tag_ship(&mut world, fleet, 0).unwrap();
         world.fleets[fleet]
             .fighters
             .push(rebellion_core::world::FighterEntry {
                 class: fighters,
                 count: 1,
-                carrier: 0,
+                carrier,
             });
         let character = world.characters.insert(Default::default());
         world.fleets[fleet].characters.push(character);
@@ -6573,7 +7350,9 @@ pub(crate) mod tests {
         );
         world.capital_ship_classes[class].troop_capacity = 2;
         let troop = add_troop(&mut world, system);
-        transport.embark(&mut world, fleet, &[troop]).unwrap();
+        transport
+            .embark(&mut world, &ProductRoom::default(), fleet, &[troop])
+            .unwrap();
         assert!(fleet_indicators(&world, &transport, fleet).contains(&(10405, 41.0)));
     }
 
@@ -6593,7 +7372,9 @@ pub(crate) mod tests {
         let fighters = world.fighter_classes.insert(Default::default());
         let character = world.characters.insert(Default::default());
         world.fleets[fleet].characters.push(character);
-        rebellion_core::carriage::board_squadrons(&mut world, fleet, fighters, 1);
+        // Both ships have room for two; the earlier one wins the tie.
+        let tag = rebellion_core::carriage::tag_ship(&mut world, fleet, 0).unwrap();
+        rebellion_core::carriage::board_squadron(&mut world, fleet, fighters, tag);
         let transport = TroopTransportState::default();
 
         assert_eq!(carriage::ship_flags(&world, &transport, fleet, 0), 1 | 4);
@@ -6730,6 +7511,98 @@ pub(crate) mod tests {
                 (side, 1),
                 "{player:?}"
             );
+        }
+    }
+
+    #[test]
+    fn an_accepted_activation_puts_a_fleet_window_on_top_of_the_galaxys_z_order() {
+        // FUN_00422ce0 0x467 raises the window it activates above every
+        // child of the view, whatever its kind.
+        let (mut world, first_system) = world(ControlKind::Controlled(Faction::Alliance));
+        let second_system = add_system(&mut world, first_system, 101);
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut manager = WindowManager::new();
+            let mut state = FleetWindowState::default();
+            let mut open = |state: &mut FleetWindowState, system| {
+                let prepared = state
+                    .prepare_open(&world, system, ORIGIN, faction, scaled(), None)
+                    .unwrap();
+                commit_prepared_fleet_window(&mut manager, state, prepared).0
+            };
+            let first = open(&mut state, first_system);
+            let second = open(&mut state, second_system);
+            assert_eq!(manager.begin_frame().paint_order().last(), Some(&second));
+            manager.apply(WindowCommand::Activate(first)).unwrap();
+            assert_eq!(manager.begin_frame().paint_order().last(), Some(&first));
+            manager.apply(WindowCommand::Activate(second)).unwrap();
+            state.remove_content(&[first]);
+            assert_eq!(manager.begin_frame().paint_order().last(), Some(&second));
+        }
+    }
+
+    /// Press at `from`, move to `to` with the button held, and release.
+    fn title_drag(from: egui::Pos2, to: egui::Pos2) -> Vec<Vec<egui::Event>> {
+        let mut frames = hover(from);
+        frames.extend([
+            vec![press(from, true)],
+            vec![egui::Event::PointerMoved(from.lerp(to, 0.5))],
+            vec![egui::Event::PointerMoved(to)],
+            vec![press(to, false)],
+            vec![egui::Event::PointerMoved(to + egui::vec2(30.0, 30.0))],
+        ]);
+        frames
+    }
+
+    #[test]
+    fn a_drag_on_the_title_moves_the_window_by_the_pointers_travel_for_either_side() {
+        // FUN_004a2630 sets the movable bit (+0xb8 | 4); FUN_00606ee0 takes
+        // hold, FUN_006071e0 places the window live and FUN_00607010 lets go.
+        let (world, system) = world(ControlKind::Controlled(Faction::Alliance));
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut state = FleetWindowState::default();
+            assert!(state.open(&world, system, ORIGIN, faction, scaled()));
+            let _ = run(
+                &world,
+                &TroopTransportState::default(),
+                &mut state,
+                faction,
+                title_drag(at(100.0, 9.0), at(70.0, 39.0)),
+            );
+            assert_eq!(
+                state.window_logical_position(system),
+                Some((ORIGIN.0 - 30, ORIGIN.1 + 30)),
+                "{faction:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_press_on_the_windows_bare_surface_drags_it_but_not_on_its_lists_or_tabs() {
+        // FUN_004a29c0 passes every press on the window to the base
+        // (FUN_00606ee0); the two lists (with their bars), the tab strip and
+        // the title buttons are controls of their own.
+        let (world, system) = world(ControlKind::Controlled(Faction::Alliance));
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let moves = |from: (f32, f32)| {
+                let mut state = FleetWindowState::default();
+                assert!(state.open(&world, system, ORIGIN, faction, scaled()));
+                let start = at(from.0, from.1);
+                let _ = run(
+                    &world,
+                    &TroopTransportState::default(),
+                    &mut state,
+                    faction,
+                    title_drag(start, start + egui::vec2(40.0, 40.0)),
+                );
+                let moved = state.window_logical_position(system).unwrap();
+                assert!(moved == ORIGIN || moved == (ORIGIN.0 + 20, ORIGIN.1 + 20));
+                moved != ORIGIN
+            };
+            assert!(moves((160.0, 60.0)), "{faction:?}: picture panel");
+            assert!(!moves((50.0, 150.0)), "{faction:?}: left list");
+            assert!(!moves((160.0, 200.0)), "{faction:?}: right list");
+            assert!(!moves((150.0, 105.0)), "{faction:?}: tab strip");
+            assert!(!moves((210.0, 9.0)), "{faction:?}: minimize");
         }
     }
 }

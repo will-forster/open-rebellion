@@ -5,6 +5,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use egui_macroquad::egui;
 use rebellion_windowing::{FocusTarget, RoutingSnapshot, WindowId};
 
+/// A presentation-family key for cockpit rules that refer to a saved child
+/// window. Identity, visibility, focus, and order remain manager-owned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GalaxyChild {
+    Fleet(WindowId),
+    Sector(rebellion_core::ids::SectorKey),
+    System(rebellion_core::ids::SystemKey),
+    Defenses(rebellion_core::ids::SystemKey),
+    Missions(rebellion_core::ids::SystemKey),
+}
+
 /// Stable, rank-independent child identity used by the managed host.
 #[must_use]
 pub fn managed_child_id(window: WindowId) -> egui::Id {

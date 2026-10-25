@@ -19,7 +19,7 @@ const site = process.env.OPEN_REBELLION_INTERFACE_TEST_SITE
   || path.join(root, ".artifacts/interface-parity/site");
 const source = path.join(root, "data/base/ui/strategy-dll/BMP");
 const executable = process.env.OPEN_REBELLION_CHROME_FOR_TESTING || chromium.executablePath();
-const launchArguments = ["--mute-audio", "--disable-background-networking", "--no-first-run"];
+const launchArguments = ["--mute-audio", "--disable-audio-output", "--disable-background-networking", "--no-first-run"];
 const expectedRequests = ["/", "/data/runtime.orpk", "/gl.js", "/open-rebellion-test.wasm"];
 const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${process.pid}`;
 const runDir = path.join(root, ".artifacts/interface-parity", `encyclopedia-surface-${runId}`);

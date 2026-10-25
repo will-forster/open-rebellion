@@ -1,3 +1,4 @@
+mod assault_orders;
 mod audio;
 #[cfg(not(target_arch = "wasm32"))]
 mod dev_actions;
@@ -22,9 +23,11 @@ mod encyclopedia_surface;
     )
 )]
 mod interface_test_fixture;
+mod movies;
 #[cfg(any(target_arch = "wasm32", test))]
 mod runtime_pack;
 mod strategic_windowing;
+mod strike_orders;
 mod tactical_flow;
 #[cfg(any(test, all(target_arch = "wasm32", feature = "interface-test-fixtures")))]
 #[cfg_attr(
@@ -44,17 +47,16 @@ use ::rand::Rng;
 use ::rand::SeedableRng;
 use macroquad::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use rebellion_core::agent_automation::{AutomationModule, PlayerAgent};
 use rebellion_core::ai::{AIAction, AIState, AiFaction, FleetMoveReason};
 use rebellion_core::betrayal::{BetrayalState, BetrayalSystem};
 use rebellion_core::blockade::{BlockadeState, BlockadeSystem};
-use rebellion_core::bombardment::BombardmentSystem;
+use rebellion_core::carriage::ProductRoom;
 use rebellion_core::combat::{side_present, CombatForce, CombatSide};
 use rebellion_core::dat::Faction;
-use rebellion_core::death_star::{DeathStarState, DeathStarSystem};
 use rebellion_core::delivery::DeliveryState;
 use rebellion_core::economy::{EconomyEvent, EconomyState, EconomySystem};
 use rebellion_core::events::{EventAction, EventState, EventSystem};
@@ -67,10 +69,9 @@ use rebellion_core::missions::{
     MissionEffect, MissionFaction, MissionKind, MissionMember, MissionState, MissionSystem,
 };
 use rebellion_core::movement::{
-    apply_fleet_arrival, begin_faction_fleet_transit, begin_fleet_transit, fleet_move_confirms,
-    fleet_move_enabled, fleet_transit_ticks, fleets_move_enabled, reconcile_fleet_orbits,
-    system_side_fleets, validate_fleet_dispatch, validate_fleets_dispatch, MovementState,
-    MovementSystem,
+    apply_fleet_arrival, begin_faction_fleet_transit, fleet_move_confirms, fleet_move_enabled,
+    fleet_transit_ticks, fleets_move_enabled, reconcile_fleet_orbits, system_side_fleets,
+    validate_fleet_dispatch, validate_fleets_dispatch, MovementState, MovementSystem,
 };
 use rebellion_core::repair::{RepairState, RepairSystem};
 use rebellion_core::research::{ResearchState, ResearchSystem};
@@ -111,17 +112,19 @@ use rebellion_render::mission_dialog::{
 };
 use rebellion_render::missions_window::{draw_managed_missions_windows, PreparedMissionsWindow};
 use rebellion_render::move_confirmation::{
-    draw_move_confirmation, draw_scrap_confirmation, MoveConfirmation, MoveConfirmationAction,
-    MoveConfirmationState, PreparedMoveConfirmation, PreparedMoveConfirmationConfirm,
-    PreparedScrapConfirmation, PreparedScrapConfirmationConfirm, ScrapConfirmation,
-    ScrapConfirmationAction, ScrapConfirmationState,
+    draw_move_confirmation, draw_scrap_confirmation, draw_stop_confirmation, MoveConfirmation,
+    MoveConfirmationAction, MoveConfirmationState, PreparedMoveConfirmation,
+    PreparedMoveConfirmationConfirm, PreparedScrapConfirmation, PreparedScrapConfirmationConfirm,
+    ScrapConfirmation, ScrapConfirmationAction, ScrapConfirmationState, StopConfirmation,
+    StopConfirmationAction, StopConfirmationState, UnitMover,
 };
 use rebellion_render::object_menu::{
     draw_owned_object_menu, object_menu_rects, CommandGates, MenuObject, ObjectMenuCommand,
     ObjectMenuState, OrderGates,
 };
-use rebellion_render::panels::bombardment::{draw_bombardment, BombardmentPanelState};
-use rebellion_render::panels::death_star::draw_death_star;
+use rebellion_render::operation_report::{
+    draw_operation_report, OperationReportAction, OperationReportState,
+};
 use rebellion_render::personnel_finder::{
     draw_personnel_finder_focused, ManagedPersonnelFinderAction, PersonnelFinderAction,
     PersonnelFinderState, PERSONNEL_FINDER_LIST_CONTROL, PERSONNEL_FINDER_NAME_CONTROL,
@@ -150,20 +153,19 @@ use rebellion_render::windowing_input::{
 };
 #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
 use rebellion_render::EncyclopediaState;
+use rebellion_render::GalaxyChild;
 #[cfg(any(debug_assertions, not(target_arch = "wasm32")))]
 use rebellion_render::InterfaceCommand;
 use rebellion_render::MdataTrack;
 use rebellion_render::{
-    cockpit_accelerator, draw_advisor, draw_audio_controls, draw_cockpit_background,
-    draw_cockpit_chrome, draw_cockpit_egui_layer, draw_credits, draw_fleets, draw_galaxy_backdrop,
-    draw_galaxy_map, draw_game_options, draw_game_setup, draw_ground_combat, draw_main_menu,
-    draw_missions, draw_multiplayer_setup, draw_save_load, draw_tactical_view,
+    cockpit_accelerator, draw_advisor, draw_cockpit_background, draw_cockpit_chrome,
+    draw_cockpit_egui_layer, draw_fleets, draw_galaxy_backdrop, draw_galaxy_map, draw_game_options,
+    draw_game_setup, draw_main_menu, draw_missions, draw_multiplayer_setup, draw_tactical_view,
     handle_cockpit_egui_input, set_cockpit_viewport_clip, update_galaxy_map_input, AdvisorFaction,
     AdvisorState, AssetRenderProfile, AudioVolumeState, BmpCache, CockpitButton, CockpitFaction,
-    CockpitState, CreditsState, FleetsState, GalaxyMapState, GameMessage, GameOptionsAction,
-    GameOptionsOrigin, GameOptionsState, GameSetupAction, GameSetupState, GroundAction,
-    GroundCombatState, MainMenuAction, MainMenuState, MenuDestinationAction, MessageCategory,
-    MessageDisplay, MessageLog, MessageLogState, MessageRail, MessageTarget,
+    CockpitState, FleetsState, GalaxyMapState, GameMessage, GameOptionsAction, GameOptionsOrigin,
+    GameOptionsState, GameSetupAction, GameSetupState, MainMenuAction, MainMenuState,
+    MessageCategory, MessageDisplay, MessageLog, MessageLogState, MessageRail, MessageTarget,
     MultiplayerSetupAction, MultiplayerSetupState, OriginalEncyclopediaCatalog,
     OriginalEncyclopediaEntry, PanelAction, RailAudience, SectorWindowAction, SectorWindowState,
     SystemWindowAction, SystemWindowState, TacticalAction, TacticalState, TacticalTrenchRunOutcome,
@@ -175,8 +177,8 @@ use rebellion_render::{MissionsWindowAction, MissionsWindowState};
 #[cfg(not(target_arch = "wasm32"))]
 use rebellion_render::{MusicSelector, SfxKind};
 use strategic_windowing::{
-    ApplicationInputLocks, CommittedTacticalPhase, StrategicWindowing, TacticalWindowIdentity,
-    WindowScene,
+    ApplicationInputLocks, CommittedTacticalPhase, LegacyInputBlockers,
+    LegacyInputRestrictionLatch, StrategicWindowing, TacticalWindowIdentity, WindowScene,
 };
 
 /// Top-level game mode state machine.
@@ -189,10 +191,6 @@ enum GameMode {
     Cutscene { kind: CutsceneKind },
     /// Title screen: New Game / Load Game / Quit.
     MainMenu,
-    /// Save-slot picker entered from the main menu.
-    LoadGame,
-    /// Scrolling original-game and Open Rebellion credits.
-    Credits,
     /// Historical head-to-head setup destination.
     MultiplayerSetup,
     /// Campaign configuration: galaxy size, difficulty, faction.
@@ -203,10 +201,6 @@ enum GameMode {
     GameOptions { origin: GameOptionsOrigin },
     /// 2D tactical combat view for player-involved battles.
     TacticalCombat,
-    /// Ground combat phase after space combat.
-    GroundCombat,
-    /// Victory/defeat modal overlay on the frozen galaxy map.
-    VictoryModal { alliance_won: bool },
 }
 
 /// The screens music follows (`ghidra/notes/audio-dispatch.md`, "Music"):
@@ -225,15 +219,10 @@ enum MusicScene {
 #[cfg(not(target_arch = "wasm32"))]
 const fn music_scene(mode: &GameMode) -> Option<MusicScene> {
     match mode {
-        GameMode::MainMenu
-        | GameMode::LoadGame
-        | GameMode::Credits
-        | GameMode::MultiplayerSetup
-        | GameMode::GameSetup => Some(MusicScene::Menu),
-        GameMode::Galaxy
-        | GameMode::TacticalCombat
-        | GameMode::GroundCombat
-        | GameMode::VictoryModal { .. } => Some(MusicScene::Play),
+        GameMode::MainMenu | GameMode::MultiplayerSetup | GameMode::GameSetup => {
+            Some(MusicScene::Menu)
+        }
+        GameMode::Galaxy | GameMode::TacticalCombat => Some(MusicScene::Play),
         GameMode::Cutscene { .. } => Some(MusicScene::Movie),
         GameMode::GameOptions { .. } => None,
     }
@@ -242,17 +231,123 @@ const fn music_scene(mode: &GameMode) -> Option<MusicScene> {
 /// Which cutscene is playing — determines post-cutscene transition.
 #[derive(Debug, Clone, PartialEq)]
 enum CutsceneKind {
-    /// Game intro (000.webm) → `MainMenu`.
-    Intro,
+    /// A movie the application window plays outside a game (`FUN_004146e0`):
+    /// the intro `0x65` and `0x66`, the side's start movie `0x68`/`0x69`, an
+    /// ending `0x6a`-`0x6d` (`FUN_00414830`), or the Credits movie `0x6e`
+    /// (`FUN_00406000`).
+    Application(u8),
     /// Death Star trench-run result (201/202.webm) → resume tactical view.
     TrenchRun(TacticalTrenchRunOutcome),
-    /// In-game story cutscene (101–108.webm) → resume Galaxy.
-    Story(u32),
+    /// A kind-6 game message's movie and caption → resume Galaxy
+    /// (`FUN_00422ce0`, `0x402`).
+    Message(movies::MessageMovie),
 }
 
-const INTRO_CUTSCENE: &str = "assets/references/ref-videos/000.webm";
-const TRENCH_RUN_SUCCESS_CUTSCENE: &str = "assets/references/ref-videos/201.webm";
-const TRENCH_RUN_FAILURE_CUTSCENE: &str = "assets/references/ref-videos/202.webm";
+impl CutsceneKind {
+    /// The original's movie id (`ghidra/notes/movies.md`).
+    const fn movie(&self) -> u8 {
+        match self {
+            Self::Application(movie) => *movie,
+            Self::TrenchRun(TacticalTrenchRunOutcome::Success) => 0x71,
+            Self::TrenchRun(TacticalTrenchRunOutcome::Failure) => 0x70,
+            Self::Message(message) => message.movie,
+        }
+    }
+
+    /// The mode once this movie ends (`movies::after_movie`): the next
+    /// state's movie when `open` opens it, the main menu, the command center,
+    /// or the window the movie played over (`0x402` to the child window).
+    fn ended(&self, side: Faction, open: impl FnMut(u8) -> bool) -> GameMode {
+        match movies::after_movie(self.movie(), side, open) {
+            movies::Scene::Movie(next) => GameMode::Cutscene {
+                kind: Self::Application(next),
+            },
+            movies::Scene::MainMenu => GameMode::MainMenu,
+            movies::Scene::Game => GameMode::Galaxy,
+            movies::Scene::Child => match self {
+                Self::TrenchRun(_) => GameMode::TacticalCombat,
+                Self::Message(_) => GameMode::Galaxy,
+                // The Credits movie's callback repaints the menu
+                // (FUN_00406520).
+                Self::Application(_) => GameMode::MainMenu,
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod movie_end_tests {
+    use super::*;
+
+    const SIDES: [Faction; 2] = [Faction::Alliance, Faction::Empire];
+
+    fn cutscene(movie: u8) -> GameMode {
+        GameMode::Cutscene {
+            kind: CutsceneKind::Application(movie),
+        }
+    }
+
+    #[test]
+    fn the_intro_chains_into_0x66_then_the_main_menu() {
+        // FUN_004138a0 0x405: 0x65 enters state 2 (FUN_00414830 plays 0x66);
+        // 0x66 enters state 3, the menu; a 0x66 that cannot open ends at once.
+        for side in SIDES {
+            let intro = CutsceneKind::Application(0x65);
+            assert_eq!(intro.ended(side, |_| true), cutscene(0x66));
+            assert_eq!(intro.ended(side, |_| false), GameMode::MainMenu);
+            assert_eq!(
+                CutsceneKind::Application(0x66).ended(side, |_| true),
+                GameMode::MainMenu
+            );
+        }
+    }
+
+    #[test]
+    fn the_sides_start_movie_ends_in_the_command_center() {
+        // FUN_004138a0 0x405: 0x68 and 0x69 enter state 8 (FUN_00414eb0).
+        for (side, movie) in [(Faction::Alliance, 0x68), (Faction::Empire, 0x69)] {
+            assert_eq!(movies::side_movie(side), movie);
+            assert_eq!(
+                CutsceneKind::Application(movie).ended(side, |_| true),
+                GameMode::Galaxy
+            );
+        }
+    }
+
+    #[test]
+    fn the_credits_movie_returns_to_the_main_menu_and_the_others_to_their_window() {
+        // FUN_004138a0 0x405 posts 0x402 to the child for 0x6e-0x74: the
+        // Credits callback repaints the menu (FUN_00406520), the strategic
+        // window resumes (FUN_00422ce0), the tactical view resumes.
+        for side in SIDES {
+            assert_eq!(
+                CutsceneKind::Application(movies::CREDITS).ended(side, |_| true),
+                GameMode::MainMenu
+            );
+            let message = CutsceneKind::Message(movies::MessageMovie {
+                movie: movies::CORUSCANT_CAPTURED,
+                caption: String::new(),
+            });
+            assert_eq!(message.ended(side, |_| true), GameMode::Galaxy);
+            for outcome in [
+                TacticalTrenchRunOutcome::Success,
+                TacticalTrenchRunOutcome::Failure,
+            ] {
+                assert_eq!(
+                    CutsceneKind::TrenchRun(outcome).ended(side, |_| true),
+                    GameMode::TacticalCombat
+                );
+            }
+            for ending in 0x6a..=0x6d {
+                assert_eq!(
+                    CutsceneKind::Application(ending).ended(side, |_| true),
+                    GameMode::MainMenu
+                );
+            }
+        }
+    }
+}
+
 /// How many frames a developer command waits for the galaxy view before it
 /// is refused (about 10 s at 60 fps). Frames rather than wall time, so a
 /// covered window that macOS throttles does not use up the wait between two
@@ -282,7 +377,6 @@ fn story_cutscene_path(number: u32) -> String {
 }
 
 const APP_WINDOW_TITLE: &str = "Open Rebellion — Star Wars Rebellion";
-
 fn window_conf() -> Conf {
     Conf {
         window_title: APP_WINDOW_TITLE.to_owned(),
@@ -407,6 +501,10 @@ fn prepare_encyclopedia_hd_snapshot(
     prepared
 }
 
+// The save layer's slots are the Game Options window's rows.
+const _: () =
+    assert!(rebellion_data::save::MAX_SAVE_SLOTS == rebellion_render::game_options::SAVE_ROWS);
+
 fn read_save_slots(saves_dir: &Path) -> Vec<rebellion_render::SaveSlotInfo> {
     let mut slots: Vec<_> = rebellion_data::save::list_saves(saves_dir)
         .into_iter()
@@ -414,14 +512,6 @@ fn read_save_slots(saves_dir: &Path) -> Vec<rebellion_render::SaveSlotInfo> {
         .map(|meta| rebellion_render::SaveSlotInfo {
             slot: meta.slot,
             name: meta.name,
-            timestamp: if meta.timestamp_secs == 0 {
-                "Browser save".to_string()
-            } else {
-                let hours = (meta.timestamp_secs / 3600) % 24;
-                let minutes = (meta.timestamp_secs / 60) % 60;
-                format!("{hours:02}:{minutes:02}")
-            },
-            game_tick: meta.game_tick,
             player_is_alliance: meta.player_is_alliance,
         })
         .collect();
@@ -432,8 +522,6 @@ fn read_save_slots(saves_dir: &Path) -> Vec<rebellion_render::SaveSlotInfo> {
             slots.push(rebellion_render::SaveSlotInfo {
                 slot,
                 name: "Unreadable save".into(),
-                timestamp: "Load to inspect error".into(),
-                game_tick: 0,
                 player_is_alliance: None,
             });
         }
@@ -455,7 +543,6 @@ struct LiveCampaign<'a> {
     player_faction: &'a mut MissionFaction,
     blockade: &'a mut BlockadeState,
     uprising: &'a mut UprisingState,
-    death_star: &'a mut DeathStarState,
     research: &'a mut ResearchState,
     jedi: &'a mut JediState,
     victory: &'a mut VictoryState,
@@ -487,7 +574,6 @@ impl LiveCampaign<'_> {
             player_is_alliance: *self.player_faction == MissionFaction::Alliance,
             blockade: self.blockade.clone(),
             uprising: self.uprising.clone(),
-            death_star: self.death_star.clone(),
             research: self.research.clone(),
             jedi: self.jedi.clone(),
             victory: self.victory.clone(),
@@ -522,7 +608,6 @@ impl LiveCampaign<'_> {
         };
         *self.blockade = state.blockade;
         *self.uprising = state.uprising;
-        *self.death_star = state.death_star;
         *self.research = state.research;
         *self.jedi = state.jedi;
         *self.victory = state.victory;
@@ -539,8 +624,117 @@ impl LiveCampaign<'_> {
         *self.stockpiles = state.stockpiles;
         // Bit 11 is derived, not saved: rebuild it before an in-day AI round
         // or a panel action reads it.
-        rebellion_core::death_star::refresh_sectors(self.world, self.movement);
+        rebellion_core::death_star::refresh_sectors(self.world);
     }
+}
+
+/// The advisor of a loaded game, whose saved win `word` the load restores.
+/// The original's save holds the advisor's slot table (`FUN_004397a0`,
+/// `FUN_00439550`: `+0x164` count, `+0x168` stamps), so a game saved after GO
+/// comes back with its ending slot stamped; the port saves the word and
+/// stamps the slot again (`FUN_004c3010`, `FUN_004c0f10`). The strategic
+/// window is built anew (`FUN_00421c70` zeroes `+0xac`), so the clock runs
+/// until the ending.
+fn resume_saved_advisor(advisor: &mut AdvisorState, faction: AdvisorFaction, word: u32) {
+    advisor.resume_saved_game(faction);
+    advisor.post_word(word);
+}
+
+/// The status a refused regiment or squadron Move (`0x201`) hands the
+/// side's advisor, which shows no text but reacts (`FUN_00487c90`,
+/// `mission-dialog.md`, "Refusal"): en route `1`/`1` (`FUN_004f9860`),
+/// another side's destination `1`/`0x28` (`FUN_0053d430`), a destroyed
+/// planet `1`/`0x22` and a blockaded one `0x90`/4 (`FUN_005073d0`), a fleet
+/// in hyperspace `1`/`0x21` (`FUN_00553410`) and no room `1`/`0x27`
+/// (`FUN_00552300`; `regiment-unload.md`). port: `None` for the port's own
+/// checks of a selection gone stale, which the original's menu never offers.
+fn transport_refusal_status(
+    error: rebellion_core::troop_transport::TroopTransportError,
+) -> Option<rebellion_render::advisor_script::RefusalStatus> {
+    use rebellion_core::troop_transport::TroopTransportError as E;
+    match error {
+        E::RegimentEnRoute | E::SquadronEnRoute => Some((1, 1)),
+        E::OtherSideDestination | E::WrongFaction => Some((1, 0x28)),
+        E::DestinationDestroyed => Some((1, 0x22)),
+        E::DestinationBlockaded => Some((0x90, 4)),
+        E::DestinationInTransit => Some((1, 0x21)),
+        E::CapacityExceeded { .. } | E::NoSquadronRoom => Some((1, 0x27)),
+        E::MissingFleet
+        | E::MissingSystem
+        | E::NoTroops
+        | E::MissingTroop
+        | E::TroopNotAtFleetSystem
+        | E::AlreadyEmbarked
+        | E::FleetNotAtDestination
+        | E::MissingSquadron => None,
+    }
+}
+
+/// The status a refused fleet Move (`0x201`) hands the side's advisor
+/// (`FUN_00487c90`; `move-order.md`): an object or destination that does
+/// not resolve `1`/`0x12`, `1`/`0x22` (`FUN_00578d00`); another side's or an
+/// en-route fleet `1`/`1` (`FUN_004fdc70` → `FUN_004f9860`); no hyperdrive
+/// `1`/`0x18` (`FUN_00555920` → `FUN_004fd900`); a blockaded system drag
+/// `1`/`1` (`FUN_00552210` → `FUN_005287f0`); a second Death Star `0x90`/3
+/// (`FUN_00507ab0`). port: `None` for the port's own origin and same-system
+/// checks.
+fn fleet_dispatch_refusal_status(
+    error: rebellion_core::movement::FleetDispatchError,
+) -> Option<rebellion_render::advisor_script::RefusalStatus> {
+    use rebellion_core::movement::FleetDispatchError as E;
+    match error {
+        E::MissingFleet => Some((1, 0x12)),
+        E::MissingDestination => Some((1, 0x22)),
+        E::WrongFaction | E::AlreadyInTransit | E::Blockaded => Some((1, 1)),
+        E::NoHyperdrive => Some((1, 0x18)),
+        E::DeathStarRoom => Some((0x90, 3)),
+        E::MissingOrigin | E::AlreadyAtDestination => None,
+    }
+}
+
+/// The status a refused join, Create Fleet or ship Move hands the side's
+/// advisor (`FUN_00487c90`; `fleet-join-split.md`): an object that does not
+/// resolve `1`/`0x12` (`FUN_00578c00`); another side's or an en-route mover
+/// `1`/`1` (`FUN_004f9860`), and an unfinished ship of a Create Fleet `1`/`2`
+/// (`FUN_004f9860.c:45-50`); a move into itself `1`/`0x26` (`FUN_00553aa0`);
+/// another side's fleet `1`/`0x24`, its first test, and one en route
+/// `1`/`0x21` (`FUN_00553410`); a departure's refusal as a fleet Move's.
+/// port: `None` for the port's roster check (`fleet_join::roster`).
+fn fleet_order_refusal_status(
+    error: rebellion_core::fleet_join::FleetOrderError,
+) -> Option<rebellion_render::advisor_script::RefusalStatus> {
+    use rebellion_core::fleet_join::FleetOrderError as E;
+    match error {
+        E::MissingFleet | E::MissingShip => Some((1, 0x12)),
+        E::WrongFaction | E::InTransit => Some((1, 1)),
+        E::Unfinished => Some((1, 2)),
+        E::IntoItself => Some((1, 0x26)),
+        E::OtherSideDestination => Some((1, 0x24)),
+        E::DestinationInTransit => Some((1, 0x21)),
+        E::Dispatch(error) => fleet_dispatch_refusal_status(error),
+        E::ShipsChanged => None,
+    }
+}
+
+/// Each side's headquarters, which the seeding marks, or the null key for a
+/// side whose data marks none, a mod's. The win word reads a missing
+/// Alliance HQ as AD (`FUN_005180e0` on `FUN_00506110`'s null) and finds
+/// Coruscant by its id, reading no Empire HQ, so either may be missing.
+fn headquarters(world: &GameWorld) -> (SystemKey, SystemKey) {
+    let held = |side: Faction| {
+        world
+            .systems
+            .iter()
+            .find(|(_, s)| s.is_headquarters && s.control.is_controlled_by(side))
+            .map_or_else(SystemKey::default, |(key, _)| key)
+    };
+    (held(Faction::Alliance), held(Faction::Empire))
+}
+
+/// The victory state of the galaxy loaded at startup, before any campaign.
+fn startup_victory_state(world: &GameWorld) -> VictoryState {
+    let (alliance_hq, empire_hq) = headquarters(world);
+    VictoryState::new(alliance_hq, empire_hq)
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -1034,6 +1228,9 @@ struct StrategicRawPointerEvent {
 struct StrategicRawInputBatch {
     keys: Vec<StrategicIndexedKeyEvent>,
     pointers: Vec<StrategicRawPointerEvent>,
+    /// Every key-down in order, autorepeats included, for the tactical
+    /// window ([`TacticalState::set_frame_key_downs`]).
+    key_downs: Vec<KeyCode>,
 }
 
 /// Backend collector only: it normalizes ordered strategic events but grants
@@ -1043,6 +1240,7 @@ struct StrategicRawInputCollector {
     next_ordinal: u32,
     keys: Vec<StrategicIndexedKeyEvent>,
     pointers: Vec<StrategicRawPointerEvent>,
+    key_downs: Vec<KeyCode>,
     pressed: BTreeSet<PointerButtonId>,
     pointer: (f32, f32),
 }
@@ -1053,6 +1251,7 @@ impl StrategicRawInputCollector {
         StrategicRawInputBatch {
             keys: std::mem::take(&mut self.keys),
             pointers: std::mem::take(&mut self.pointers),
+            key_downs: std::mem::take(&mut self.key_downs),
         }
     }
 
@@ -1093,6 +1292,7 @@ impl macroquad::miniquad::EventHandler for StrategicRawInputCollector {
         modifiers: macroquad::miniquad::KeyMods,
         repeat: bool,
     ) {
+        self.key_downs.push(key);
         if strategic_root_key(key) {
             let event = StrategicRawKeyEvent {
                 key,
@@ -1379,6 +1579,19 @@ fn child_key_disposition(
             } else {
                 InputDisposition::Unhandled
             })
+        }
+        InputRecipient::Window(window)
+            if fleet.is_some_and(|(fleet_window, _)| fleet_window == window) =>
+        {
+            Some(
+                if event.key == KeyCode::Escape
+                    || fleet.is_some_and(|(_, renaming)| renaming && rename_edit_owns_key(event))
+                {
+                    InputDisposition::Handled
+                } else {
+                    InputDisposition::Unhandled
+                },
+            )
         }
         InputRecipient::Window(window) if build_selection == Some(window) => Some(
             if matches!(
@@ -1870,6 +2083,72 @@ fn collect_strategic_pointer_batch(
     })
 }
 
+/// Whether the galaxy view acts on a root key: its accelerators (TEXTCOMM 11,
+/// `FUN_00422ce0` case `0x483`) and F1-F7 (`WM_KEYDOWN`), and the port's
+/// panel letters, S, Tab (the Mod Manager) and palette key. Escape is not
+/// one: the view's `WM_KEYDOWN` has no `VK_ESCAPE` case, passes other keys to
+/// `FUN_005ff530`, which has none, and the table has no Escape entry
+/// (`ghidra/notes/keyboard-shortcuts.md`, section 1), so on the bare galaxy
+/// it does nothing; the windows that close on it read it first.
+fn galaxy_root_acts(key: KeyCode, alt: bool, debug: bool, palette: bool) -> bool {
+    let panel_letter = matches!(key, KeyCode::F | KeyCode::N);
+    cockpit_accelerator(key).is_some()
+        || key == KeyCode::F6
+        || alt
+            && matches!(
+                key,
+                KeyCode::P
+                    | KeyCode::KpAdd
+                    | KeyCode::KpSubtract
+                    | KeyCode::G
+                    | KeyCode::U
+                    | KeyCode::A
+                    | KeyCode::Key1
+                    | KeyCode::Key2
+                    | KeyCode::Key3
+                    | KeyCode::Key4
+                    | KeyCode::Key5
+                    | KeyCode::Key6
+                    | KeyCode::Key7
+                    | KeyCode::Key8
+                    | KeyCode::Key9
+            )
+        || panel_letter && panel_letters_open_panels(debug, alt)
+        || key == KeyCode::S && !alt
+        || key == KeyCode::Tab
+        || palette
+}
+
+#[cfg(test)]
+mod galaxy_root_key_tests {
+    use super::*;
+
+    #[test]
+    fn escape_on_the_bare_galaxy_does_nothing_while_its_shortcuts_still_act() {
+        // FUN_00422ce0's WM_KEYDOWN handles Tab and F1-F7 but no VK_ESCAPE,
+        // and TEXTCOMM 11 has no Escape accelerator (move-order.md; VM,
+        // alliance-day927-orto-orbit.sav).
+        for (alt, debug) in [(false, false), (true, true), (false, true)] {
+            assert!(!galaxy_root_acts(KeyCode::Escape, alt, debug, false));
+        }
+        assert!(galaxy_root_acts(KeyCode::F1, false, false, false));
+        assert!(galaxy_root_acts(KeyCode::F6, false, false, false));
+        // Nor is R: no WM_KEYDOWN case and no TEXTCOMM 11 entry has it
+        // (keyboard-shortcuts.md, sections 1 and 2).
+        assert!(!galaxy_root_acts(KeyCode::R, false, false, false));
+        assert!(!strategic_root_key(KeyCode::R));
+        assert!(galaxy_root_acts(KeyCode::Tab, false, false, false));
+        assert!(galaxy_root_acts(KeyCode::P, true, false, false));
+        assert!(!galaxy_root_acts(KeyCode::P, false, false, false));
+        assert!(galaxy_root_acts(KeyCode::S, false, false, false));
+        assert!(!galaxy_root_acts(KeyCode::S, true, false, false));
+        assert!(galaxy_root_acts(KeyCode::N, false, true, false));
+        assert!(!galaxy_root_acts(KeyCode::N, false, false, false));
+        assert!(!galaxy_root_acts(KeyCode::Q, false, true, false));
+        assert!(galaxy_root_acts(KeyCode::GraveAccent, false, true, true));
+    }
+}
+
 const fn strategic_root_key(key: KeyCode) -> bool {
     matches!(
         key,
@@ -1886,7 +2165,6 @@ const fn strategic_root_key(key: KeyCode) -> bool {
             | KeyCode::F5
             | KeyCode::F6
             | KeyCode::F7
-            | KeyCode::R
             | KeyCode::P
             | KeyCode::G
             | KeyCode::U
@@ -1896,8 +2174,6 @@ const fn strategic_root_key(key: KeyCode) -> bool {
             | KeyCode::N
             | KeyCode::T
             | KeyCode::J
-            | KeyCode::B
-            | KeyCode::D
             | KeyCode::L
             | KeyCode::S
             | KeyCode::Tab
@@ -2514,6 +2790,7 @@ enum ManagedStrategicSurface {
     TroopFinder(rebellion_windowing::WindowId),
     PersonnelFinder(rebellion_windowing::WindowId),
     MessageIndex(rebellion_windowing::WindowId),
+    OperationReport(rebellion_windowing::WindowId),
     Status(rebellion_windowing::WindowId),
     BuildSelection(rebellion_windowing::WindowId),
     MissionDialog(rebellion_windowing::WindowId),
@@ -2534,6 +2811,15 @@ fn managed_strategic_surface_plan(
     move_confirmation: Option<rebellion_windowing::WindowId>,
     scrap_confirmation: Option<rebellion_windowing::WindowId>,
 ) -> Vec<(ManagedStrategicSurface, bool)> {
+    let operation_report = frame.paint_order().iter().copied().find(|id| {
+        frame.key(*id).is_some_and(|key| {
+            key.kind == rebellion_windowing::WindowKind::BattleResults
+                && key.subject.is_some_and(|subject| {
+                    subject.namespace
+                        == rebellion_render::windowing_policy::SUBJECT_OPERATION_REPORT
+                })
+        })
+    });
     frame
         .paint_order()
         .iter()
@@ -2548,6 +2834,8 @@ fn managed_strategic_surface_plan(
                 ManagedStrategicSurface::PersonnelFinder(*id)
             } else if Some(*id) == message_index {
                 ManagedStrategicSurface::MessageIndex(*id)
+            } else if Some(*id) == operation_report {
+                ManagedStrategicSurface::OperationReport(*id)
             } else if Some(*id) == status {
                 ManagedStrategicSurface::Status(*id)
             } else if Some(*id) == build_selection {
@@ -3052,6 +3340,7 @@ fn commit_move_confirmation_gameplay(
         members,
         destination,
         join,
+        ..
     }) = prepared.and_then(|prepared| state.commit_confirm(prepared, removed_content))
     else {
         return false;
@@ -3184,6 +3473,7 @@ fn commit_mission_dialog_gameplay(
         team,
         decoys,
         target,
+        ..
     }) = prepared.and_then(|prepared| state.commit_confirm(prepared, removed_content))
     else {
         return false;
@@ -4365,7 +4655,7 @@ mod frame_input_tests {
             fighters: Vec::new(),
             characters: Vec::new(),
             is_alliance: true,
-            has_death_star: false,
+            bombarding: false,
         });
         world.systems[system].fleets.push(fleet);
         let mut coordinator = crate::strategic_windowing::StrategicWindowing::new();
@@ -7922,6 +8212,7 @@ mod panel_toggle_tests {
         assert!(state.open(
             MissionFaction::Alliance,
             SystemKey::default(),
+            None,
             vec![MissionMember::Character(Default::default())],
             vec![MissionKind::Diplomacy],
         ));
@@ -8268,6 +8559,35 @@ mod panel_toggle_tests {
     }
 
     #[test]
+    fn a_focused_fleet_keeps_its_escape_which_closes_it() {
+        // fleet-window.md: Escape runs the window's slot +0x30 close
+        // (FUN_004a7390 -> FUN_004ac3a0), so it never reaches the view.
+        let mut coordinator = crate::strategic_windowing::StrategicWindowing::new();
+        let fleet = opened_fleet(&mut coordinator);
+        let frame = coordinator.begin_frame();
+        let events = [key(KeyCode::Escape, false), key(KeyCode::R, false)];
+        let mut router = FrameInputRouter::default();
+        router.begin_frame(6, &frame);
+        let batch = StrategicRootKeyBatch::collect_from_raw(6, &mut router, &events);
+
+        batch.report_child_keys(
+            &mut router,
+            false,
+            Some((fleet, false)),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(!router.claim_root(batch.events[0].id));
+        assert!(router.claim_root(batch.events[1].id));
+    }
+
+    #[test]
     fn an_open_fleet_rename_owns_its_text_keys_while_accelerators_bubble_to_root() {
         // FUN_00413560 translates accelerators before dispatch; the edit
         // owns its text, Enter and Escape (FUN_004ac950, FUN_004aca40).
@@ -8509,6 +8829,21 @@ mod panel_toggle_tests {
             router.keyboard_recipient(keys.events[0].id),
             rebellion_render::windowing_input::InputRecipient::Root,
         );
+    }
+
+    // Source: the tactical window acts on every WM_KEYDOWN of a held number
+    // key; only Tab tests the autorepeat bit (FUN_0059b730.c:8-11).
+    #[test]
+    fn raw_backend_capture_keeps_every_key_down_for_the_tactical_window() {
+        let mut collector = StrategicRawInputCollector::default();
+        collector.key_down_event(KeyCode::Key1, KeyMods::default(), false);
+        collector.key_down_event(KeyCode::Key1, KeyMods::default(), true);
+        collector.key_down_event(KeyCode::F9, KeyMods::default(), false);
+        assert_eq!(
+            collector.take().key_downs,
+            [KeyCode::Key1, KeyCode::Key1, KeyCode::F9]
+        );
+        assert!(collector.take().key_downs.is_empty());
     }
 
     #[test]
@@ -8787,10 +9122,14 @@ async fn main() {
     drop(resolved_mod_order);
 
     // ── Game mode ─────────────────────────────────────────────────────────
-    let mut game_mode = GameMode::MainMenu;
+    // State 1 at the start of the program (FUN_00414830): the intro, whose
+    // end plays 0x66 and then shows the menu (CutsceneKind::ended). One
+    // that cannot open ends at once.
+    let mut game_mode = GameMode::Cutscene {
+        kind: CutsceneKind::Application(movies::INTRO),
+    };
     let mut main_menu_state = MainMenuState::default();
     let mut game_setup_state = GameSetupState::default();
-    let mut credits_state = CreditsState::default();
     let mut multiplayer_setup_state = MultiplayerSetupState::default();
     let mut pending_cockpit_start: Option<GameSetupAction> = None;
     let mut pending_victory_conditions = VictoryConditions::Standard;
@@ -8827,7 +9166,6 @@ async fn main() {
     FogSystem::seed(&mut fog_empire_state, &world);
     let mut blockade_state = BlockadeState::new();
     let mut uprising_state = UprisingState::new();
-    let mut death_star_state = DeathStarState::default();
     let mut research_state = ResearchState::new();
     let mut jedi_state = JediState::new();
     let mut betrayal_state = BetrayalState::new();
@@ -8840,30 +9178,12 @@ async fn main() {
     // at a new game (FUN_00439950).
     let mut player_agent = PlayerAgent::default();
     let mut agent_menu_state = rebellion_render::agent_menu::AgentMenuState::default();
+    // The local player's message movies and the ending (movies.rs), and
+    // whether the galaxy had no modal window last frame (FUN_00601340).
+    let mut movie_queue = movies::MovieQueue::default();
+    let mut movie_window_free = false;
     // Find HQ systems for victory detection
-    let alliance_hq = world
-        .systems
-        .iter()
-        .find(|(_, s)| s.is_headquarters && s.control.is_controlled_by(Faction::Alliance))
-        .map(|(k, _)| k);
-    let empire_hq = world
-        .systems
-        .iter()
-        .find(|(_, s)| s.is_headquarters && s.control.is_controlled_by(Faction::Empire))
-        .map(|(k, _)| k);
-    let mut victory_state = if let (Some(a), Some(e)) = (alliance_hq, empire_hq) {
-        VictoryState::new(a, e)
-    } else {
-        // Fallback: use first two systems if HQs not marked
-        let mut keys = world.systems.keys();
-        let a = keys
-            .next()
-            .expect("world must have at least 2 systems for victory");
-        let e = keys
-            .next()
-            .expect("world must have at least 2 systems for victory");
-        VictoryState::new(a, e)
-    };
+    let mut victory_state = startup_victory_state(&world);
 
     // Register scripted story events
     rebellion_core::story_events::define_story_events(&mut event_state, &world);
@@ -8881,6 +9201,7 @@ async fn main() {
     let mut mission_dialog_state = MissionDialogState::default();
     let mut move_confirmation_state = MoveConfirmationState::default();
     let mut scrap_confirmation_state = ScrapConfirmationState::default();
+    let mut stop_confirmation_state = StopConfirmationState::default();
     let mut status_window_state = StatusWindowState::default();
     let mut fleet_finder_state = FleetFinderState::default();
     let mut encyclopedia_surface = encyclopedia_surface::EncyclopediaSurfaceController::new();
@@ -8888,16 +9209,25 @@ async fn main() {
     let mut pending_troop_finder_open: Option<PendingTroopFinderOpen> = None;
     let mut personnel_finder_state = PersonnelFinderState::default();
     let mut pending_personnel_finder_open: Option<PendingPersonnelFinderOpen> = None;
+    // The Operation Report window (type 0x1c, FUN_0044c410).
+    let mut operation_report_state = OperationReportState::default();
+    let mut operation_report_window_id: Option<rebellion_windowing::WindowId> = None;
+    let mut operation_report_open_pending = false;
+    let mut operation_report_close_pending = false;
+    let mut pending_report_reopen_index: Option<u16> = None;
+    let mut pending_report_destination: Option<(SystemKey, FinderTarget)> = None;
     // The open Message Index (window 0x0d) and the speed its Advice
     // category saved (FUN_00487ff0 +0x58).
     let mut message_index = MessageIndexState::new();
     let mut advice_saved_speed: Option<GameSpeed> = None;
+    // The Encyclopedia holds the speed through the same slot (FUN_0045ddc0,
+    // FUN_00460070); this is whether the last frame saw it open.
+    let mut encyclopedia_speed_held = false;
     // The sound of the message the Message Index last showed, played by the
     // next frame's audio step.
-    let mut pending_message_sound: Option<u16> = None;
+    let mut pending_message_sound: Option<MessageSounds> = None;
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let mut enc_state = EncyclopediaState::new();
-    let mut bombardment_panel_state = BombardmentPanelState::default();
     let mut mod_manager_state = rebellion_render::ModManagerState::default();
     #[cfg(any(debug_assertions, not(target_arch = "wasm32")))]
     let mut command_palette_state = rebellion_render::CommandPaletteState::new();
@@ -8979,9 +9309,6 @@ async fn main() {
     // Panel visibility (mutually exclusive left panels)
     let mut show_fleets = false;
     let mut show_missions = false;
-    let mut show_bombardment = false;
-    let mut show_death_star = false;
-    let mut save_load_panel_state = rebellion_render::SaveLoadPanelState::default();
     let saves_dir = rebellion_data::save::default_saves_dir();
     let mut save_slots = read_save_slots(&saves_dir);
 
@@ -8989,7 +9316,6 @@ async fn main() {
     let mut tactical_state = TacticalState::new();
     let mut pending_tactical_window_action: Option<PreparedTacticalWindowAction> = None;
     let mut pending_tactical_destination: Option<TacticalResultDestination> = None;
-    let mut ground_combat_state: Option<GroundCombatState> = None;
 
     // ── Cockpit chrome ───────────────────────────────────────────────────────
     let mut cockpit_state = CockpitState::new(CockpitFaction::Alliance);
@@ -9176,19 +9502,16 @@ async fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     let mut music_result: Option<MdataTrack> = None;
 
-    let mut cutscene_player = open_cutscene(
-        Path::new(INTRO_CUTSCENE),
-        audio_vol.cutscene_volume(),
-        &mut msg_log,
-        clock.tick,
+    let mut cutscene_player = open_movie(
+        movies::INTRO,
+        &audio_vol,
         #[cfg(not(target_arch = "wasm32"))]
         &mut audio_engine,
     );
-    if cutscene_player.is_some() {
-        game_mode = GameMode::Cutscene {
-            kind: CutsceneKind::Intro,
-        };
-    }
+    // A message movie that could not open still shows its caption until
+    // dismissed: the caption is that message's only notice (kind 6 files
+    // no Message Index row). port: the original's movies always open.
+    let mut caption_without_movie = false;
 
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let interface_fixture_request = interface_test_fixture::requested();
@@ -9299,6 +9622,10 @@ async fn main() {
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let mut speed_menu_watch = interface_test_fixture::SpeedMenuWatch::default();
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+    let mut operation_report_watch = interface_test_fixture::OperationReportWatch::default();
+    #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+    let mut fixture_operation_report: Option<OperationReportState> = None;
+    #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let mut quadrant_watch = interface_test_fixture::QuadrantWatch::default();
     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
     let mut identity_history_watch = interface_test_fixture::IdentityHistoryWatch::default();
@@ -9360,6 +9687,8 @@ async fn main() {
             }
         }
     }
+    // A load's saved windows, waiting for its Fleet windows' commit.
+    let mut pending_window_restore: Option<Vec<rebellion_data::save::SavedWindow>> = None;
     let mut strategic_input_router = rebellion_render::windowing_input::FrameInputRouter::default();
     let mut routed_egui_input_filter = RoutedEguiInputFilter::default();
     let mut strategic_frame_number = 0_u64;
@@ -9414,9 +9743,9 @@ async fn main() {
                     manufacturing: &mut mfg_state,
                     movement: &mut movement_state,
                     transport: &mut troop_transport_state,
+                    deliveries: &mut delivery_state,
                     stockpiles: &mut stockpile_state,
                     victory: &mut victory_state,
-                    death_star: &mut death_star_state,
                     blockade: &mut blockade_state,
                     research: &research_state,
                     uprising: &uprising_state,
@@ -9438,16 +9767,31 @@ async fn main() {
                     &records,
                     $day,
                     &world,
+                    &text_templates,
                     &mut msg_log,
                     #[cfg(not(target_arch = "wasm32"))]
                     &mut audio_engine,
                     #[cfg(not(target_arch = "wasm32"))]
                     &audio_vol,
                 );
+                movie_queue.file(strike_orders::strike_movies(
+                    &world,
+                    &text_templates,
+                    records
+                        .iter()
+                        .filter(|record| record.outcome.is_applied())
+                        .map(|record| &record.strike),
+                    Faction::of_alliance(player_faction == MissionFaction::Alliance),
+                ));
                 show_blockade_events(
+                    $day,
                     &runs,
                     &mut world,
+                    &mut mfg_state,
                     &mut troop_transport_state,
+                    &movement_state,
+                    &mut delivery_state,
+                    &blockade_state,
                     &text_templates,
                     &mut msg_log,
                 );
@@ -9518,9 +9862,18 @@ async fn main() {
                     .is_running()
                     .then(|| clock.speed.steps_per_second())
                     .flatten()
-                    .filter(|_| !advisor_state.holds_clock()),
+                    .filter(|_| !advisor_state.holds_clock() && !movie_queue.days_stopped()),
             );
             for step in advisor_state.take_cockpit_steps() {
+                // Step 3 closes the ending script: the side's word becomes
+                // the strategic window's ending code (FUN_004c3060 →
+                // FUN_0041d830).
+                if step.kind == 3 {
+                    movie_queue.end(
+                        victory_state.word,
+                        Faction::of_alliance(cockpit_state.faction == CockpitFaction::Alliance),
+                    );
+                }
                 if step.kind == 2 {
                     apply_briefing_step(
                         step.step,
@@ -9580,10 +9933,20 @@ async fn main() {
                 &audio_vol,
             );
             #[cfg(not(target_arch = "wasm32"))]
-            play_message_sound(&mut audio_engine, pending_message_sound.take(), &audio_vol);
+            play_message_sound(
+                &mut audio_engine,
+                pending_message_sound.take(),
+                &advisor_state,
+                &audio_vol,
+            );
             #[cfg(target_arch = "wasm32")]
             if let Some(engine) = browser_menu_audio.as_mut() {
-                play_message_sound(engine, pending_message_sound.take(), &audio_vol);
+                play_message_sound(
+                    engine,
+                    pending_message_sound.take(),
+                    &advisor_state,
+                    &audio_vol,
+                );
             }
             #[cfg(target_arch = "wasm32")]
             match browser_menu_audio.as_mut() {
@@ -9601,25 +9964,31 @@ async fn main() {
         // outside the strategic-window contract; Galaxy keys are consumed
         // only from `StrategicRawInputCollector` and `FrameInputRouter` below.
         // ── Global keyboard shortcuts ───────────────────────────────────────
-        if matches!(game_mode, GameMode::Cutscene { .. }) {
-            if is_key_pressed(KeyCode::Escape) || is_key_pressed(KeyCode::Space) {
+        if let GameMode::Cutscene { kind } = &game_mode {
+            // Esc or the left button ends any movie (FUN_005f7240, 0x404);
+            // any other key ends all but the trench-run pair (FUN_00421790).
+            let other_key = get_last_key_pressed().is_some_and(|key| key != KeyCode::Escape);
+            if is_key_pressed(KeyCode::Escape)
+                || is_mouse_button_pressed(MouseButton::Left)
+                || (other_key && movies::keys_dismiss(kind.movie()))
+            {
                 if let Some(player) = cutscene_player.as_mut() {
                     player.stop();
                 }
+                caption_without_movie = false;
             }
         } else if is_key_pressed(KeyCode::Escape) && game_mode != GameMode::Galaxy {
             if let GameMode::GameOptions { origin } = game_mode.clone() {
-                if game_options_state.escape() == GameOptionsAction::Return {
+                if game_options_state.key(egui_macroquad::egui::Key::Escape)
+                    == GameOptionsAction::Return
+                {
                     game_mode = match origin {
                         GameOptionsOrigin::ShuttleCockpit => GameMode::MainMenu,
                         GameOptionsOrigin::CommandCenter => GameMode::Galaxy,
                         GameOptionsOrigin::TacticalBattle => GameMode::TacticalCombat,
                     };
                 }
-            } else if game_mode == GameMode::LoadGame {
-                save_load_panel_state.close();
-                game_mode = GameMode::MainMenu;
-            } else if matches!(game_mode, GameMode::Credits | GameMode::MultiplayerSetup) {
+            } else if game_mode == GameMode::MultiplayerSetup {
                 game_mode = GameMode::MainMenu;
             } else if game_mode == GameMode::MainMenu && main_menu_state.registry_open() {
                 // The Fleet Registry answers Escape by closing itself.
@@ -9638,9 +10007,17 @@ async fn main() {
         {
             advisor_state.skip_tour();
         }
+        rebellion_render::game_speed::hold_speed_while_open(
+            &mut clock,
+            &mut advice_saved_speed,
+            &mut encyclopedia_speed_held,
+            encyclopedia_surface.is_open(),
+        );
         // ── Tick the clock (Galaxy mode only) ────────────────────────────────
-        // A new game's clock holds through the briefing until its step 11.
+        // A new game's clock holds through the briefing until its step 11,
+        // and stops for good once the advisor stamps its ending slot.
         let tick_events = if game_mode == GameMode::Galaxy
+            && !movie_queue.days_stopped()
             && (interface_fixture_active || !advisor_state.holds_clock())
         {
             // Fast forward (dev): exactly one day a frame, as the systems
@@ -9669,6 +10046,14 @@ async fn main() {
             command_script.as_ref().and_then(|script| script.last_seq()),
         );
         if !tick_events.is_empty() {
+            // Every prisoner and where it is held, for the release messages
+            // (notification 0x1e0) once the day is done.
+            let held_at_dawn: Vec<(CharacterKey, String)> = world
+                .characters
+                .iter()
+                .filter(|(_, c)| c.is_captive && !c.is_killed)
+                .filter_map(|(key, _)| Some((key, prison_name(&world, key)?)))
+                .collect();
             // Used by the Dabora 2 notification paths that need to timestamp
             // message-log entries. `current_tick` is re-bound further down for
             // the rest of the tick loop; this earlier binding is read-only.
@@ -9677,8 +10062,6 @@ async fn main() {
             // Active movement orders are authoritative; repair stale orbit
             // indexes before economy and manufacturing inspect fleet presence.
             reconcile_fleet_orbits(&movement_state, &mut world);
-            // System bit 11 before anything reads it (FUN_005178b0).
-            rebellion_core::death_star::refresh_sectors(&mut world, &movement_state);
 
             // The day before closes: the AI rounds its frames left run (a
             // fast-forward day, a frame that crossed several steps, or a first
@@ -9704,91 +10087,27 @@ async fn main() {
             }
 
             // ── Economy (runs BEFORE manufacturing — affects production) ──────
-            let economy_events = EconomySystem::advance_with_uprisings(
-                &mut economy_state,
-                &world,
-                &tick_events,
-                world.difficulty_index,
-                &uprising_state,
-            );
+            let economy_events =
+                EconomySystem::advance(&mut economy_state, &mut world, &tick_events);
             for ev in &economy_events {
-                match ev {
-                    EconomyEvent::SupportDrifted {
-                        system,
-                        alliance_delta,
-                        empire_delta,
-                    } => {
-                        if let Some(sys) = world.systems.get_mut(*system) {
-                            sys.popularity_alliance =
-                                (sys.popularity_alliance + alliance_delta).clamp(0.0, 1.0);
-                            sys.popularity_empire =
-                                (sys.popularity_empire + empire_delta).clamp(0.0, 1.0);
-                        }
-                    }
-                    EconomyEvent::ControlResolved {
-                        system,
-                        new_control,
-                    } => {
-                        let side = |faction: Option<Faction>| match faction {
-                            Some(Faction::Alliance) => Some(true),
-                            Some(Faction::Empire) => Some(false),
-                            _ => None,
-                        };
-                        let old = world
-                            .systems
-                            .get(*system)
-                            .and_then(|sys| side(sys.control.faction()));
-                        if let Some(sys) = world.systems.get_mut(*system) {
-                            sys.control = *new_control;
-                        }
-                        // FUN_00510d70 → FUN_004f6f40: the system's facilities
-                        // follow its new holder.
-                        world.hand_over_facilities(*system);
-                        rebellion_data::telemetry::native_control_resolved(
+                // Knesset Shamash-Bet Dabora 2 notification events — surface
+                // them in the interactive message log.
+                if let EconomyEvent::ResourceDiscovered { system, new_output } = ev {
+                    let name = world
+                        .systems
+                        .get(*system)
+                        .map_or_else(|| "unknown".into(), |s| s.name.clone());
+                    // Notification 0x20, System Resources Messages.
+                    msg_log.push(filed(
+                        GameMessage::at_system(
                             economy_tick,
-                            &world,
+                            format!("New resources discovered at {name} ({new_output} units)"),
+                            MessageCategory::Event,
                             *system,
-                            *new_control,
-                        );
-                        // Only a change of side is a loyalty change; a
-                        // contested system has not declared neutrality.
-                        let new = side(new_control.faction());
-                        if new == old
-                            || matches!(new_control, rebellion_core::world::ControlKind::Contested)
-                        {
-                            continue;
-                        }
-                        for message in loyalty_messages(
-                            &world,
-                            &text_templates,
-                            *system,
-                            economy_tick,
-                            new,
-                            old,
-                        ) {
-                            msg_log.push(message);
-                        }
-                    }
-                    // Knesset Shamash-Bet Dabora 2 notification events —
-                    // surface them in the interactive message log.
-                    EconomyEvent::ResourceDiscovered { system, new_output } => {
-                        let name = world
-                            .systems
-                            .get(*system)
-                            .map_or_else(|| "unknown".into(), |s| s.name.clone());
-                        // Notification 0x20, System Resources Messages.
-                        msg_log.push(filed(
-                            GameMessage::at_system(
-                                economy_tick,
-                                format!("New resources discovered at {name} ({new_output} units)"),
-                                MessageCategory::Event,
-                                *system,
-                            ),
-                            MessageRail::Resource,
-                            system_audience(&world, *system),
-                        ));
-                    }
-                    _ => {}
+                        ),
+                        MessageRail::Resource,
+                        system_audience(&world, *system),
+                    ));
                 }
                 rebellion_data::telemetry::native_economy_record(economy_tick, &world, ev);
             }
@@ -9801,7 +10120,6 @@ async fn main() {
                 &mut stockpile_state,
                 &world,
                 &mut mfg_state,
-                &economy_state,
                 &tick_events,
                 blockade_state.blockaded_systems(),
                 &stockpile_rolls,
@@ -9828,7 +10146,7 @@ async fn main() {
                     }
                 }
             }
-            rebellion_core::scrap::scrap_all(
+            let overdraft = rebellion_core::scrap::scrap_all_reporting(
                 &mut world,
                 &mut stockpile_state,
                 &mut troop_transport_state,
@@ -9836,6 +10154,25 @@ async fn main() {
                     StockpileEvent::OverdraftScrap { target, .. } => Some(target),
                     _ => None,
                 }),
+            );
+            for loss in &overdraft.losses {
+                let system = world
+                    .systems
+                    .get(loss.system)
+                    .map_or("", |value| value.name.as_str());
+                macroquad::logging::info!("{}", loss.log_line(system));
+            }
+            // A scrapped regiment's holder rerun (FUN_00508660).
+            fire_support_events(
+                &mut world,
+                &mut mfg_state,
+                &mut troop_transport_state,
+                &movement_state,
+                &mut delivery_state,
+                &text_templates,
+                &mut msg_log,
+                economy_tick,
+                0,
             );
 
             // ── Manufacturing (blockaded systems are skipped) ─────────────────
@@ -9845,6 +10182,13 @@ async fn main() {
                 &mut mfg_state,
                 &tick_events,
                 blockade_state.blockaded_systems(),
+            );
+            // An ordered capital ship completes in place in its fleet
+            // (FUN_0052bee0).
+            rebellion_core::manufacturing::finish_ships(
+                &mut world,
+                &movement_state,
+                &mfg_advance.finished_ships,
             );
             for completion in &mfg_advance.completions {
                 // Apply the built item to the game world (ships, facilities, troops).
@@ -9896,18 +10240,70 @@ async fn main() {
                 #[cfg(not(target_arch = "wasm32"))]
                 audio_engine.play_sfx(SfxKind::BuildComplete, &audio_vol);
             }
-            delivery_state.depart(&world, &mfg_advance.departures);
+            // A capital ship travels inside its destination fleet.
+            let travelling =
+                rebellion_data::integrator::travelling_products(&mfg_advance.departures);
+            delivery_state.depart(&world, &travelling);
             let delivered = delivery_state.advance(&world, &tick_events);
+            let ships = rebellion_core::delivery::advance_ship_legs(
+                &mut world,
+                &movement_state,
+                &tick_events,
+            );
             for completion in &delivered.arrivals {
                 rebellion_data::integrator::apply_build_completion_inner(completion, &mut world);
+                if matches!(
+                    completion.kind,
+                    rebellion_core::manufacturing::BuildableKind::SpecialForce(_)
+                ) {
+                    rebellion_core::death_star::deploy_special_forces(
+                        &mut world,
+                        &troop_transport_state,
+                        &movement_state,
+                        completion.system,
+                    );
+                }
             }
-            for (fleet, completion) in &delivered.boarded {
-                rebellion_data::integrator::apply_boarding_inner(*fleet, completion, &mut world);
+            for boarded in &delivered.boarded {
+                rebellion_data::integrator::apply_boarding_inner(
+                    boarded,
+                    &mut world,
+                    &mut troop_transport_state,
+                );
             }
+            rebellion_data::integrator::apply_ship_arrivals_inner(&mut world, &ships);
+            // Ordered ships whose queue entries are gone.
+            rebellion_core::manufacturing::seat_ordered_ships(&mut world, &mut mfg_state);
+            // A finished regiment's holder rerun (FUN_00508660).
+            fire_support_events(
+                &mut world,
+                &mut mfg_state,
+                &mut troop_transport_state,
+                &movement_state,
+                &mut delivery_state,
+                &text_templates,
+                &mut msg_log,
+                economy_tick,
+                0,
+            );
+            let ships = ships
+                .iter()
+                .map(|ship| rebellion_core::manufacturing::CompletionEvent {
+                    system: ship.system,
+                    tick: ship.tick,
+                    kind: rebellion_core::manufacturing::BuildableKind::CapitalShip(ship.class),
+                });
             let arrived = delivered
                 .arrivals
                 .iter()
-                .chain(delivered.boarded.iter().map(|(_, completion)| completion));
+                .cloned()
+                .chain(
+                    delivered
+                        .boarded
+                        .iter()
+                        .map(|boarded| boarded.completion.clone()),
+                )
+                .chain(ships);
             for completion in arrived {
                 // Notification 0xd, Unit Arrival.
                 msg_log.push(filed(
@@ -9990,11 +10386,29 @@ async fn main() {
                     applied.is_alliance,
                 ));
             }
-            // An arriving Death Star sets bit 11 in its new sector (event 0x301).
-            rebellion_core::death_star::refresh_sectors(&mut world, &movement_state);
             // Regiments travelling on their own (FUN_00556430, event 0x387).
             let now = tick_events.last().map_or(clock.tick, |event| event.tick);
             let regiments = troop_transport_state.advance_transit(&mut world, now);
+            // An arrival's holder rerun (FUN_00508660).
+            fire_support_events(
+                &mut world,
+                &mut mfg_state,
+                &mut troop_transport_state,
+                &movement_state,
+                &mut delivery_state,
+                &text_templates,
+                &mut msg_log,
+                now,
+                0,
+            );
+            sweep_flagged(
+                &mut world,
+                &mut mission_state,
+                &troop_transport_state,
+                &movement_state,
+                &blockade_state,
+                now,
+            );
             for transit in &regiments.arrived {
                 let system = match transit.leg {
                     RegimentLeg::Surface(system) => Some(system),
@@ -10064,72 +10478,10 @@ async fn main() {
                 ));
             }
 
-            // Unopposed troop transports can land immediately. Contested
-            // orbits retain cargo until space combat produces a winner.
-            let mut ground_resolved_systems = HashSet::new();
+            // No regiment lands without an order: the assault (0x234) or a
+            // Move (0x201) puts one down (ghidra/notes/ground-assault.md,
+            // "Landing without the order").
             let current_tick = tick_events.last().map_or(0, |event| event.tick);
-            let landing_targets: Vec<_> = world
-                .systems
-                .iter()
-                .filter_map(|(system, value)| {
-                    let has_alliance = value.fleets.iter().any(|fleet| {
-                        world
-                            .fleets
-                            .get(*fleet)
-                            .is_some_and(|value| value.is_alliance)
-                    });
-                    let has_empire = value.fleets.iter().any(|fleet| {
-                        world
-                            .fleets
-                            .get(*fleet)
-                            .is_some_and(|value| !value.is_alliance)
-                    });
-                    let faction = match (has_alliance, has_empire) {
-                        (true, false) => Some(true),
-                        (false, true) => Some(false),
-                        _ => None,
-                    }?;
-                    value
-                        .fleets
-                        .iter()
-                        .any(|fleet| troop_transport_state.landing_count(*fleet) > 0)
-                        .then_some((system, faction))
-                })
-                .collect();
-            for (system, is_alliance) in landing_targets {
-                if !is_alliance && system == victory_state.alliance_hq {
-                    let bombardment_fleet = world.systems.get(system).and_then(|value| {
-                        value.fleets.iter().copied().find(|fleet| {
-                            world
-                                .fleets
-                                .get(*fleet)
-                                .is_some_and(|value| !value.is_alliance)
-                                && troop_transport_state.landing_count(*fleet) > 0
-                        })
-                    });
-                    if let Some(fleet) = bombardment_fleet {
-                        tactical_flow::apply_automatic_bombardment(
-                            &mut world,
-                            &victory_state,
-                            fleet,
-                            system,
-                            current_tick,
-                            &mut msg_log,
-                        );
-                    }
-                }
-                let ground_rolls: Vec<f64> = (0..256).map(|_| sim_rng.gen::<f64>()).collect();
-                ground_resolved_systems.insert(system);
-                tactical_flow::resolve_ground_campaign(
-                    &mut world,
-                    &mut troop_transport_state,
-                    system,
-                    is_alliance,
-                    &ground_rolls,
-                    current_tick,
-                    &mut msg_log,
-                );
-            }
 
             // ── Combat ──────────────────────────────────────────────────────
             // After fleet arrivals, check every system for opposing fleets.
@@ -10142,19 +10494,11 @@ async fn main() {
                     // fights on every pass that finds both sides present;
                     // when both remain the battle fires again next pass.
                     // There is no cooldown.
-                    let sys = &world.systems[sys_key];
-                    let alliance_fleets: Vec<_> = sys
-                        .fleets
-                        .iter()
-                        .copied()
-                        .filter(|&k| world.fleets.get(k).is_some_and(|f| f.is_alliance))
-                        .collect();
-                    let empire_fleets: Vec<_> = sys
-                        .fleets
-                        .iter()
-                        .copied()
-                        .filter(|&k| world.fleets.get(k).is_some_and(|f| !f.is_alliance))
-                        .collect();
+                    // Each side's lead is its first fleet that fights.
+                    let alliance_fleets =
+                        rebellion_core::combat::fighting_fleets(&world, sys_key, true);
+                    let empire_fleets =
+                        rebellion_core::combat::fighting_fleets(&world, sys_key, false);
                     // FUN_00509710 / FUN_0050b8e0: both sides present, each
                     // with a fleet or squadrons the system holds for it.
                     (side_present(&world, sys_key, true) && side_present(&world, sys_key, false))
@@ -10196,6 +10540,7 @@ async fn main() {
                     rebellion_core::carriage::tag_all(&mut world);
                     if let Err(error) = tactical_flow::begin_player_battle(
                         &world,
+                        Some(&mfg_state),
                         tactical_flow::BattleEntry {
                             system: sys_key,
                             attacker: CombatForce {
@@ -10244,16 +10589,13 @@ async fn main() {
                     sim_rng.gen::<u32>(),
                     current_tick,
                     Some(player_is_alliance),
+                    Some(&mfg_state),
+                    &ProductRoom::new(&mfg_state, &delivery_state),
                 );
                 for line in &space_result.log {
                     macroquad::logging::info!("{}", line);
                 }
                 rebellion_data::telemetry::native_combat_space(current_tick, &world, &space_result);
-                tactical_flow::reconcile_death_star_result(
-                    &world,
-                    &mut death_star_state,
-                    &mut victory_state,
-                );
 
                 let winner_str = match space_result.winner {
                     CombatSide::Attacker => "Alliance victory",
@@ -10268,104 +10610,12 @@ async fn main() {
                 ));
                 #[cfg(not(target_arch = "wasm32"))]
                 audio_engine.play_sfx(SfxKind::CombatStart, &audio_vol);
-
-                // Surviving transports land only after a decisive space result.
-                // FUN_00517270: a side left with only its system squadrons
-                // is still present, so the system stays contested.
-                let winner = match (
-                    side_present(&world, sys_key, true),
-                    side_present(&world, sys_key, false),
-                ) {
-                    (true, false) => atk_force.map(|fleet| (true, fleet)),
-                    (false, true) => def_force.map(|fleet| (false, fleet)),
-                    _ => None,
-                }
-                .filter(|&(_, fleet)| world.fleets.contains_key(fleet));
-                if let Some((winner_is_alliance, winner_fleet)) = winner {
-                    tactical_flow::apply_automatic_bombardment(
-                        &mut world,
-                        &victory_state,
-                        winner_fleet,
-                        sys_key,
-                        current_tick,
-                        &mut msg_log,
-                    );
-
-                    let ground_rolls: Vec<f64> = (0..256).map(|_| sim_rng.gen::<f64>()).collect();
-                    ground_resolved_systems.insert(sys_key);
-                    tactical_flow::resolve_ground_campaign(
-                        &mut world,
-                        &mut troop_transport_state,
-                        sys_key,
-                        winner_is_alliance,
-                        &ground_rolls,
-                        current_tick,
-                        &mut msg_log,
-                    );
-                }
             }
 
             // The battles left for a later pass hold the AI's orders there
             // until the next day's combat (`held_at`). The opened battle
             // closes before any round runs, as rounds run in the galaxy only.
             held_battles = engaged_systems.get(1..).unwrap_or_default().to_vec();
-
-            // Continue unresolved surface engagements even after every troop
-            // has left its transport. This mirrors the shared simulation loop
-            // and prevents a no-progress round from freezing an invasion until
-            // another fleet happens to arrive.
-            let continuing_ground_battles: Vec<_> = world
-                .systems
-                .keys()
-                .filter_map(|system| {
-                    if ground_resolved_systems.contains(&system) {
-                        return None;
-                    }
-                    let value = world.systems.get(system)?;
-                    let (alliance_troops, empire_troops) =
-                        value
-                            .ground_units
-                            .iter()
-                            .fold((false, false), |counts, troop| {
-                                match world.troops.get(*troop) {
-                                    Some(value)
-                                        if value.regiment_strength > 0 && value.is_alliance =>
-                                    {
-                                        (true, counts.1)
-                                    }
-                                    Some(value) if value.regiment_strength > 0 => (counts.0, true),
-                                    _ => counts,
-                                }
-                            });
-                    if !alliance_troops || !empire_troops {
-                        return None;
-                    }
-
-                    let (alliance_fleet, empire_fleet) =
-                        value.fleets.iter().fold((false, false), |counts, fleet| {
-                            match world.fleets.get(*fleet) {
-                                Some(value) if value.is_alliance => (true, counts.1),
-                                Some(_) => (counts.0, true),
-                                None => counts,
-                            }
-                        });
-                    let attacker_is_alliance =
-                        !matches!((alliance_fleet, empire_fleet), (false, true));
-                    Some((system, attacker_is_alliance))
-                })
-                .collect();
-            for (system, attacker_is_alliance) in continuing_ground_battles {
-                let ground_rolls: Vec<f64> = (0..256).map(|_| sim_rng.gen::<f64>()).collect();
-                tactical_flow::resolve_ground_campaign(
-                    &mut world,
-                    &mut troop_transport_state,
-                    system,
-                    attacker_is_alliance,
-                    &ground_rolls,
-                    current_tick,
-                    &mut msg_log,
-                );
-            }
 
             // Observe embarked regiments after arrivals and landings, so a
             // fleet that arrives and is ordered away again this tick still
@@ -10381,15 +10631,39 @@ async fn main() {
                 )
             };
 
-            // A Death Star lost in battle clears bit 11 before the blockade
-            // and uprising steps read it (event 0x301).
-            rebellion_core::death_star::refresh_sectors(&mut world, &movement_state);
-
             // The blockade rule reruns as an arrival or a battle settles,
             // before the AI's orders take effect (`FUN_0050b8e0` through
             // event 0x311, `ghidra/notes/blockade-bit.md`, "When it runs").
             let mut blockade_events =
                 BlockadeSystem::advance(&mut blockade_state, &world, &tick_events);
+            // The same rule writes the battle bit; each change sweeps the
+            // system's adrift characters (event 0x304, FUN_00548e90).
+            if let Some(last) = tick_events.last() {
+                for (system, started) in rebellion_core::death_star::sweep_battle_changes(
+                    &mut world,
+                    &mut mission_state,
+                    &mut blockade_state,
+                    &troop_transport_state,
+                    &movement_state,
+                    last.tick,
+                ) {
+                    rebellion_data::telemetry::native_adrift_trips(
+                        last.tick,
+                        &world,
+                        &mission_state,
+                        system,
+                        &started,
+                    );
+                }
+                sweep_flagged(
+                    &mut world,
+                    &mut mission_state,
+                    &troop_transport_state,
+                    &movement_state,
+                    &blockade_state,
+                    last.tick,
+                );
+            }
 
             // ── Fog of war ──────────────────────────────────────────────────
             let alliance_reveals =
@@ -10448,6 +10722,11 @@ async fn main() {
                     #[cfg(not(target_arch = "wasm32"))]
                     &audio_vol,
                 );
+                movie_queue.file(strike_orders::sabotage_movies(
+                    &world,
+                    &text_templates,
+                    &result.effects,
+                ));
                 let research_results = ResearchSystem::apply_mission_points(
                     &mut world,
                     &mut research_state,
@@ -10457,7 +10736,7 @@ async fn main() {
                 push_research_reports(&mut msg_log, result.tick, &research_results);
                 for ended in rebellion_data::integrator::apply_mission_state_effects(
                     &result.effects,
-                    &world,
+                    &mut world,
                     result.tick,
                     &mut uprising_state,
                 ) {
@@ -10482,44 +10761,93 @@ async fn main() {
                 }
             }
 
+            // A support gain's control change (FUN_005109f0, event 0x31b).
+            fire_support_events(
+                &mut world,
+                &mut mfg_state,
+                &mut troop_transport_state,
+                &movement_state,
+                &mut delivery_state,
+                &text_templates,
+                &mut msg_log,
+                tick_events.last().map_or(0, |e| e.tick),
+                0,
+            );
+            sweep_flagged(
+                &mut world,
+                &mut mission_state,
+                &troop_transport_state,
+                &movement_state,
+                &blockade_state,
+                tick_events.last().map_or(0, |e| e.tick),
+            );
+
+            // ── Members going home from ended missions (FUN_00548120) ──────
+            for ended in &mission_advance.ended {
+                let started = rebellion_core::death_star::return_members(
+                    &mut world,
+                    &mut mission_state,
+                    &troop_transport_state,
+                    &movement_state,
+                    &blockade_state,
+                    ended,
+                    current_tick,
+                );
+                // Notification 0x1f1 on the end code (FUN_00491500).
+                let returning_to = mission_returning_place(&world, &mission_state, ended, &started);
+                let luke_trained =
+                    event_state.has_fired(rebellion_core::events::EVT_DAGOBAH_COMPLETED);
+                let voice = mission_end_voice_list(&world, ended, luke_trained)
+                    .map_or(0, |list| advisor_state.voice_line(list));
+                for message in mission_end_messages(
+                    &world,
+                    &text_templates,
+                    ended,
+                    returning_to.as_deref(),
+                    voice,
+                ) {
+                    msg_log.push(message);
+                }
+                if let Some(system) = ended.origin {
+                    rebellion_data::telemetry::native_adrift_trips(
+                        current_tick,
+                        &world,
+                        &mission_state,
+                        system,
+                        &started,
+                    );
+                }
+            }
+
             // ── Character escapes ────────────────────────────────────────────
-            let escape_rolls: Vec<f64> = (0..world.characters.len())
-                .map(|_| sim_rng.gen::<f64>())
-                .collect();
-            let escape_effects = MissionSystem::check_escapes(&world, &escape_rolls);
+            let escape_effects =
+                MissionSystem::escape_step(&mut world, current_tick, sim_rng.gen::<f64>());
             for effect in &escape_effects {
-                if let MissionEffect::CharacterEscaped {
-                    character,
-                    escaped_to_alliance,
-                } = effect
-                {
-                    if let Some(c) = world.characters.get_mut(*character) {
-                        c.is_alliance = *escaped_to_alliance;
-                        c.is_empire = !*escaped_to_alliance;
-                        c.is_captive = false;
-                        c.captured_by = None;
-                        c.capture_tick = None;
-                    }
-                    for (_, fleet) in &mut world.fleets {
-                        fleet.characters.retain(|&k| k != *character);
-                    }
-                    let name = world
+                if let MissionEffect::CharacterEscaped { character, .. } = effect {
+                    // The release's autoscrap request sweeps the escapee's
+                    // location at once (event 0x307, FUN_00548da0).
+                    let started = rebellion_core::death_star::free_escapee(
+                        &mut world,
+                        &mut mission_state,
+                        &troop_transport_state,
+                        &movement_state,
+                        &blockade_state,
+                        *character,
+                        current_tick,
+                    );
+                    if let Some(system) = world
                         .characters
                         .get(*character)
-                        .map_or_else(|| "Unknown".into(), |c| c.display_name().to_owned());
-                    // FUN_00490340: the escape carries the character's code,
-                    // for the side it escapes to.
-                    msg_log.push(
-                        GameMessage::new(
+                        .and_then(|c| c.current_system)
+                    {
+                        rebellion_data::telemetry::native_adrift_trips(
                             current_tick,
-                            format!("{name} has escaped captivity!"),
-                            MessageCategory::Event,
-                        )
-                        .with_advice_to(
-                            escape_advice(&world, *character),
-                            RailAudience::side(*escaped_to_alliance),
-                        ),
-                    );
+                            &world,
+                            &mission_state,
+                            system,
+                            &started,
+                        );
+                    }
                 }
             }
 
@@ -10584,30 +10912,6 @@ async fn main() {
                 }
             }
 
-            // ── Story cutscene triggers (C1–C8) ─────────────────────────────
-            // When a story event fires that maps to a cutscene file (101–108),
-            // launch the cutscene. Only the first matching event triggers a
-            // cutscene per tick. Story cutscenes return to Galaxy when done.
-            for fired in &fired_events {
-                if let Some(number) = story_event_to_cutscene(fired.event_id) {
-                    let path_str = story_cutscene_path(number);
-                    cutscene_player = open_cutscene(
-                        Path::new(&path_str),
-                        audio_vol.cutscene_volume(),
-                        &mut msg_log,
-                        current_tick,
-                        #[cfg(not(target_arch = "wasm32"))]
-                        &mut audio_engine,
-                    );
-                    if cutscene_player.is_some() {
-                        game_mode = GameMode::Cutscene {
-                            kind: CutsceneKind::Story(number),
-                        };
-                        break;
-                    }
-                }
-            }
-
             // ── Blockade ─────────────────────────────────────────────────────
             if let Some(last) = tick_events.last() {
                 running_regiments.extend(BlockadeSystem::running_regiments(
@@ -10626,9 +10930,14 @@ async fn main() {
                 ));
             }
             show_blockade_events(
+                current_tick,
                 &blockade_events,
                 &mut world,
+                &mut mfg_state,
                 &mut troop_transport_state,
+                &movement_state,
+                &mut delivery_state,
+                &blockade_state,
                 &text_templates,
                 &mut msg_log,
             );
@@ -10653,7 +10962,8 @@ async fn main() {
                     UprisingEvent::UprisingBegan { system, tick }
                     | UprisingEvent::UprisingEnded { system, tick }
                     | UprisingEvent::UprisingIncident { system, tick, .. }
-                    | UprisingEvent::Disaster { system, tick, .. } => (*system, *tick),
+                    | UprisingEvent::Disaster { system, tick, .. }
+                    | UprisingEvent::RevoltSupportLoss { system, tick, .. } => (*system, *tick),
                 };
                 let name = world
                     .systems
@@ -10688,6 +10998,11 @@ async fn main() {
                         format!("Natural disaster strikes {name}"),
                         MessageCategory::Event,
                     ),
+                    // Timer 0x384 raises no notice (FUN_0050caa0).
+                    UprisingEvent::RevoltSupportLoss { .. } => {
+                        rebellion_core::uprising::apply_uprising_event(&mut world, evt);
+                        continue;
+                    }
                 };
                 // port: incidents and disasters have no traced class yet.
                 msg_log.push(filed(
@@ -10697,6 +11012,25 @@ async fn main() {
                 ));
                 rebellion_core::uprising::apply_uprising_event(&mut world, evt);
             }
+            fire_support_events(
+                &mut world,
+                &mut mfg_state,
+                &mut troop_transport_state,
+                &movement_state,
+                &mut delivery_state,
+                &text_templates,
+                &mut msg_log,
+                tick_events.last().map_or(0, |e| e.tick),
+                0,
+            );
+            sweep_flagged(
+                &mut world,
+                &mut mission_state,
+                &troop_transport_state,
+                &movement_state,
+                &blockade_state,
+                tick_events.last().map_or(0, |e| e.tick),
+            );
 
             // ── Betrayal ─────────────────────────────────────────────────────
             let betrayal_rolls: Vec<f64> = (0..world.characters.len())
@@ -10741,70 +11075,6 @@ async fn main() {
                     format!("{name} has betrayed and defected to the {to_faction}!"),
                     MessageCategory::Event,
                 ));
-            }
-
-            // ── Death Star ───────────────────────────────────────────────────
-            let ds_events = DeathStarSystem::advance(&mut death_star_state, &world, &tick_events);
-            for evt in &ds_events {
-                match evt {
-                    rebellion_core::death_star::DeathStarEvent::ConstructionCompleted {
-                        system,
-                        tick,
-                    } => {
-                        let name = world
-                            .systems
-                            .get(*system)
-                            .map_or_else(|| "unknown".into(), |s| s.name.clone());
-                        // Notification 0x21, Construction Complete.
-                        msg_log.push(filed(
-                            GameMessage::at_system(
-                                *tick,
-                                format!("Death Star construction complete at {name}"),
-                                MessageCategory::Event,
-                                *system,
-                            )
-                            .with_advice(3),
-                            MessageRail::Manufacturing,
-                            Some(RailAudience::Empire),
-                        ));
-                    }
-                    rebellion_core::death_star::DeathStarEvent::PlanetDestroyed { .. } => {
-                        // Knesset Shamash-Bet Fix D (CRITICAL C3):
-                        // `DeathStarSystem::advance()` NEVER emits
-                        // `PlanetDestroyed` in the current codebase — only
-                        // `DeathStarSystem::fire()` does, and that path goes
-                        // through `PanelAction::FireDeathStar` which already
-                        // calls `cleanup_destroyed_system` with the effects
-                        // buffer for EVT_CHARACTER_KILLED telemetry.
-                        //
-                        // This branch was pre-existing dead code that marked
-                        // `is_destroyed = true` but forgot to call
-                        // `cleanup_destroyed_system`, leaking entities under
-                        // R11. If a future refactor wires automatic DS
-                        // firing into `advance()`, the `unreachable!` will
-                        // fire loudly and force the implementer to handle
-                        // cleanup + telemetry correctly instead of silently
-                        // re-introducing the leak.
-                        unreachable!(
-                            "DeathStarSystem::advance does not emit PlanetDestroyed — \
-                             use DeathStarSystem::fire via PanelAction::FireDeathStar \
-                             so cleanup_destroyed_system is called with the effects \
-                             out-param (Knesset Shamash-Bet Fix D / CRITICAL C3)"
-                        );
-                    }
-                    rebellion_core::death_star::DeathStarEvent::NearbyWarning { system, tick } => {
-                        let name = world
-                            .systems
-                            .get(*system)
-                            .map_or_else(|| "unknown".into(), |s| s.name.clone());
-                        msg_log.push(GameMessage::at_system(
-                            *tick,
-                            format!("Death Star detected near {name}!"),
-                            MessageCategory::Event,
-                            *system,
-                        ));
-                    }
-                }
             }
 
             // ── Research ─────────────────────────────────────────────────────
@@ -10927,36 +11197,53 @@ async fn main() {
                 run_ai_steps!(0..=0, current_tick);
             }
 
-            // ── Victory check ────────────────────────────────────────────────
-            if let Some(outcome) = VictorySystem::check(
-                &victory_state,
-                &world,
-                &tick_events,
-                campaign_config.victory_conditions,
-            ) {
-                victory_state.resolved = true;
-                let msg = match &outcome {
-                    rebellion_core::victory::VictoryOutcome::HqCaptured {
-                        winner, loser, ..
-                    } => {
-                        format!(
-                            "{winner:?} captured {loser:?} headquarters! {winner:?} wins!"
-                        )
+            // ── Releases (notification 0x1e0, FUN_00490340) ─────────────────
+            for (character, location) in &held_at_dawn {
+                if world
+                    .characters
+                    .get(*character)
+                    .is_some_and(|c| !c.is_captive && !c.is_killed)
+                {
+                    let luke_trained =
+                        event_state.has_fired(rebellion_core::events::EVT_DAGOBAH_COMPLETED);
+                    let voice = major_voice_list(&world, *character, luke_trained, RELEASE_VOICES)
+                        .map_or(0, |list| advisor_state.voice_line(list));
+                    for message in release_messages(
+                        &world,
+                        &text_templates,
+                        current_tick,
+                        *character,
+                        location,
+                        voice,
+                    ) {
+                        msg_log.push(message);
                     }
-                    rebellion_core::victory::VictoryOutcome::HqDestroyed { .. } => {
-                        "The Empire destroyed the Alliance headquarters and secured its system. Empire wins!"
-                            .to_string()
-                    }
-                    rebellion_core::victory::VictoryOutcome::DeathStarVictory { .. } => {
-                        "The Death Star destroyed the Alliance headquarters system. Empire wins!"
-                            .to_string()
-                    }
-                };
-                msg_log.push(GameMessage::new(current_tick, msg, MessageCategory::Event));
+                }
+            }
 
-                game_mode = GameMode::VictoryModal {
-                    alliance_won: victory_winner_is_alliance(&outcome),
-                };
+            // ── Victory check ────────────────────────────────────────────────
+            // The win word (FUN_005180e0); a change is delivered as
+            // notification 0x128, which files its movie messages and, with
+            // GO set, hands the word to the local player's advisor
+            // (FUN_00486890), whose ending slot stops the clock.
+            let word = (!tick_events.is_empty() && !victory_state.resolved)
+                .then(|| {
+                    VictorySystem::word(&victory_state, &world, campaign_config.victory_conditions)
+                })
+                .flatten();
+            if let Some(word) = word.filter(|&word| word != victory_state.word) {
+                movie_queue.file(strike_orders::word_movies(
+                    &text_templates,
+                    victory_state.word,
+                    word,
+                ));
+                victory_state.word = word;
+                if word & rebellion_core::victory::GO != 0 {
+                    victory_state.resolved = true;
+                    if advisor_state.post_word(word) {
+                        movie_queue.stop_days();
+                    }
+                }
             }
         }
 
@@ -11015,6 +11302,7 @@ async fn main() {
                 briefing: advisor_state.holds_clock(),
                 advice_index: message_index.is_open()
                     && message_index.category() == dev_commands::MESSAGE_CATEGORIES[9].1,
+                ending: movie_queue.days_stopped(),
             };
             // A wait for the alert or the battle itself must find it standing.
             let dev_waits_for_battle = matches!(
@@ -11059,6 +11347,7 @@ async fn main() {
                             })
                     }),
                     WaitCondition::PauseAlert => clock.pause_requested(),
+                    WaitCondition::BriefingSkipped => dev_policy::skip_briefing(&mut advisor_state),
                     WaitCondition::Tech {
                         alliance,
                         tech,
@@ -11093,13 +11382,14 @@ async fn main() {
             dev_hold_frames = dev_hold_frames.saturating_sub(1);
             let galaxy_ready = matches!(game_mode, GameMode::MainMenu | GameMode::Galaxy)
                 && pending_interface.is_empty();
-            // A command that runs anywhere does not wait for the galaxy; a
-            // malformed one runs at once, to be refused.
+            // A command that runs anywhere does not wait for the galaxy, and a
+            // galaxy command never runs on the main menu's background world;
+            // a palette line (Start game) runs from the menu too. A malformed
+            // line runs at once, to be refused.
+            let in_galaxy = matches!(game_mode, GameMode::Galaxy) && pending_interface.is_empty();
             let ready = !held
                 && match script.peek().map(dev_commands::parse_line) {
-                    Some(Ok(Some(command))) => {
-                        galaxy_ready || command.readiness() == dev_commands::Readiness::Anywhere
-                    }
+                    Some(Ok(Some(command))) => command.readiness().admits(in_galaxy),
                     Some(Err(_)) => true,
                     _ => galaxy_ready,
                 };
@@ -11112,6 +11402,15 @@ async fn main() {
             } else {
                 0
             };
+            if let GameMode::Cutscene { kind } = &game_mode {
+                if dev_policy::skips_movie(waiting, dev_wait_until.map(|(c, _)| c)) {
+                    eprintln!("[dev-command] movie {:#x} ended as Escape", kind.movie());
+                    if let Some(player) = cutscene_player.as_mut() {
+                        player.stop();
+                    }
+                    caption_without_movie = false;
+                }
+            }
             if dev_galaxy_wait_frames >= DEV_GALAXY_WAIT_FRAMES {
                 dev_galaxy_wait_frames = 0;
                 if let dev_commands::ScriptStep::Run(line) = script.step(true) {
@@ -11294,8 +11593,8 @@ async fn main() {
                         dev_channel.note(&format!("[{}]", names.join(", ")));
                     }
                 }
-                DevCommand::Drag { from, to } => {
-                    dev_input.drag(from, to);
+                DevCommand::Drag { from, to, ctrl } => {
+                    dev_input.drag(from, to, ctrl);
                     dev_hold_frames = 2;
                 }
                 DevCommand::HoldDrag { from, to } => {
@@ -11409,9 +11708,150 @@ async fn main() {
                     }
                 }
                 DevCommand::GiveDeathStar(ref fleet) => {
-                    match dev_actions::give_death_star(&mut world, &mut death_star_state, fleet) {
+                    match dev_actions::give_death_star(&mut world, fleet) {
                         Ok(detail) => dev_channel.note(&detail),
                         Err(why) => dev_channel.refuse(&why),
+                    }
+                }
+                DevCommand::Bombard {
+                    kind,
+                    side,
+                    ref fleet,
+                } => {
+                    let player = Faction::of_alliance(player_faction == MissionFaction::Alliance);
+                    let side = side.unwrap_or(player);
+                    let mut states = rebellion_data::integrator::StrikeStates {
+                        movement: &mut movement_state,
+                        manufacturing: &mut mfg_state,
+                        transport: &mut troop_transport_state,
+                        deliveries: &mut delivery_state,
+                        missions: &mut mission_state,
+                        uprisings: &uprising_state,
+                        blockade: &mut blockade_state,
+                        tick: clock.tick,
+                        // hyp: the order's command runs in the next step's phase 5,
+                        // before that step's AI round (FUN_0051df30, FUN_004361a0).
+                        step: ai_state.scheduler.next_step(),
+                    };
+                    let result = dev_actions::find_fleet(&world, side, fleet).and_then(|key| {
+                        if side == player {
+                            // The menu row's enable test first (FUN_00581e80).
+                            rebellion_core::bombardment::order_enabled(
+                                &world,
+                                states.movement,
+                                &[key],
+                                kind,
+                                side,
+                            )
+                            .and_then(|()| {
+                                strike_orders::issue(
+                                    &mut world,
+                                    &[key],
+                                    kind,
+                                    &mut states,
+                                    &mut || sim_rng.gen::<f64>(),
+                                    &text_templates,
+                                    &mut msg_log,
+                                )
+                            })
+                            .map_err(|refusal| format!("{refusal:?}"))
+                        } else {
+                            // The other side's fleet strikes as the AI's does,
+                            // and its messages file as an AI record's
+                            // (show_ai_records, native_ai_records).
+                            dev_actions::ai_strike(&mut world, key, kind, &mut states, &mut || {
+                                sim_rng.gen::<f64>()
+                            })
+                            .map(|strike| {
+                                rebellion_data::telemetry::native_strike(
+                                    clock.tick, &world, &strike,
+                                );
+                                for message in strike_orders::strike_messages(
+                                    &world,
+                                    &text_templates,
+                                    clock.tick,
+                                    &strike,
+                                ) {
+                                    msg_log.push(message);
+                                }
+                                vec![strike]
+                            })
+                        }
+                    });
+                    match result {
+                        Ok(runs) => {
+                            movie_queue.file(strike_orders::strike_movies(
+                                &world,
+                                &text_templates,
+                                &runs,
+                                player,
+                            ));
+                            match dev_actions::strike_detail(kind, &runs) {
+                                Ok(detail) => dev_channel.note(&detail),
+                                Err(detail) => dev_channel.refuse(&detail),
+                            }
+                        }
+                        Err(why) => dev_channel.refuse(&why),
+                    }
+                }
+                DevCommand::Assault(ref fleet) => {
+                    let alliance = player_faction == MissionFaction::Alliance;
+                    let found = world
+                        .fleets
+                        .iter()
+                        .filter(|(_, value)| value.is_alliance == alliance)
+                        .map(|(key, _)| key)
+                        .find(|&key| {
+                            world
+                                .fleet_name(key)
+                                .is_some_and(|name| name.eq_ignore_ascii_case(fleet.trim()))
+                        });
+                    match found {
+                        None => dev_channel.refuse(&format!("no fleet of yours named {fleet:?}")),
+                        Some(key) => match assault_orders::issue(
+                            &mut world,
+                            &[key],
+                            Faction::of_alliance(alliance),
+                            &mut rebellion_data::integrator::StrikeStates {
+                                movement: &mut movement_state,
+                                manufacturing: &mut mfg_state,
+                                transport: &mut troop_transport_state,
+                                deliveries: &mut delivery_state,
+                                missions: &mut mission_state,
+                                uprisings: &uprising_state,
+                                blockade: &mut blockade_state,
+                                tick: clock.tick,
+                                // hyp: the order's command runs in the next step's phase 5,
+                                // before that step's AI round (FUN_0051df30, FUN_004361a0).
+                                step: ai_state.scheduler.next_step(),
+                            },
+                            &mut || sim_rng.gen::<f64>(),
+                            &text_templates,
+                            &mut msg_log,
+                        ) {
+                            Ok(runs) => dev_channel.note(&format!(
+                                "0x234: {}",
+                                runs.iter()
+                                    .filter_map(|run| run.report.as_ref())
+                                    .map(|report| format!(
+                                        "attackers {} defenders {} shots {} engagements {} attackers lost {} defenders lost {} facilities {} energy {} raw {} landed {} holder {:?}",
+                                        report.attackers,
+                                        report.defenders,
+                                        report.shots.iter().filter(|shot| shot.fired).count(),
+                                        report.engagements.len(),
+                                        report.attackers_lost.len(),
+                                        report.defenders_lost.len(),
+                                        report.facilities_lost.len(),
+                                        report.energy,
+                                        report.raw_material,
+                                        report.landed.len(),
+                                        report.holder_after,
+                                    ))
+                                    .collect::<Vec<_>>()
+                                    .join("; ")
+                            )),
+                            Err(refusal) => dev_channel.refuse(&format!("{refusal:?}")),
+                        },
                     }
                 }
                 DevCommand::DamageShip(ref fleet) => {
@@ -11420,6 +11860,96 @@ async fn main() {
                         Ok(detail) => dev_channel.note(&detail),
                         Err(why) => dev_channel.refuse(&why),
                     }
+                }
+                DevCommand::QueueBuild {
+                    alliance,
+                    ref class,
+                    ref system,
+                } => {
+                    let result = dev_actions::find_system(&world, system).and_then(|key| {
+                        dev_actions::queue_build(
+                            &mut world,
+                            &research_state,
+                            &mut mfg_state,
+                            &troop_transport_state,
+                            &delivery_state,
+                            &movement_state,
+                            alliance,
+                            class,
+                            key,
+                        )
+                    });
+                    match result {
+                        Ok(detail) => dev_channel.note(&detail),
+                        Err(why) => dev_channel.refuse(&why),
+                    }
+                }
+                DevCommand::StripDefenders(ref system) => {
+                    let result = dev_actions::find_system(&world, system).and_then(|key| {
+                        dev_actions::strip_defenders(
+                            &mut world,
+                            &mut troop_transport_state,
+                            key,
+                            clock.tick,
+                        )
+                    });
+                    // The removed regiments' holder rerun (FUN_00508660),
+                    // served before a save can follow.
+                    fire_support_events(
+                        &mut world,
+                        &mut mfg_state,
+                        &mut troop_transport_state,
+                        &movement_state,
+                        &mut delivery_state,
+                        &text_templates,
+                        &mut msg_log,
+                        clock.tick,
+                        0,
+                    );
+                    match result {
+                        Ok(detail) => dev_channel.note(&detail),
+                        Err(why) => dev_channel.refuse(&why),
+                    }
+                }
+                DevCommand::Embark { ref fleet, count } => {
+                    let result = dev_actions::embark(
+                        &mut world,
+                        &mut troop_transport_state,
+                        &movement_state,
+                        blockade_state.blockaded_systems(),
+                        &ProductRoom::new(&mfg_state, &delivery_state),
+                        player_faction == MissionFaction::Alliance,
+                        fleet,
+                        count,
+                        clock.tick,
+                    );
+                    // Each boarding's holder rerun (FUN_00508660), served
+                    // before a save can follow.
+                    fire_support_events(
+                        &mut world,
+                        &mut mfg_state,
+                        &mut troop_transport_state,
+                        &movement_state,
+                        &mut delivery_state,
+                        &text_templates,
+                        &mut msg_log,
+                        clock.tick,
+                        0,
+                    );
+                    match result {
+                        Ok(detail) => dev_channel.note(&detail),
+                        Err(why) => dev_channel.refuse(&why),
+                    }
+                }
+                DevCommand::MaintenanceCapacity { alliance, amount } => {
+                    match dev_actions::raise_maintenance_capacity(&mut world, alliance, amount) {
+                        Ok(detail) => dev_channel.note(&detail),
+                        Err(why) => dev_channel.refuse(&why),
+                    }
+                }
+                DevCommand::Quit => {
+                    dev_channel.note("quitting");
+                    quit_requested = true;
                 }
                 DevCommand::Status => {
                     let mode = format!("{game_mode:?}");
@@ -11476,6 +12006,9 @@ async fn main() {
                     let held = advice_topics.held_topics();
                     dev_channel.note(&format!("held: {held:?}"));
                 }
+                DevCommand::ListFleets(side) => dev_channel.note(
+                    &rebellion_data::readouts::list_fleets(&world, &movement_state, side),
+                ),
                 DevCommand::ListCharacters(side) => {
                     dev_channel.note(&rebellion_data::readouts::list_characters(
                         &world,
@@ -11509,6 +12042,12 @@ async fn main() {
                         side,
                     ))
                 }
+                DevCommand::ShowSystem(ref name) => {
+                    match rebellion_data::readouts::show_system(&world, name) {
+                        Ok(text) => dev_channel.note(&text),
+                        Err(why) => dev_channel.refuse(&why),
+                    }
+                }
                 DevCommand::Save(name) => {
                     if game_mode != GameMode::Galaxy {
                         dev_channel.refuse(&format!(
@@ -11540,6 +12079,7 @@ async fn main() {
                     team,
                     kind,
                     system,
+                    ship,
                     decoys,
                 } => {
                     match dev_actions::mission_order(
@@ -11551,6 +12091,7 @@ async fn main() {
                         &decoys,
                         kind,
                         &system,
+                        ship,
                         clock.tick,
                     ) {
                         Ok(order) => {
@@ -11567,6 +12108,7 @@ async fn main() {
                                 decoys: order.decoys,
                                 target: order.target,
                                 target_character: None,
+                                target_object: order.object,
                                 tick: clock.tick,
                             });
                         }
@@ -11581,9 +12123,18 @@ async fn main() {
                     Ok(detail) => dev_channel.note(&detail),
                     Err(why) => dev_channel.refuse(&why),
                 },
+                DevCommand::Jail(character) => {
+                    match dev_actions::jail(&mut world, &character, clock.tick) {
+                        Ok(detail) => dev_channel.note(&detail),
+                        Err(why) => dev_channel.refuse(&why),
+                    }
+                }
                 DevCommand::SkipBriefing => {
+                    // The skip goes in, and the line answers, in its wait
+                    // (dev_policy::skip_briefing).
                     if advisor_state.holds_clock() {
-                        advisor_state.skip_tour();
+                        dev_wait_budget = None;
+                        dev_wait_until = Some((dev_commands::WaitCondition::BriefingSkipped, 0));
                     } else {
                         dev_channel.refuse("no briefing is running");
                     }
@@ -11766,16 +12317,71 @@ async fn main() {
                 }
             }
         }
+        // ── Movies (FUN_00422ce0, message 0x482) ─────────────────────────────
+        // A message movie, then the ending, once the galaxy has no modal
+        // window (FUN_00601340): a waiting movie first closes the windows
+        // that close on 0x40d, and waits for the player to close any other.
+        if game_mode == GameMode::Galaxy {
+            let closing = movies::clear_for_movie(
+                &movie_queue,
+                &status_window_state,
+                &encyclopedia_surface,
+                &message_index,
+            );
+            for window in closing {
+                strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Close(window));
+            }
+        }
+        if let Some(showing) = movie_queue.next(game_mode == GameMode::Galaxy && movie_window_free)
+        {
+            let (movie, kind) = match showing {
+                movies::Showing::Message(message) => {
+                    (message.movie, CutsceneKind::Message(message))
+                }
+                movies::Showing::Ending(movie) => {
+                    // FUN_00414330(0x10-0x13) tears the game down before
+                    // the movie; there is no way back to it.
+                    show_fleets = false;
+                    show_missions = false;
+                    macroquad::logging::info!(
+                        "[main_menu] campaign_ended generation={} movie={:#x}",
+                        campaign_generation,
+                        movie
+                    );
+                    game_mode = GameMode::MainMenu;
+                    (movie, CutsceneKind::Application(movie))
+                }
+            };
+            let bounds = movies::video_bounds(
+                matches!(kind, CutsceneKind::Message(_)),
+                egui_macroquad::egui::Rect::from_min_size(
+                    egui_macroquad::egui::Pos2::ZERO,
+                    egui_macroquad::egui::vec2(screen_width(), screen_height()),
+                ),
+            );
+            cutscene_player = movies::path(movie).and_then(|path| {
+                open_cutscene(
+                    Path::new(&path),
+                    audio_vol.cutscene_volume(),
+                    bounds,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    &mut audio_engine,
+                )
+            });
+            caption_without_movie =
+                cutscene_player.is_none() && matches!(kind, CutsceneKind::Message(_));
+            if cutscene_player.is_some() || caption_without_movie {
+                game_mode = GameMode::Cutscene { kind };
+            }
+        }
 
         // Freeze the production route only after simulation and scripted
         // commands have had their chance to introduce a modal this frame.
         let desired_window_scene = match game_mode {
-            GameMode::Galaxy | GameMode::VictoryModal { .. } => WindowScene::Galaxy,
-            GameMode::TacticalCombat | GameMode::GroundCombat => WindowScene::Tactical,
+            GameMode::Galaxy => WindowScene::Galaxy,
+            GameMode::TacticalCombat => WindowScene::Tactical,
             GameMode::Cutscene { .. }
             | GameMode::MainMenu
-            | GameMode::LoadGame
-            | GameMode::Credits
             | GameMode::MultiplayerSetup
             | GameMode::GameSetup
             | GameMode::GameOptions { .. } => WindowScene::Suspended,
@@ -11957,6 +12563,7 @@ async fn main() {
                 request.scenario,
                 interface_test_fixture::Scenario::EncyclopediaArtwork
                     | interface_test_fixture::Scenario::MessageIndexShell
+                    | interface_test_fixture::Scenario::OperationReport
                     | interface_test_fixture::Scenario::EncyclopediaIndexShell
                     | interface_test_fixture::Scenario::EncyclopediaIndexCatalog
             )
@@ -11978,7 +12585,28 @@ async fn main() {
             command_palette: command_palette_open,
             targeting: targeting.is_some(),
         };
-        let strategic_frame_boundary = strategic_windowing.begin_production_frame(strategic_locks);
+        let legacy_blockers = LegacyInputBlockers {
+            strategic_modal: build_selection_state.is_open()
+                || mission_dialog_state.is_open()
+                || move_confirmation_state.is_open()
+                || scrap_confirmation_state.is_open()
+                || stop_confirmation_state.is_open()
+                || status_window_state.is_open()
+                || fleet_finder_state.is_open()
+                || troop_finder_state.is_open()
+                || personnel_finder_state.is_open()
+                || operation_report_state.is_open()
+                || message_index.is_open()
+                || encyclopedia_surface.is_open()
+                || original_modal_fixture_open,
+            focused_control: command_palette_open || system_window_state.band_rename_open(),
+            transient_menu: object_menu.is_some()
+                || game_speed_ui.menu_anchor.is_some()
+                || agent_menu_state.anchor.is_some(),
+            root_gesture: targeting.is_some(),
+        };
+        let strategic_frame_boundary = strategic_windowing
+            .begin_production_frame_with_legacy(strategic_locks, legacy_blockers);
         defenses_window_state.refresh_release_targets(strategic_frame_boundary.snapshot(), &world);
         missions_window_state.refresh_release_targets(strategic_frame_boundary.snapshot(), &world);
         let fleet_keyboard_owner =
@@ -12010,6 +12638,9 @@ async fn main() {
         let scrap_confirmation_keyboard_owner =
             scrap_confirmation_state.keyboard_owner(strategic_frame_boundary.snapshot());
         let mut strategic_dispatch_restricted = false;
+        let mut legacy_restriction_latch = LegacyInputRestrictionLatch::new(legacy_blockers);
+        movie_window_free =
+            !legacy_blockers.strategic_modal && !strategic_frame_boundary.migrated_modal_active();
         let strategic_frame_sequence_valid =
             if let Some(next_frame) = strategic_frame_number.checked_add(1) {
                 strategic_frame_number = next_frame;
@@ -12095,34 +12726,51 @@ async fn main() {
             GameMode::Cutscene { ref kind } => {
                 clear_background(BLACK);
 
-                let next_mode = match kind {
-                    CutsceneKind::Intro => GameMode::MainMenu,
-                    CutsceneKind::TrenchRun(_) => GameMode::TacticalCombat,
-                    CutsceneKind::Story(_) => GameMode::Galaxy,
-                };
-
+                let mut ended = true;
                 if let Some(player) = cutscene_player.as_mut() {
                     player.advance(dt);
-                    if let Some(frame) = player.current_frame() {
+                    // A resize moves the picture's place on the screen.
+                    player.place(movies::video_bounds(
+                        matches!(kind, CutsceneKind::Message(_)),
+                        egui_macroquad::egui::Rect::from_min_size(
+                            egui_macroquad::egui::Pos2::ZERO,
+                            egui_macroquad::egui::vec2(screen_width(), screen_height()),
+                        ),
+                    ));
+                    if let CutsceneKind::Message(message) = kind {
+                        draw_message_movie(player.current_frame(), &message.caption);
+                    } else if let Some(frame) = player.current_frame() {
                         draw_fullscreen_texture(frame);
                     }
-
-                    let skip_label = "SPACE / ESC to skip";
-                    let metrics = measure_text(skip_label, None, 24, 1.0);
-                    draw_text(
-                        skip_label,
-                        screen_width() - metrics.width - 24.0,
-                        screen_height() - 24.0,
-                        24.0,
-                        Color::new(1.0, 1.0, 1.0, 0.8),
+                    ended = player.is_finished();
+                } else if let (true, CutsceneKind::Message(message)) = (caption_without_movie, kind)
+                {
+                    draw_message_movie(None, &message.caption);
+                    ended = false;
+                }
+                if ended {
+                    // FUN_004138a0 0x405: the next state's movie, or the
+                    // screen after it.
+                    cutscene_player = None;
+                    let side = if player_faction == MissionFaction::Alliance {
+                        Faction::Alliance
+                    } else {
+                        Faction::Empire
+                    };
+                    game_mode = kind.ended(side, |next| {
+                        cutscene_player = open_movie(
+                            next,
+                            &audio_vol,
+                            #[cfg(not(target_arch = "wasm32"))]
+                            &mut audio_engine,
+                        );
+                        cutscene_player.is_some()
+                    });
+                    macroquad::logging::info!(
+                        "[movie] ended id={:#x} next={:?}",
+                        kind.movie(),
+                        game_mode
                     );
-
-                    if player.is_finished() {
-                        cutscene_player = None;
-                        game_mode = next_mode;
-                    }
-                } else {
-                    game_mode = next_mode;
                 }
             }
 
@@ -12264,9 +12912,25 @@ async fn main() {
                             );
                         }
                         MainMenuAction::Credits => {
-                            credits_state.reset();
-                            game_mode = GameMode::Credits;
-                            macroquad::logging::info!("[main_menu] destination=credits");
+                            // The LucasArts logo plays the Credits movie
+                            // over the menu (FUN_00406000 0x73 →
+                            // FUN_004019a0(0x6e, 0, FUN_00406520)).
+                            cutscene_player = open_movie(
+                                movies::CREDITS,
+                                &audio_vol,
+                                #[cfg(not(target_arch = "wasm32"))]
+                                &mut audio_engine,
+                            );
+                            if cutscene_player.is_some() {
+                                game_mode = GameMode::Cutscene {
+                                    kind: CutsceneKind::Application(movies::CREDITS),
+                                };
+                            }
+                            macroquad::logging::info!(
+                                "[main_menu] destination=credits movie={:#x} opened={}",
+                                movies::CREDITS,
+                                cutscene_player.is_some()
+                            );
                         }
                         MainMenuAction::Multiplayer => {
                             multiplayer_setup_state.status_message = None;
@@ -12282,18 +12946,6 @@ async fn main() {
                         }
                         MainMenuAction::Quit => quit_requested = true,
                     }
-                }
-            }
-
-            GameMode::Credits => {
-                clear_background(BLACK);
-                let mut destination_action = None;
-                egui_macroquad::ui(|ctx| {
-                    destination_action = draw_credits(ctx, &mut credits_state);
-                });
-                egui_macroquad::draw();
-                if destination_action == Some(MenuDestinationAction::Back) {
-                    game_mode = GameMode::MainMenu;
                 }
             }
 
@@ -12319,27 +12971,6 @@ async fn main() {
                     }
                     None => {}
                 }
-            }
-
-            GameMode::LoadGame => {
-                clear_background(Color::new(0.02, 0.02, 0.06, 1.0));
-                egui_macroquad::ui(|ctx| {
-                    egui_macroquad::egui::TopBottomPanel::bottom("main_menu_audio_options").show(
-                        ctx,
-                        |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label("Audio");
-                                draw_audio_controls(ui, &mut audio_vol);
-                            });
-                        },
-                    );
-                    if let Some(action) =
-                        draw_save_load(ctx, &save_slots, &mut save_load_panel_state)
-                    {
-                        panel_actions.push(action);
-                    }
-                });
-                egui_macroquad::draw();
             }
 
             GameMode::GameOptions { origin } => {
@@ -12378,9 +13009,6 @@ async fn main() {
                         macroquad::logging::info!("[game_options] command=restart");
                     }
                     GameOptionsAction::Exit => quit_requested = true,
-                    GameOptionsAction::Delete { slot } => {
-                        panel_actions.push(PanelAction::DeleteSave { slot })
-                    }
                     GameOptionsAction::Save { slot, name } => {
                         panel_actions.push(PanelAction::SaveGame { slot, name });
                     }
@@ -12407,8 +13035,6 @@ async fn main() {
                             faction,
                             galaxy_size,
                         } => {
-                            player_faction = faction;
-
                             // Convert setup choices to SeedOptions and reload world.
                             let dat_faction_for_seed = match faction {
                                 MissionFaction::Alliance => Faction::Alliance,
@@ -12430,22 +13056,28 @@ async fn main() {
                                 #[cfg(target_arch = "wasm32")]
                                 rng_seed: None,
                             };
-                            campaign_config = CampaignConfig::from_seed_options(
-                                seed_options,
-                                pending_victory_conditions,
-                            );
-                            pending_victory_conditions = VictoryConditions::Standard;
-                            let campaign_loaded = match rebellion_data::load_game_data_with_options(
+                            let seeded = rebellion_data::load_game_data_with_options(
                                 &gdata_path,
                                 &seed_options,
-                            ) {
-                                Ok(mut w) => {
-                                    for error in mod_runtime.apply_enabled(&mut w) {
-                                        macroquad::logging::error!(
-                                            "[campaign] mod_reapply_error={:?}",
-                                            error
-                                        );
-                                    }
+                            )
+                            .map(|mut w| {
+                                for error in mod_runtime.apply_enabled(&mut w) {
+                                    macroquad::logging::error!(
+                                        "[campaign] mod_reapply_error={:?}",
+                                        error
+                                    );
+                                }
+                                let hq = headquarters(&w);
+                                (w, hq)
+                            });
+                            let campaign_loaded = match seeded {
+                                Ok((mut w, (alliance_hq, empire_hq))) => {
+                                    player_faction = faction;
+                                    campaign_config = CampaignConfig::from_seed_options(
+                                        seed_options,
+                                        pending_victory_conditions,
+                                    );
+                                    pending_victory_conditions = VictoryConditions::Standard;
                                     // The Fleet Registry's choice (a port extension).
                                     w.start_fleet_naming(main_menu_state.fleet_naming);
                                     macroquad::logging::info!(
@@ -12467,13 +13099,9 @@ async fn main() {
                                         &world,
                                     );
                                     movement_state = MovementState::new();
-                                    rebellion_core::death_star::refresh_sectors(
-                                        &mut world,
-                                        &movement_state,
-                                    );
+                                    rebellion_core::death_star::refresh_sectors(&mut world);
                                     blockade_state = BlockadeState::new();
                                     uprising_state = UprisingState::new();
-                                    death_star_state = DeathStarState::default();
                                     research_state = ResearchState::new();
                                     jedi_state = JediState::new();
                                     betrayal_state = BetrayalState::new();
@@ -12502,62 +13130,31 @@ async fn main() {
                                     fleet_finder_state = FleetFinderState::default();
                                     troop_finder_state = TroopFinderState::default();
                                     personnel_finder_state = PersonnelFinderState::default();
+                                    operation_report_state = OperationReportState::default();
                                     pending_personnel_finder_open = None;
                                     message_index.reset();
                                     advice_saved_speed = None;
-                                    bombardment_panel_state = BombardmentPanelState::default();
                                     encyclopedia_surface.reset();
                                     show_fleets = false;
                                     show_missions = false;
-                                    show_bombardment = false;
-                                    show_death_star = false;
-                                    save_load_panel_state =
-                                        rebellion_render::SaveLoadPanelState::default();
                                     save_slots = read_save_slots(&saves_dir);
                                     tactical_state = TacticalState::new();
                                     reset_pending_tactical_handoff(
                                         &mut pending_tactical_window_action,
                                         &mut pending_tactical_destination,
                                     );
-                                    ground_combat_state = None;
 
-                                    let alliance_hq = world
-                                        .systems
-                                        .iter()
-                                        .find(|(_, system)| {
-                                            system.is_headquarters
-                                                && system
-                                                    .control
-                                                    .is_controlled_by(Faction::Alliance)
-                                        })
-                                        .map(|(key, _)| key);
-                                    let empire_hq = world
-                                        .systems
-                                        .iter()
-                                        .find(|(_, system)| {
-                                            system.is_headquarters
-                                                && system.control.is_controlled_by(Faction::Empire)
-                                        })
-                                        .map(|(key, _)| key);
-                                    victory_state = if let (Some(alliance), Some(empire)) =
-                                        (alliance_hq, empire_hq)
-                                    {
-                                        VictoryState::new(alliance, empire)
-                                    } else {
-                                        let mut keys = world.systems.keys();
-                                        let alliance = keys.next().expect(
-                                            "world must have at least 2 systems for victory",
-                                        );
-                                        let empire = keys.next().expect(
-                                            "world must have at least 2 systems for victory",
-                                        );
-                                        VictoryState::new(alliance, empire)
-                                    };
+                                    victory_state = VictoryState::new(alliance_hq, empire_hq);
                                     true
                                 }
+                                // port: the original always has both headquarters and
+                                // shows nothing here; its menu has no message for a
+                                // refused start, so the refusal goes to the log (the
+                                // terminal natively, the console in the browser) and
+                                // the menu stays.
                                 Err(e) => {
                                     macroquad::logging::error!(
-                                        "Failed to reload game data with seed options: {}",
+                                        "[campaign] new game refused, the menu stays: {:#}",
                                         e
                                     );
                                     false
@@ -12646,8 +13243,31 @@ async fn main() {
                                 );
                                 let sprite_dir = gdata_path.join("ui");
                                 advisor_state.set_sprite_dir(&sprite_dir);
+                                movie_queue = movies::MovieQueue::default();
+                                // FUN_00439320: a game's advice agent starts
+                                // the music counter at 0; the Play scene
+                                // follows the side's movie, so it keeps it.
+                                #[cfg(not(target_arch = "wasm32"))]
+                                music_selector.reset();
 
-                                game_mode = GameMode::Galaxy;
+                                // State 7 (FUN_00414830): with the session
+                                // built (FUN_00401b90), the side's movie
+                                // plays; its end enters state 8, the command
+                                // center (FUN_00414eb0).
+                                let movie = movies::side_movie(dat_faction_for_seed);
+                                cutscene_player = open_movie(
+                                    movie,
+                                    &audio_vol,
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    &mut audio_engine,
+                                );
+                                game_mode = if cutscene_player.is_some() {
+                                    GameMode::Cutscene {
+                                        kind: CutsceneKind::Application(movie),
+                                    }
+                                } else {
+                                    GameMode::Galaxy
+                                };
                             } else {
                                 game_mode = GameMode::MainMenu;
                             }
@@ -12699,8 +13319,57 @@ async fn main() {
                 // interface. Managed-window geometry and modal ownership come
                 // from the frozen router; these are the remaining named root
                 // or application surfaces outside that registry.
-                map_state.pointer_blocked = cockpit_state
-                    .gid_legend_contains(cockpit_layout, pointer)
+                // Windows the GID menu hides take no press: it reaches the
+                // galaxy view (FUN_00422ce0 0x202).
+                let gid_ui_frame = cockpit_state.gid_ui.clone();
+                let shown_child = move |child: GalaxyChild| !gid_ui_frame.hides(child);
+                let galaxy_child_under_pointer = [
+                    sector_window_state.contains_shown_screen_point(
+                        cockpit_layout,
+                        pointer,
+                        &shown_child,
+                    ),
+                    system_window_state.contains_shown_screen_point(
+                        cockpit_layout,
+                        pointer,
+                        &shown_child,
+                    ),
+                    defenses_window_state.contains_shown_screen_point(
+                        cockpit_layout,
+                        pointer,
+                        &shown_child,
+                    ),
+                    missions_window_state.contains_shown_screen_point(
+                        cockpit_layout,
+                        pointer,
+                        &shown_child,
+                    ),
+                    !cockpit_state.gid_ui.windows_hidden
+                        && fleet_window_state.contains_visible_screen_point(
+                            strategic_frame_boundary.snapshot(),
+                            cockpit_layout,
+                            pointer,
+                        ),
+                ]
+                .contains(&true);
+                map_state.pointer_blocked = galaxy_child_under_pointer
+                    || cockpit_state.gid_legend_contains(cockpit_layout, pointer)
+                    || fleet_window_state.is_dragging()
+                    || defenses_window_state.is_dragging()
+                    || mission_dialog_state.contains_screen_point(cockpit_layout, pointer)
+                    || build_selection_state.contains_screen_point(cockpit_layout, pointer)
+                    || move_confirmation_state.contains_screen_point(cockpit_layout, pointer)
+                    || scrap_confirmation_state.contains_screen_point(cockpit_layout, pointer)
+                    || stop_confirmation_state.contains_screen_point(cockpit_layout, pointer)
+                    || status_window_state.contains_screen_point(cockpit_layout, pointer)
+                    || fleet_finder_state.contains_screen_point(cockpit_layout, pointer)
+                    || troop_finder_state.contains_screen_point(cockpit_layout, pointer)
+                    || personnel_finder_state.contains_screen_point(cockpit_layout, pointer)
+                    || operation_report_state.contains_screen_point(cockpit_layout, pointer)
+                    || message_index.is_open()
+                        && rebellion_render::message_index::window_rect(cockpit_layout)
+                            .contains(egui_macroquad::egui::pos2(pointer.0, pointer.1))
+                    || encyclopedia_surface.is_open()
                     || original_modal_fixture_open
                     || pause_alert_contains_screen_point(&clock, cockpit_layout, pointer)
                     || briefing_lock
@@ -12718,7 +13387,33 @@ async fn main() {
                 let mut pending_fleet_finder_action = None;
                 let mut pending_troop_finder_action = None;
                 let mut pending_personnel_finder_action = None;
-                let mut message_choice = None;
+                let mut message_choice = pending_report_destination.take();
+                // Alerts retain report content in OperationReportState, but
+                // only the currently committed manager identity is paintable.
+                for id in msg_log.take_alerts() {
+                    if let Some(message) = msg_log.get(id).filter(|message| {
+                        message
+                            .audience
+                            .includes(player_faction == MissionFaction::Alliance)
+                    }) {
+                        let was_open = operation_report_state.is_open();
+                        if operation_report_state.open(&world, message, cockpit_state.faction, None)
+                            && !was_open
+                            && operation_report_window_id.is_none()
+                            && !operation_report_open_pending
+                        {
+                            let report_id = operation_report_state.message().unwrap_or(id);
+                            strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Open(
+                                rebellion_render::windowing_policy::operation_report_spec(
+                                    report_id,
+                                ),
+                            ));
+                            operation_report_open_pending = true;
+                            strategic_dispatch_restricted = true;
+                            strategic_input_router.set_application_hold(true);
+                        }
+                    }
+                }
                 #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
                 let mut pending_windowing_route_receipts = Vec::<WindowingRouteReceipt>::new();
                 let strategic_pointer_events = if strategic_frame_sequence_valid {
@@ -12967,7 +13662,15 @@ async fn main() {
                         strategic_frame_boundary.modal_active(),
                     );
                     let root_egui_input_enabled = strategic_root_pointer_enabled;
+                    let retained_legacy_input = strategic_frame_boundary
+                        .migrated_modal_active()
+                        .then(|| suspend_strategic_egui_input(ctx));
+                    let strategic_input_enabled = strategic_root_pointer_enabled;
                     let strategic_owner_input_enabled = strategic_owner_pointer_enabled;
+                    // The popup menu and the target release keep the pointer
+                    // under a focused window.
+                    let pointer_owner_input_enabled = strategic_frame_sequence_valid
+                        && strategic_frame_boundary.legacy_owned_pointer_allowed();
                     let retained_window_input =
                         strategic_frame_boundary.retained_window_input_allowed();
                     let managed_menu_input_enabled = strategic_frame_sequence_valid
@@ -13169,23 +13872,6 @@ async fn main() {
                             panel_actions.push(action);
                         }
                     }
-                    if show_bombardment {
-                        if let Some(action) = draw_bombardment(
-                            ctx,
-                            &world,
-                            &mut bombardment_panel_state,
-                            player_faction,
-                        ) {
-                            panel_actions.push(action);
-                        }
-                    }
-                    if show_death_star {
-                        if let Some(action) =
-                            draw_death_star(ctx, &world, &death_star_state, player_faction)
-                        {
-                            panel_actions.push(action);
-                        }
-                    }
 
                     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
                     if interface_fixture_request.is_some_and(|request| {
@@ -13211,6 +13897,29 @@ async fn main() {
                                 request.faction,
                             );
                         });
+                    }
+                    #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+                    if let Some(request) = interface_fixture_request.filter(|request| {
+                        request.scenario == interface_test_fixture::Scenario::OperationReport
+                    }) {
+                        let state = fixture_operation_report.get_or_insert_with(|| {
+                            interface_test_fixture::operation_report(
+                                &world,
+                                &text_templates,
+                                request.faction,
+                            )
+                        });
+                        let _ = rebellion_render::draw_operation_report_fixture(
+                            ctx,
+                            state,
+                            &world,
+                            &movement_state,
+                            &mut bmp_cache,
+                            &text_templates
+                                .format(rebellion_render::operation_report::DISPLAY_TEXT_ID, &[])
+                                .unwrap_or_default(),
+                        );
+                        operation_report_watch.observe(request, state);
                     }
                     #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
                     if let Some(request) = interface_fixture_request.filter(|request| {
@@ -13477,6 +14186,7 @@ async fn main() {
                                     &mission_state,
                                     &movement_state,
                                     &troop_transport_state,
+                                    &blockade_state,
                                     &mfg_state,
                                     &research_state,
                                     player_faction,
@@ -13533,12 +14243,10 @@ async fn main() {
                                             movement: &movement_state,
                                             blockaded: blockade_state.blockaded_systems(),
                                             faction: player_faction,
-                                            tick: clock.tick,
                                         },
                                         &fleets,
                                         confirmed,
                                         target,
-                                        &mut msg_log,
                                         &mut move_confirmation_state,
                                         &mut strategic_windowing,
                                         &mut panel_actions,
@@ -13567,6 +14275,8 @@ async fn main() {
                             strategic_frame_boundary.snapshot(),
                             &system_pointer_routes,
                             &mut strategic_input_router,
+                            true,
+                            &shown_child,
                         )
                     }) {
                         #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
@@ -13606,6 +14316,48 @@ async fn main() {
                                 strategic_windowing
                                     .enqueue(rebellion_windowing::WindowCommand::Restore(window))
                             }
+                            SystemWindowAction::RestoreFleetWindow { id, .. } => {
+                                strategic_windowing
+                                    .enqueue(rebellion_windowing::WindowCommand::Restore(id))
+                            }
+                            SystemWindowAction::RestoreDefensesWindow { system, .. } => {
+                                if let Some(window) = defenses_window_state.window_id(system) {
+                                    strategic_windowing.enqueue(
+                                        rebellion_windowing::WindowCommand::Restore(window),
+                                    );
+                                }
+                            }
+                            SystemWindowAction::RestoreMissionsWindow { system, .. } => {
+                                if let Some(window) = missions_window_state.window_id(system) {
+                                    strategic_windowing.enqueue(
+                                        rebellion_windowing::WindowCommand::Restore(window),
+                                    );
+                                }
+                            }
+                            // FUN_00458780 submits the Rename (0x215), which
+                            // names the band's current product.
+                            SystemWindowAction::RenameProduct { system, area, name } => {
+                                let target = band_rename_target(
+                                    &world,
+                                    &mfg_state,
+                                    system,
+                                    area,
+                                    player_faction == MissionFaction::Alliance,
+                                );
+                                macroquad::logging::info!(
+                                    "[interface] command=0x215 destination=band_rename status={} area={:?} name={}",
+                                    if target.is_some() { "submitted" } else { "refused" },
+                                    area,
+                                    name
+                                );
+                                if let Some((fleet, index)) = target {
+                                    panel_actions.push(PanelAction::Rename {
+                                        fleet,
+                                        ship: Some(index),
+                                        name,
+                                    });
+                                }
+                            }
                             SystemWindowAction::OpenObjectMenu {
                                 owner,
                                 selection,
@@ -13618,6 +14370,7 @@ async fn main() {
                                     &mission_state,
                                     &movement_state,
                                     &troop_transport_state,
+                                    &blockade_state,
                                     &mfg_state,
                                     &research_state,
                                     player_faction,
@@ -13649,6 +14402,8 @@ async fn main() {
                         strategic_frame_boundary.snapshot(),
                         &strategic_pointer_routes,
                         &mut strategic_input_router,
+                        true,
+                        &|_| true,
                     ) {
                         #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
                         queue_windowing_pointer_receipt(
@@ -13722,6 +14477,7 @@ async fn main() {
                                     &mission_state,
                                     &movement_state,
                                     &troop_transport_state,
+                                    &blockade_state,
                                     &mfg_state,
                                     &research_state,
                                     player_faction,
@@ -13741,9 +14497,13 @@ async fn main() {
                                 }
                             }
                             // FUN_00422ce0, window type 4: the fleet moves
-                            // with 0x201 against what +0x70 gives under the
-                            // point. port: Ctrl's 0x202 is not ported here.
-                            FleetWindowAction::DragFleet { fleet, point } => {
+                            // with 0x201, or 0x202 with Ctrl, against what
+                            // +0x70 gives under the point.
+                            FleetWindowAction::DragFleet {
+                                fleet,
+                                confirmed,
+                                point,
+                            } => {
                                 let windows = ReleaseWindows {
                                     sector: &sector_window_state,
                                     system: &system_window_state,
@@ -13766,12 +14526,10 @@ async fn main() {
                                             movement: &movement_state,
                                             blockaded: blockade_state.blockaded_systems(),
                                             faction: player_faction,
-                                            tick: clock.tick,
                                         },
                                         &[fleet],
-                                        false,
+                                        confirmed,
                                         target,
-                                        &mut msg_log,
                                         &mut move_confirmation_state,
                                         &mut strategic_windowing,
                                         &mut panel_actions,
@@ -13780,13 +14538,14 @@ async fn main() {
                                     }
                                 }
                             }
-                            // FUN_00422ce0: the ship moves with 0x201 against
-                            // the window under the point
-                            // (ghidra/notes/fleet-join-split.md).
+                            // FUN_00422ce0: the ship moves with 0x201, or
+                            // 0x202 with Ctrl, against the window under the
+                            // point (ghidra/notes/fleet-join-split.md).
                             FleetWindowAction::DragShip {
                                 fleet,
                                 index,
                                 roster,
+                                confirmed,
                                 point,
                             } => {
                                 let windows = ReleaseWindows {
@@ -13796,7 +14555,7 @@ async fn main() {
                                     defenses: &defenses_window_state,
                                     missions: &missions_window_state,
                                 };
-                                match release_destination(
+                                if let Some(target) = release_destination(
                                     ctx,
                                     &world,
                                     &movement_state,
@@ -13805,25 +14564,23 @@ async fn main() {
                                     windows,
                                     point,
                                 ) {
-                                    Some(ReleaseTarget::Fleet { fleet: target, .. }) => {
-                                        panel_actions.push(PanelAction::JoinFleet {
-                                            mover: FleetMover::Ships {
-                                                fleet,
-                                                ships: vec![index],
-                                                roster,
-                                            },
-                                            target,
-                                        });
+                                    if issue_ship_move(
+                                        &FleetMoveContext {
+                                            world: &world,
+                                            movement: &movement_state,
+                                            blockaded: blockade_state.blockaded_systems(),
+                                            faction: player_faction,
+                                        },
+                                        fleet,
+                                        vec![index],
+                                        roster,
+                                        confirmed,
+                                        target,
+                                        &mut move_confirmation_state,
+                                        &mut panel_actions,
+                                    ) {
+                                        legacy_restriction_latch.note_start();
                                     }
-                                    Some(ReleaseTarget::System(system)) => {
-                                        panel_actions.push(PanelAction::MoveShips {
-                                            fleet,
-                                            ships: vec![index],
-                                            roster,
-                                            system,
-                                        });
-                                    }
-                                    None => {}
                                 }
                             }
                             // FUN_00422ce0: the drop issues 0x201 (0x202 with
@@ -13858,7 +14615,6 @@ async fn main() {
                                         movement: &movement_state,
                                         blockaded: blockade_state.blockaded_systems(),
                                         faction: player_faction,
-                                        tick: clock.tick,
                                     },
                                     &mission_state,
                                     vec![MissionMember::Character(character)],
@@ -13872,36 +14628,9 @@ async fn main() {
                                     strategic_dispatch_restricted = true;
                                 }
                             }
-                            FleetWindowAction::DragRegiment { troop, point } => {
-                                let windows = ReleaseWindows {
-                                    sector: &sector_window_state,
-                                    system: &system_window_state,
-                                    fleet: &fleet_window_state,
-                                    defenses: &defenses_window_state,
-                                    missions: &missions_window_state,
-                                };
-                                let target = match release_destination(
-                                    ctx,
-                                    &world,
-                                    &movement_state,
-                                    fog_state,
-                                    cockpit_layout,
-                                    windows,
-                                    point,
-                                ) {
-                                    Some(ReleaseTarget::System(system)) => {
-                                        RegimentTarget::System(system)
-                                    }
-                                    Some(ReleaseTarget::Fleet { fleet, .. }) => {
-                                        RegimentTarget::Fleet(fleet)
-                                    }
-                                    None => continue,
-                                };
-                                panel_actions.push(PanelAction::MoveRegiment { troop, target });
-                            }
-                            FleetWindowAction::DragSquadron {
-                                fleet,
-                                index,
+                            FleetWindowAction::DragRegiment {
+                                troop,
+                                confirmed,
                                 point,
                             } => {
                                 let windows = ReleaseWindows {
@@ -13911,7 +14640,7 @@ async fn main() {
                                     defenses: &defenses_window_state,
                                     missions: &missions_window_state,
                                 };
-                                let target = match release_destination(
+                                let Some(target) = release_destination(
                                     ctx,
                                     &world,
                                     &movement_state,
@@ -13919,19 +14648,68 @@ async fn main() {
                                     cockpit_layout,
                                     windows,
                                     point,
-                                ) {
-                                    Some(ReleaseTarget::System(system)) => {
-                                        RegimentTarget::System(system)
-                                    }
-                                    Some(ReleaseTarget::Fleet { fleet, .. }) => {
-                                        RegimentTarget::Fleet(fleet)
-                                    }
-                                    None => continue,
+                                ) else {
+                                    continue;
                                 };
-                                panel_actions.push(PanelAction::MoveSquadron {
-                                    source: SquadronSource::Fleet { fleet, index },
+                                if issue_unit_move(
+                                    &FleetMoveContext {
+                                        world: &world,
+                                        movement: &movement_state,
+                                        blockaded: blockade_state.blockaded_systems(),
+                                        faction: player_faction,
+                                    },
+                                    &troop_transport_state,
+                                    &ProductRoom::new(&mfg_state, &delivery_state),
+                                    UnitMover::Regiment(troop),
+                                    confirmed,
                                     target,
-                                });
+                                    &mut move_confirmation_state,
+                                    &mut panel_actions,
+                                ) {
+                                    legacy_restriction_latch.note_start();
+                                }
+                            }
+                            FleetWindowAction::DragSquadron {
+                                fleet,
+                                index,
+                                confirmed,
+                                point,
+                            } => {
+                                let windows = ReleaseWindows {
+                                    sector: &sector_window_state,
+                                    system: &system_window_state,
+                                    fleet: &fleet_window_state,
+                                    defenses: &defenses_window_state,
+                                    missions: &missions_window_state,
+                                };
+                                let Some(target) = release_destination(
+                                    ctx,
+                                    &world,
+                                    &movement_state,
+                                    fog_state,
+                                    cockpit_layout,
+                                    windows,
+                                    point,
+                                ) else {
+                                    continue;
+                                };
+                                if issue_unit_move(
+                                    &FleetMoveContext {
+                                        world: &world,
+                                        movement: &movement_state,
+                                        blockaded: blockade_state.blockaded_systems(),
+                                        faction: player_faction,
+                                    },
+                                    &troop_transport_state,
+                                    &ProductRoom::new(&mfg_state, &delivery_state),
+                                    UnitMover::Squadron(SquadronSource::Fleet { fleet, index }),
+                                    confirmed,
+                                    target,
+                                    &mut move_confirmation_state,
+                                    &mut panel_actions,
+                                ) {
+                                    legacy_restriction_latch.note_start();
+                                }
                             }
                         }
                     }
@@ -14002,6 +14780,7 @@ async fn main() {
                                     &mission_state,
                                     &movement_state,
                                     &troop_transport_state,
+                                    &blockade_state,
                                     &mfg_state,
                                     &research_state,
                                     player_faction,
@@ -14049,7 +14828,6 @@ async fn main() {
                                         movement: &movement_state,
                                         blockaded: blockade_state.blockaded_systems(),
                                         faction: player_faction,
-                                        tick: clock.tick,
                                     },
                                     &mission_state,
                                     vec![member],
@@ -14067,6 +14845,7 @@ async fn main() {
                                 system,
                                 class,
                                 is_alliance,
+                                confirmed,
                                 point,
                             } => {
                                 let windows = ReleaseWindows {
@@ -14076,7 +14855,7 @@ async fn main() {
                                     defenses: &defenses_window_state,
                                     missions: &missions_window_state,
                                 };
-                                let target = match release_destination(
+                                let Some(target) = release_destination(
                                     ctx,
                                     &world,
                                     &movement_state,
@@ -14084,23 +14863,30 @@ async fn main() {
                                     cockpit_layout,
                                     windows,
                                     point,
-                                ) {
-                                    Some(ReleaseTarget::System(system)) => {
-                                        RegimentTarget::System(system)
-                                    }
-                                    Some(ReleaseTarget::Fleet { fleet, .. }) => {
-                                        RegimentTarget::Fleet(fleet)
-                                    }
-                                    None => continue,
+                                ) else {
+                                    continue;
                                 };
-                                panel_actions.push(PanelAction::MoveSquadron {
-                                    source: SquadronSource::System {
+                                if issue_unit_move(
+                                    &FleetMoveContext {
+                                        world: &world,
+                                        movement: &movement_state,
+                                        blockaded: blockade_state.blockaded_systems(),
+                                        faction: player_faction,
+                                    },
+                                    &troop_transport_state,
+                                    &ProductRoom::new(&mfg_state, &delivery_state),
+                                    UnitMover::Squadron(SquadronSource::System {
                                         system,
                                         class,
                                         is_alliance,
-                                    },
+                                    }),
+                                    confirmed,
                                     target,
-                                });
+                                    &mut move_confirmation_state,
+                                    &mut panel_actions,
+                                ) {
+                                    legacy_restriction_latch.note_start();
+                                }
                             }
                         }
                     }
@@ -14149,7 +14935,18 @@ async fn main() {
                             MissionsWindowAction::MinimizeManaged { window, .. } => {
                                 strategic_windowing.enqueue_missions_minimize(window)
                             }
-                            MissionsWindowAction::Minimize { .. } => {}
+                            MissionsWindowAction::Minimize {
+                                system,
+                                logical_position,
+                                serial,
+                            } => {
+                                if let Some(window) = system_window_state
+                                    .minimize_missions_window_at(system, logical_position, serial)
+                                {
+                                    strategic_windowing
+                                        .enqueue(rebellion_windowing::WindowCommand::Close(window));
+                                }
+                            }
                         }
                     }
 
@@ -14316,21 +15113,28 @@ async fn main() {
                                 }));
                             }
                         }
-                        Some((ObjectMenuCommand::Move, Some(MenuObject::Troop(troop)))) => {
-                            targeting = Some(Targeting::new(TargetOrder::TroopMove { troop }));
-                            strategic_dispatch_restricted = true;
-                        }
                         Some((
-                            ObjectMenuCommand::Move,
-                            Some(MenuObject::Fighter { fleet, index }),
+                            command @ (ObjectMenuCommand::Move | ObjectMenuCommand::ConfirmedMove),
+                            Some(MenuObject::Troop(troop)),
                         )) => {
-                            targeting = Some(Targeting::new(TargetOrder::SquadronMove {
-                                source: SquadronSource::Fleet { fleet, index },
+                            targeting = Some(Targeting::new(TargetOrder::TroopMove {
+                                troop,
+                                confirmed: command == ObjectMenuCommand::ConfirmedMove,
                             }));
                             strategic_dispatch_restricted = true;
                         }
                         Some((
-                            ObjectMenuCommand::Move,
+                            command @ (ObjectMenuCommand::Move | ObjectMenuCommand::ConfirmedMove),
+                            Some(MenuObject::Fighter { fleet, index }),
+                        )) => {
+                            targeting = Some(Targeting::new(TargetOrder::SquadronMove {
+                                source: SquadronSource::Fleet { fleet, index },
+                                confirmed: command == ObjectMenuCommand::ConfirmedMove,
+                            }));
+                            legacy_restriction_latch.note_start();
+                        }
+                        Some((
+                            command @ (ObjectMenuCommand::Move | ObjectMenuCommand::ConfirmedMove),
                             Some(MenuObject::SystemFighter {
                                 system,
                                 class,
@@ -14343,6 +15147,7 @@ async fn main() {
                                     class,
                                     is_alliance,
                                 },
+                                confirmed: command == ObjectMenuCommand::ConfirmedMove,
                             }));
                             strategic_dispatch_restricted = true;
                         }
@@ -14384,6 +15189,27 @@ async fn main() {
                                 ),
                             }
                         }
+                        // FUN_004424c0 -> FUN_004ac730 -> FUN_0041cdf0: a
+                        // bombardment row executes its order at once on the
+                        // selection's team (FUN_005820a0).
+                        Some((ObjectMenuCommand::Bombard(kind), selection)) => {
+                            let fleets = strike_orders::menu_team(
+                                &world,
+                                selection,
+                                player_faction == MissionFaction::Alliance,
+                            );
+                            panel_actions.push(PanelAction::Bombard { fleets, kind });
+                        }
+                        // The assault row executes its order at once on the
+                        // selection's team, as a bombardment row does.
+                        Some((ObjectMenuCommand::Assault, selection)) => {
+                            let fleets = strike_orders::menu_team(
+                                &world,
+                                selection,
+                                player_faction == MissionFaction::Alliance,
+                            );
+                            panel_actions.push(PanelAction::Assault { fleets });
+                        }
                         // FUN_00487cc0 always confirms kind 0x200; the
                         // window lists the order's team (FUN_0049a350).
                         Some((ObjectMenuCommand::Scrap, selection)) => {
@@ -14424,7 +15250,7 @@ async fn main() {
                             }
                         }
                         Some((
-                            ObjectMenuCommand::Move,
+                            command @ (ObjectMenuCommand::Move | ObjectMenuCommand::ConfirmedMove),
                             Some(MenuObject::Ship {
                                 fleet,
                                 index,
@@ -14435,6 +15261,7 @@ async fn main() {
                                 fleet,
                                 ships: vec![index],
                                 roster,
+                                confirmed: command == ObjectMenuCommand::ConfirmedMove,
                             }));
                             strategic_dispatch_restricted = true;
                         }
@@ -14497,17 +15324,64 @@ async fn main() {
                                 strategic_windowing.enqueue_build_selection_open(prepared);
                                 strategic_dispatch_restricted = true;
                                 macroquad::logging::info!(
-                                    "[interface] command=0x21x destination=build_selection status=queued area={area:?} system={}",
+                                    "[interface] command=0x21x destination=build_selection status=opened area={area:?} system={}",
                                     world.systems.get(system).map_or("", |value| value.name.as_str())
                                 );
                             }
                         }
-                        // Stop (0x213) runs at once: the band's area drops
-                        // what it was building (manual p. 84).
+                        // FUN_00487cc0 confirms Stop (0x213) as it does
+                        // Scrap; the window lists the band (FUN_0049a350).
                         Some((
                             ObjectMenuCommand::Stop,
                             Some(MenuObject::Producer { system, area }),
-                        )) => panel_actions.push(PanelAction::StopProduction { system, area }),
+                        )) => {
+                            if let Some(confirmation) = StopConfirmation::for_band(
+                                &world,
+                                &mfg_state,
+                                player_faction,
+                                system,
+                                area,
+                            ) {
+                                stop_confirmation_state.open(confirmation);
+                                legacy_restriction_latch.note_start();
+                                macroquad::logging::info!(
+                                    "[interface] command=0x213 destination=stop_confirmation status=opened area={:?}",
+                                    area
+                                );
+                            }
+                        }
+                        // FUN_00486fb0 0x215 → FUN_0041d600 → FUN_00429350 →
+                        // FUN_00458b50: the edit opens over the band's
+                        // product name in its System window.
+                        Some((
+                            ObjectMenuCommand::Rename,
+                            Some(MenuObject::Producer { system, area }),
+                        )) => {
+                            let name = band_rename_target(
+                                &world,
+                                &mfg_state,
+                                system,
+                                area,
+                                player_faction == MissionFaction::Alliance,
+                            )
+                            .and_then(|(fleet, index)| world.ship_name(fleet, index))
+                            .map(str::to_owned);
+                            if let Some(name) = name {
+                                if system_window_state.begin_band_rename(system, area, &name) {
+                                    // FUN_00458640's SetFocus lands in the
+                                    // System window, as its 0x467 does.
+                                    if let Some(window) = system_window_state.window_id(system) {
+                                        strategic_windowing.enqueue(
+                                            rebellion_windowing::WindowCommand::Activate(window),
+                                        );
+                                    }
+                                    macroquad::logging::info!(
+                                        "[interface] command=0x215 destination=band_rename status=opened area={:?}",
+                                        area
+                                    );
+                                }
+                            }
+                        }
                         // FUN_00486fb0 0x203 → FUN_0041d600 → FUN_00429350:
                         // the edit opens in the window that lists the object.
                         // port: with no Fleet window open there, one opens.
@@ -14634,13 +15508,430 @@ async fn main() {
                     // Personnel Finder destinations now wait for the exact
                     // manager-owned close receipt before opening the Sector
                     // and its dependent detail.
+                    /*
+                                        // FUN_00429440: the Finder's choice opens its system's
+                                        // sector window, then the Fleet window from the fleet
+                                        // icon with the fleet or ship selected.
+                                        if let Some(FleetFinderAction::Open(entry)) = draw_fleet_finder(
+                                            ctx,
+                                            &world,
+                                            &movement_state,
+                                            fog_state,
+                                            &mut fleet_finder_state,
+                                            cockpit_layout,
+                                            &mut bmp_cache,
+                                        ) {
+                                            // A fleet in hyperspace is its destination's child
+                                            // (FUN_00556390), so its windows open there.
+                                            if let Some(system) = rebellion_core::movement::listed_location(
+                                                &movement_state,
+                                                &world,
+                                                entry.fleet(),
+                                            ) {
+                                                sector_window_state.open_for_system(
+                                                    &world,
+                                                    system,
+                                                    cockpit_state.faction,
+                                                );
+                                                if let Some(point) = sector_window_state.fleet_window_point(
+                                                    &world,
+                                                    cockpit_layout,
+                                                    system,
+                                                ) {
+                                                    map_state.selected_system = Some(system);
+                                                    enqueue_fleet_window(
+                                                        &mut strategic_windowing,
+                                                        &fleet_window_state,
+                                                        &world,
+                                                        system,
+                                                        point,
+                                                        cockpit_state.faction,
+                                                        cockpit_layout,
+                                                        Some(entry),
+                                                    );
+                                                }
+                                            }
+                                        }
 
+                                        // FUN_0046df90 (Troop Finder) / FUN_00464c20 (Personnel
+                                        // Finder) command slots: a Finder's choice goes through
+                                        // FUN_00429440, which opens the target's sector window
+                                        // and then the window for its kind.
+                                        let troop_choice = draw_troop_finder(
+                                            ctx,
+                                            &world,
+                                            &mut troop_finder_state,
+                                            cockpit_layout,
+                                            &mut bmp_cache,
+                                            &troop_transport_state,
+                                        )
+                                        .map(|action| match action {
+                                            TroopFinderAction::OpenDefenses { system } => {
+                                                (system, FinderTarget::Defenses)
+                                            }
+                                            TroopFinderAction::OpenFleet { system, fleet } => {
+                                                (system, FinderTarget::Fleet(fleet))
+                                            }
+                                        });
+                                        let personnel_choice = draw_personnel_finder(
+                                            ctx,
+                                            &world,
+                                            fog_state,
+                                            &mut personnel_finder_state,
+                                            cockpit_layout,
+                                            &mut bmp_cache,
+                                        )
+                                        .and_then(|action| match action {
+                                            // FUN_00429440 family 0x30 (character_target).
+                                            PersonnelFinderAction::OpenCharacter { character, system } => {
+                                                use rebellion_render::personnel_finder::{
+                                                    character_target, CharacterTarget,
+                                                };
+                                                match world.characters.get(character).map(character_target) {
+                                                    Some(CharacterTarget::Fleet(fleet)) => {
+                                                        rebellion_core::movement::listed_location(
+                                                            &movement_state,
+                                                            &world,
+                                                            fleet,
+                                                        )
+                                                        .map(|system| (system, FinderTarget::Fleet(fleet)))
+                                                    }
+                                                    Some(CharacterTarget::Missions) => system.map(|system| {
+                                                        (
+                                                            system,
+                                                            FinderTarget::Missions(
+                                                                rebellion_core::missions::MissionMember::Character(
+                                                                    character,
+                                                                ),
+                                                            ),
+                                                        )
+                                                    }),
+                                                    Some(CharacterTarget::Defenses) | None => {
+                                                        system.map(|system| (system, FinderTarget::Defenses))
+                                                    }
+                                                }
+                                            }
+                                            PersonnelFinderAction::OpenSystem { system } => {
+                                                Some((system, FinderTarget::Sector))
+                                            }
+                                            PersonnelFinderAction::OpenFleet { system, fleet } => {
+                                                Some((system, FinderTarget::Fleet(fleet)))
+                                            }
+                                        });
+                                        // FUN_0048a060 class 7: a report filed for the side
+                                        // that owns the fleet opens its window (window message
+                                        // 0x468, wParam 0x1c); only the player's side shows one.
+                                        let player_is_alliance = player_faction == MissionFaction::Alliance;
+                                        for id in msg_log.take_alerts() {
+                                            if let Some(message) = msg_log
+                                                .get(id)
+                                                .filter(|message| message.audience.includes(player_is_alliance))
+                                            {
+                                                operation_report_state.open(
+                                                    &world,
+                                                    message,
+                                                    cockpit_state.faction,
+                                                    None,
+                                                );
+                                            }
+                                        }
+                                        let report_choice = match draw_operation_report(
+                                            ctx,
+                                            &mut operation_report_state,
+                                            cockpit_layout,
+                                            &world,
+                                            &movement_state,
+                                            &mut bmp_cache,
+                                            &text_templates
+                                                .format(rebellion_render::operation_report::DISPLAY_TEXT_ID, &[])
+                                                .unwrap_or_default(),
+                                        ) {
+                                            // FUN_00469d60: a report the Index opened reopens it.
+                                            Some(OperationReportAction::Closed { reopen_index }) => {
+                                                if let Some(category) = reopen_index.filter(|_| message_index.is_none())
+                                                {
+                                                    let mut index = MessageIndexState::new();
+                                                    let actions = index.set_category(category);
+                                                    message_index = Some(index);
+                                                    legacy_restriction_latch.note_start();
+                                                    apply_message_index_actions(
+                                                        actions,
+                                                        &mut msg_log,
+                                                        &mut clock,
+                                                        &mut advice_saved_speed,
+                                                        &mut pending_message_sound,
+                                                    );
+                                                }
+                                                None
+                                            }
+                                            // FUN_0044df90 0x0b / 0x0c: the system's Sector
+                                            // window, then for 0x0c its fleets (hyp: the
+                                            // report's fleet still at the system).
+                                            Some(
+                                                ref action @ (OperationReportAction::GotoSystem { .. }
+                                                | OperationReportAction::GotoFleet { .. }),
+                                            ) => report_destination(action),
+                                            None => None,
+                                        };
+                                        #[cfg(all(target_arch = "wasm32", feature = "interface-test-fixtures"))]
+                                        if let Some(request) = interface_fixture_request {
+                                            operation_report_watch.observe_live(
+                                                request,
+                                                &operation_report_state,
+                                                &world,
+                                                &movement_state,
+                                                &interface_test_fixture::ReportDestinations {
+                                                    sectors: &sector_window_state,
+                                                    fleets: &fleet_window_state,
+                                                    chosen: report_choice.map(|(system, target)| {
+                                                        (system, target == FinderTarget::FleetWindow)
+                                                    }),
+                                                },
+                                            );
+                                        }
+                                        if let Some((system, target)) = troop_choice
+                                            .or(personnel_choice)
+                                            .or(message_choice)
+                                            .or(report_choice)
+                                        {
+                                            sector_window_state.open_for_system(&world, system, cockpit_state.faction);
+                                            map_state.selected_system = Some(system);
+                                            match target {
+                                                FinderTarget::Sector => {}
+                                                FinderTarget::Defenses => {
+                                                    if let Some(point) = sector_window_state.quadrant_window_point(
+                                                        &world,
+                                                        cockpit_layout,
+                                                        system,
+                                                        rebellion_render::quadrant_icons::Quadrant::Defenses,
+                                                    ) {
+                                                        defenses_window_state.open(
+                                                            &world,
+                                                            system,
+                                                            point,
+                                                            cockpit_state.faction,
+                                                            cockpit_layout,
+                                                        );
+                                                    }
+                                                }
+                                                // FUN_00429440 kind 11, then slot 27
+                                                // (FUN_004a1e10) shows the member.
+                                                FinderTarget::Missions(member) => {
+                                                    if let Some(point) = sector_window_state.quadrant_window_point(
+                                                        &world,
+                                                        cockpit_layout,
+                                                        system,
+                                                        rebellion_render::quadrant_icons::Quadrant::Missions,
+                                                    ) {
+                                                        missions_window_state.open(
+                                                            &world,
+                                                            fog_state,
+                                                            &mission_state,
+                                                            system,
+                                                            point,
+                                                            cockpit_state.faction,
+                                                            cockpit_layout,
+                                                        );
+                                                        missions_window_state.show_member(
+                                                            &mission_state,
+                                                            system,
+                                                            member,
+                                                        );
+                                                    }
+                                                }
+                                                FinderTarget::Fleet(_) | FinderTarget::FleetWindow => {
+                                                    if let Some(point) = sector_window_state.fleet_window_point(
+                                                        &world,
+                                                        cockpit_layout,
+                                                        system,
+                                                    ) {
+                                                        let selected = match target {
+                                                            FinderTarget::Fleet(fleet) => {
+                                                                Some(FleetWindowEntry::Fleet(fleet))
+                                                            }
+                                                            _ => None,
+                                                        };
+                                                        enqueue_fleet_window(
+                                                            &mut strategic_windowing,
+                                                            &fleet_window_state,
+                                                            &world,
+                                                            system,
+                                                            point,
+                                                            cockpit_state.faction,
+                                                            cockpit_layout,
+                                                            selected,
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // FUN_004443a0: 0x66 closes the Status window and opens
+                                        // the Encyclopedia; 0x65 closes it.
+                                        if let Some(action) = draw_status_window(
+                                            ctx,
+                                            StatusSources {
+                                                world: &world,
+                                                missions: &mission_state,
+                                                movement: &movement_state,
+                                                transport: &troop_transport_state,
+                                                manufacturing: &mfg_state,
+                                                today: clock.tick,
+                                            },
+                                            &mut status_window_state,
+                                            cockpit_state.faction,
+                                            cockpit_layout,
+                                            &mut bmp_cache,
+                                        ) {
+                                            macroquad::logging::info!(
+                                                "[interface] destination=status_window status=closed action={}",
+                                                match action {
+                                                    StatusWindowAction::Encyclopedia => "encyclopedia",
+                                                    StatusWindowAction::Close => "close",
+                                                }
+                                            );
+                                            if action == StatusWindowAction::Encyclopedia {
+                                                if let Some(session) = encyclopedia_session_store.current() {
+                                                    let intent = EncyclopediaEntryIntent::Contextual {
+                                                        audience: encyclopedia_audience(player_faction),
+                                                        // The Status window's selected-object
+                                                        // admission join is not part of the
+                                                        // merged upstream contract yet.
+                                                        object_id: 0,
+                                                        caller: EncyclopediaContextCaller::Handler004443a0Command66,
+                                                    };
+                                                    match encyclopedia_surface.open(&session, intent) {
+                                                        Ok(()) => {
+                                                            macroquad::logging::info!(
+                                                                "[encyclopedia] production_route status=opened origin=contextual caller=FUN_004443a0_command_0x66 requested=unresolved"
+                                                            );
+                                                        }
+                                                        Err(error) => {
+                                                            macroquad::logging::error!(
+                                                                "[encyclopedia] production_route rejected origin=status_window error={}",
+                                                                error
+                                                            );
+                                                        }
+                                                    }
+                                                } else {
+                                                    macroquad::logging::warn!(
+                                                        "[encyclopedia] production_route unavailable origin=status_window reason=no_session"
+                                                    );
+                                                }
+                                            }
+                                        }
+
+                                        // FUN_0044f5e0: the checkmark resubmits with force 1,
+                                        // which validates again and departs without asking.
+                                        if let Some(MoveConfirmationAction::Confirm {
+                                            fleets,
+                                            members,
+                                            ships,
+                                            units,
+                                            destination,
+                                            join,
+                                        }) = draw_move_confirmation(
+                                            ctx,
+                                            &mut move_confirmation_state,
+                                            cockpit_layout,
+                                            &mut bmp_cache,
+                                        ) {
+                                            if !members.is_empty() {
+                                                panel_actions.push(PanelAction::MoveMembers {
+                                                    members,
+                                                    destination: join.map_or(
+                                                        rebellion_core::missions::MoveDestination::System(destination),
+                                                        rebellion_core::missions::MoveDestination::Fleet,
+                                                    ),
+                                                });
+                                            }
+                                            panel_actions.extend(
+                                                fleets
+                                                    .into_iter()
+                                                    .map(FleetMover::Fleet)
+                                                    .chain(ships)
+                                                    .map(|mover| mover_move_action(mover, destination, join)),
+                                            );
+                                            let target = join.map_or(RegimentTarget::System(destination), RegimentTarget::Fleet);
+                                            panel_actions.extend(units.into_iter().map(|unit| unit_move_action(unit, target)));
+                                        }
+
+                                        // FUN_0044f5e0: the checkmark submits the Stop order
+                                        // (the band drops what it was building, manual p. 84);
+                                        // the X destroys it.
+                                        if let Some(StopConfirmationAction::Confirm { system, area }) =
+                                            draw_stop_confirmation(
+                                                ctx,
+                                                &mut stop_confirmation_state,
+                                                cockpit_layout,
+                                                &mut bmp_cache,
+                                            )
+                                        {
+                                            panel_actions.push(PanelAction::StopProduction { system, area });
+                                        }
+
+                                        // FUN_0044f5e0: the checkmark submits the Scrap order,
+                                        // which scraps each object at once (FUN_004f84e0 →
+                                        // FUN_00534c00, reason 0x14).
+                                        if let Some(ScrapConfirmationAction::Confirm(targets)) = draw_scrap_confirmation(
+                                            ctx,
+                                            &mut scrap_confirmation_state,
+                                            cockpit_layout,
+                                            &mut bmp_cache,
+                                        ) {
+                                            let scrapped = rebellion_core::scrap::scrap_all_reporting(
+                                                &mut world,
+                                                &mut stockpile_state,
+                                                &mut troop_transport_state,
+                                                targets.iter().copied(),
+                                            );
+                                            let refund = scrapped.refund;
+                                            for loss in &scrapped.losses {
+                                                let system = world
+                                                    .systems
+                                                    .get(loss.system)
+                                                    .map_or("", |value| value.name.as_str());
+                                                macroquad::logging::info!("{}", loss.log_line(system));
+                                            }
+                                            macroquad::logging::info!(
+                                                "[interface] command=0x200 status=scrapped objects={} refund={}",
+                                                targets.len(),
+                                                refund
+                                            );
+                                            // A scrapped regiment's holder rerun (FUN_00508660),
+                                            // in the order's step (FUN_0051df30).
+                                            let step = ai_state.scheduler.next_step();
+                                            fire_support_events(
+                                                &mut world,
+                                                &mut mfg_state,
+                                                &mut troop_transport_state,
+                                                &movement_state,
+                                                &mut delivery_state,
+                                                &text_templates,
+                                                &mut msg_log,
+                                                clock.tick,
+                                                step,
+                                            );
+                                            sweep_flagged(
+                                                &mut world,
+                                                &mut mission_state,
+                                                &troop_transport_state,
+                                                &movement_state,
+                                                &blockade_state,
+                                                clock.tick,
+                                            );
+                                        }
+                    */
+
+                    // FUN_00422ce0's WM_KEYDOWN has no VK_ESCAPE case: in the
+                    // original Escape neither cancels targeting nor reaches
+                    // the main menu (VM, alliance-day927-orto-orbit.sav); a
+                    // left release off any target ends it below.
                     if targeting.is_some()
                         && strategic_frame_boundary.root_shortcuts_allowed()
                         && strategic_root_keys.contains(KeyCode::Escape)
                     {
                         child_keyboard_handled = true;
-                        targeting = None;
                     }
                     if targeting.is_some() {
                         capture_pointer(ctx);
@@ -14682,6 +15973,17 @@ async fn main() {
                                 windows,
                                 pointer,
                             );
+                            // A Mission order asks the window's +0x68 object.
+                            let object = rebellion_render::targeting::release_object(
+                                ctx,
+                                &world,
+                                &movement_state,
+                                fog_state,
+                                &troop_transport_state,
+                                cockpit_layout,
+                                windows,
+                                pointer,
+                            );
                             match targeting.take().map(|order| order.release(destination)) {
                                 Some(TargetingEnd::Target {
                                     order: TargetOrder::Mission(team),
@@ -14695,11 +15997,13 @@ async fn main() {
                                         &team,
                                         &[],
                                         system,
+                                        object,
                                     );
                                     macroquad::logging::info!(
-                                        "[order] mission dialog {:?} at {:?}: {:?}",
+                                        "[order] mission dialog {:?} at {:?} on {:?}: {:?}",
                                         team,
                                         system,
+                                        object,
                                         kinds
                                     );
                                     if let Some(prepared) = mission_dialog_state.prepare_open(
@@ -14730,12 +16034,10 @@ async fn main() {
                                             movement: &movement_state,
                                             blockaded: blockade_state.blockaded_systems(),
                                             faction: player_faction,
-                                            tick: clock.tick,
                                         },
                                         &fleets,
                                         confirmed,
                                         target,
-                                        &mut msg_log,
                                         &mut move_confirmation_state,
                                         &mut strategic_windowing,
                                         &mut panel_actions,
@@ -14753,7 +16055,6 @@ async fn main() {
                                             movement: &movement_state,
                                             blockaded: blockade_state.blockaded_systems(),
                                             faction: player_faction,
-                                            tick: clock.tick,
                                         },
                                         &mission_state,
                                         members,
@@ -14773,61 +16074,65 @@ async fn main() {
                                             fleet,
                                             ships,
                                             roster,
+                                            confirmed,
                                         },
-                                    target: ReleaseTarget::Fleet { fleet: target, .. },
-                                }) => panel_actions.push(PanelAction::JoinFleet {
-                                    mover: FleetMover::Ships {
+                                    target,
+                                }) => {
+                                    if issue_ship_move(
+                                        &FleetMoveContext {
+                                            world: &world,
+                                            movement: &movement_state,
+                                            blockaded: blockade_state.blockaded_systems(),
+                                            faction: player_faction,
+                                        },
                                         fleet,
                                         ships,
                                         roster,
-                                    },
-                                    target,
-                                }),
+                                        confirmed,
+                                        target,
+                                        &mut move_confirmation_state,
+                                        &mut panel_actions,
+                                    ) {
+                                        legacy_restriction_latch.note_start();
+                                    }
+                                }
+                                // A regiment's or squadron's 0x201 or 0x202
+                                // against the release window's +0x70
+                                // (FUN_004a3130 for a Fleet window), boarding,
+                                // landing or travelling.
                                 Some(TargetingEnd::Target {
                                     order:
-                                        TargetOrder::ShipMove {
-                                            fleet,
-                                            ships,
-                                            roster,
+                                        order @ (TargetOrder::TroopMove { .. }
+                                        | TargetOrder::SquadronMove { .. }),
+                                    target,
+                                }) => {
+                                    let (unit, confirmed) = match order {
+                                        TargetOrder::TroopMove { troop, confirmed } => {
+                                            (UnitMover::Regiment(troop), confirmed)
+                                        }
+                                        TargetOrder::SquadronMove { source, confirmed } => {
+                                            (UnitMover::Squadron(source), confirmed)
+                                        }
+                                        _ => unreachable!("matched a unit order"),
+                                    };
+                                    if issue_unit_move(
+                                        &FleetMoveContext {
+                                            world: &world,
+                                            movement: &movement_state,
+                                            blockaded: blockade_state.blockaded_systems(),
+                                            faction: player_faction,
                                         },
-                                    target: ReleaseTarget::System(system),
-                                }) => panel_actions.push(PanelAction::MoveShips {
-                                    fleet,
-                                    ships,
-                                    roster,
-                                    system,
-                                }),
-                                // A regiment's 0x201 against the release
-                                // window's +0x70 (FUN_004a3130 for a Fleet
-                                // window), boarding, landing or travelling.
-                                Some(TargetingEnd::Target {
-                                    order: TargetOrder::TroopMove { troop },
-                                    target: ReleaseTarget::Fleet { fleet, .. },
-                                }) => panel_actions.push(PanelAction::MoveRegiment {
-                                    troop,
-                                    target: RegimentTarget::Fleet(fleet),
-                                }),
-                                Some(TargetingEnd::Target {
-                                    order: TargetOrder::TroopMove { troop },
-                                    target: ReleaseTarget::System(system),
-                                }) => panel_actions.push(PanelAction::MoveRegiment {
-                                    troop,
-                                    target: RegimentTarget::System(system),
-                                }),
-                                Some(TargetingEnd::Target {
-                                    order: TargetOrder::SquadronMove { source },
-                                    target: ReleaseTarget::Fleet { fleet, .. },
-                                }) => panel_actions.push(PanelAction::MoveSquadron {
-                                    source,
-                                    target: RegimentTarget::Fleet(fleet),
-                                }),
-                                Some(TargetingEnd::Target {
-                                    order: TargetOrder::SquadronMove { source },
-                                    target: ReleaseTarget::System(system),
-                                }) => panel_actions.push(PanelAction::MoveSquadron {
-                                    source,
-                                    target: RegimentTarget::System(system),
-                                }),
+                                        &troop_transport_state,
+                                        &ProductRoom::new(&mfg_state, &delivery_state),
+                                        unit,
+                                        confirmed,
+                                        target,
+                                        &mut move_confirmation_state,
+                                        &mut panel_actions,
+                                    ) {
+                                        legacy_restriction_latch.note_start();
+                                    }
+                                }
                                 // FUN_00512700 kind 4: the order's team is
                                 // every production area of the system, or
                                 // a band's own area.
@@ -14859,6 +16164,85 @@ async fn main() {
                     // Droid advisor (floating window, bottom-right)
                     draw_advisor(ctx, &mut advisor_state);
 
+                    /*
+                                        // Source-backed production Encyclopedia is modal over
+                                        // every retained command-center window. The legacy
+                                        // replacement panel remains fixture-only above.
+                                        if encyclopedia_surface.is_open()
+                                            && strategic_frame_boundary.legacy_surface_input_allowed()
+                                            && strategic_root_keys.contains(KeyCode::Escape)
+                                        {
+                                            legacy_keyboard_handled = true;
+                                            if let Some(session) = encyclopedia_session_store.current() {
+                                                match encyclopedia_surface.apply_action(
+                                                    &session,
+                                                    rebellion_render::EncyclopediaSurfaceAction::Close,
+                                                ) {
+                                                    Ok(Some(route)) => log_encyclopedia_return(route),
+                                                    Ok(None) => {}
+                                                    Err(error) => {
+                                                        encyclopedia_surface.close();
+                                                        macroquad::logging::error!(
+                                                            "[encyclopedia] production_route close_failed error={}",
+                                                            error
+                                                        );
+                                                    }
+                                                }
+                                            } else {
+                                                encyclopedia_surface.close();
+                                            }
+                                        }
+                                        // Escape goes where the keyboard focus is (GalaxyFocus):
+                                        // the GID menu shows the top window, a detail window
+                                        // closes, and a sector window or a hidden one does
+                                        // nothing; the galaxy view never sees the key.
+                                        if !legacy_keyboard_handled
+                                            && !legacy_blockers.strategic_modal
+                                            && !legacy_blockers.transient_menu
+                                            && !legacy_blockers.focused_control
+                                            && strategic_frame_boundary.legacy_surface_input_allowed()
+                                            && strategic_root_keys.contains(KeyCode::Escape)
+                                        {
+                                            if let Some(step) = galaxy_focus.escape() {
+                                                apply_focus_step(
+                                                    step,
+                                                    &mut cockpit_state.gid_ui,
+                                                    &mut sector_window_state,
+                                                    &mut system_window_state,
+                                                    &mut defenses_window_state,
+                                                    &mut missions_window_state,
+                                                    &mut |command| strategic_windowing.enqueue(command),
+                                                );
+                                                legacy_keyboard_handled = true;
+                                            }
+                                        }
+                                        if encyclopedia_surface.is_open() {
+                                            if let Some(session) = encyclopedia_session_store.current() {
+                                                match encyclopedia_surface.draw(
+                                                    ctx,
+                                                    &mut bmp_cache,
+                                                    &session,
+                                                    &encyclopedia_hd,
+                                                ) {
+                                                    Ok(Some(route)) => log_encyclopedia_return(route),
+                                                    Ok(None) => {}
+                                                    Err(error) => {
+                                                        encyclopedia_surface.close();
+                                                        macroquad::logging::error!(
+                                                            "[encyclopedia] production_route draw_failed error={}",
+                                                            error
+                                                        );
+                                                    }
+                                                }
+                                            } else {
+                                                encyclopedia_surface.close();
+                                                macroquad::logging::warn!(
+                                                    "[encyclopedia] production_route unavailable reason=no_session"
+                                                );
+                                            }
+                                        }
+
+                    */
                     // Under the battle window the command center takes no
                     // pointer input: this foreground layer absorbs it, so the
                     // windows beneath stay as they are.
@@ -15046,10 +16430,53 @@ async fn main() {
                                             &msg_log,
                                             &mut message_index,
                                             player_faction == MissionFaction::Alliance,
+                                            &|id| {
+                                                encyclopedia_picture(
+                                                    encyclopedia_session_store.current().as_deref(),
+                                                    id,
+                                                )
+                                            },
                                         );
                                     message_index.mark_paintable();
                                     actions
                                 });
+                                let mut opening_report = false;
+                                if allows_input {
+                                    if let Some(message_id) = actions.iter().find_map(|action| {
+                                        if let MessageIndexAction::OpenReport(id) = action {
+                                            Some(*id)
+                                        } else {
+                                            None
+                                        }
+                                    }) {
+                                        if let Some(message) = msg_log.get(message_id) {
+                                            let category = message_index.category();
+                                            if operation_report_state.open(
+                                                &world,
+                                                message,
+                                                cockpit_state.faction,
+                                                Some(category),
+                                            ) {
+                                                let new = rebellion_render::windowing_policy::operation_report_spec(message_id);
+                                                if let Some(old) = message_index.window_id() {
+                                                    strategic_windowing.enqueue(
+                                                        rebellion_windowing::WindowCommand::Replace { old, new },
+                                                    );
+                                                    operation_report_open_pending = true;
+                                                    pending_report_reopen_index = Some(category);
+                                                    opening_report = true;
+                                                    message_index_close_queued = true;
+                                                    strategic_dispatch_restricted = true;
+                                                    strategic_input_router
+                                                        .set_application_hold(true);
+                                                } else {
+                                                    operation_report_state =
+                                                        OperationReportState::default();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 message_choice = actions.iter().find_map(|action| match action {
                                     MessageIndexAction::GoTo(MessageTarget::System(system)) => {
                                         Some((*system, FinderTarget::Sector))
@@ -15064,7 +16491,7 @@ async fn main() {
                                     }
                                     _ => None,
                                 });
-                                if actions.contains(&MessageIndexAction::Close) {
+                                if actions.contains(&MessageIndexAction::Close) && !opening_report {
                                     if let Some(window) = message_index.request_close() {
                                         strategic_windowing.enqueue(
                                             rebellion_windowing::WindowCommand::Close(window),
@@ -15079,6 +16506,41 @@ async fn main() {
                                     &mut advice_saved_speed,
                                     &mut pending_message_sound,
                                 );
+                            }
+                            ManagedStrategicSurface::OperationReport(window) => {
+                                if operation_report_window_id == Some(window) && allows_input {
+                                    if let Some(action) = draw_operation_report(
+                                        ctx,
+                                        &mut operation_report_state,
+                                        cockpit_layout,
+                                        &world,
+                                        &movement_state,
+                                        &mut bmp_cache,
+                                        &text_templates
+                                            .format(
+                                                rebellion_render::operation_report::DISPLAY_TEXT_ID,
+                                                &[],
+                                            )
+                                            .unwrap_or_default(),
+                                    ) {
+                                        match &action {
+                                            OperationReportAction::Closed { reopen_index } => {
+                                                pending_report_reopen_index = *reopen_index;
+                                            }
+                                            OperationReportAction::GotoSystem { .. }
+                                            | OperationReportAction::GotoFleet { .. } => {
+                                                pending_report_destination =
+                                                    report_destination(&action);
+                                            }
+                                        }
+                                        if !operation_report_close_pending {
+                                            strategic_windowing.enqueue(
+                                                rebellion_windowing::WindowCommand::Close(window),
+                                            );
+                                            operation_report_close_pending = true;
+                                        }
+                                    }
+                                }
                             }
                             ManagedStrategicSurface::Status(_) => {
                                 if let Some((window, action)) = draw_managed_status_window(
@@ -15141,6 +16603,9 @@ async fn main() {
                                         ctx,
                                         &world,
                                         &mfg_state,
+                                        &troop_transport_state,
+                                        &delivery_state,
+                                        &movement_state,
                                         &mut build_selection_state,
                                         cockpit_layout,
                                         &mut bmp_cache,
@@ -15452,6 +16917,35 @@ async fn main() {
                 // Child surfaces have now handled their input. A manager open
                 // queued during this pass fences later root dispatch until the
                 // next immutable snapshot publishes the accepted boundary.
+                // Child surfaces have now handled their input. Keep every
+                // restriction introduced during dispatch sticky until the next
+                // immutable frame boundary, even if that surface also closes.
+                #[cfg(any(debug_assertions, not(target_arch = "wasm32")))]
+                let command_palette_now_open = command_palette_state.open;
+                #[cfg(not(any(debug_assertions, not(target_arch = "wasm32"))))]
+                let command_palette_now_open = false;
+                legacy_restriction_latch.observe(LegacyInputBlockers {
+                    strategic_modal: build_selection_state.is_open()
+                        || mission_dialog_state.is_open()
+                        || move_confirmation_state.is_open()
+                        || scrap_confirmation_state.is_open()
+                        || stop_confirmation_state.is_open()
+                        || status_window_state.is_open()
+                        || fleet_finder_state.is_open()
+                        || troop_finder_state.is_open()
+                        || personnel_finder_state.is_open()
+                        || operation_report_state.is_open()
+                        || message_index.is_open()
+                        || encyclopedia_surface.is_open()
+                        || original_modal_fixture_open,
+                    focused_control: command_palette_now_open
+                        || system_window_state.band_rename_open(),
+                    transient_menu: object_menu.is_some()
+                        || game_speed_ui.menu_anchor.is_some()
+                        || agent_menu_state.anchor.is_some(),
+                    root_gesture: targeting.is_some(),
+                });
+                strategic_dispatch_restricted |= legacy_restriction_latch.started();
                 if strategic_dispatch_restricted {
                     strategic_input_router.set_application_hold(true);
                 }
@@ -15684,61 +17178,23 @@ async fn main() {
                         let panel_index = match event.key {
                             KeyCode::F => Some(0),
                             KeyCode::N => Some(1),
-                            KeyCode::B => Some(2),
-                            KeyCode::D => Some(3),
                             _ => None,
                         };
                         #[cfg(any(debug_assertions, not(target_arch = "wasm32")))]
                         let palette_shortcut = palette_enabled && event.key == KeyCode::GraveAccent;
                         #[cfg(not(any(debug_assertions, not(target_arch = "wasm32"))))]
                         let palette_shortcut = false;
-                        let root_action = event.key == KeyCode::Escape
-                            || cockpit_accelerator(event.key).is_some()
-                            || event.key == KeyCode::F6
-                            || event.key == KeyCode::R
-                            || event.alt
-                                && matches!(
-                                    event.key,
-                                    KeyCode::P
-                                        | KeyCode::KpAdd
-                                        | KeyCode::KpSubtract
-                                        | KeyCode::G
-                                        | KeyCode::U
-                                        | KeyCode::A
-                                        | KeyCode::Key1
-                                        | KeyCode::Key2
-                                        | KeyCode::Key3
-                                        | KeyCode::Key4
-                                        | KeyCode::Key5
-                                        | KeyCode::Key6
-                                        | KeyCode::Key7
-                                        | KeyCode::Key8
-                                        | KeyCode::Key9
-                                )
-                            || panel_index.is_some_and(|_| {
-                                panel_letters_open_panels(cfg!(debug_assertions), event.alt)
-                            })
-                            || event.key == KeyCode::S && !event.alt
-                            || event.key == KeyCode::Tab
-                            || palette_shortcut;
+                        let root_action = galaxy_root_acts(
+                            event.key,
+                            event.alt,
+                            cfg!(debug_assertions),
+                            palette_shortcut,
+                        );
                         if !root_action || !strategic_input_router.claim_root(event.id) {
                             continue;
                         }
 
-                        if event.key == KeyCode::Escape {
-                            show_fleets = false;
-                            show_missions = false;
-                            show_bombardment = false;
-                            show_death_star = false;
-                            save_load_panel_state.close();
-                            game_mode = GameMode::MainMenu;
-                            strategic_dispatch_restricted = true;
-                            strategic_input_router.set_application_hold(true);
-                            macroquad::logging::info!(
-                                "[main_menu] returned_from_campaign generation={} audio_context=main_menu",
-                                campaign_generation
-                            );
-                        } else if let Some(btn) = cockpit_accelerator(event.key) {
+                        if let Some(btn) = cockpit_accelerator(event.key) {
                             dispatch_cockpit_button!(btn);
                         } else if event.key == KeyCode::F6 {
                             if let Some(category) =
@@ -15765,8 +17221,6 @@ async fn main() {
                                     category
                                 );
                             }
-                        } else if event.key == KeyCode::R {
-                            map_state = GalaxyMapState::default();
                         } else if event.alt
                             && matches!(
                                 event.key,
@@ -15838,12 +17292,7 @@ async fn main() {
                             }
                         } else if let Some(index) = panel_index {
                             toggle_exclusive_panel(
-                                &mut [
-                                    &mut show_fleets,
-                                    &mut show_missions,
-                                    &mut show_bombardment,
-                                    &mut show_death_star,
-                                ],
+                                &mut [&mut show_fleets, &mut show_missions],
                                 index,
                             );
                         } else if event.key == KeyCode::S {
@@ -16028,129 +17477,13 @@ async fn main() {
             // Drawn after the match, over the command center when the
             // Battle Alert is up.
             GameMode::TacticalCombat => {}
-
-            GameMode::GroundCombat => {
-                if let Some(ref mut gc_state) = ground_combat_state {
-                    let gc_action = draw_ground_combat(gc_state);
-                    if gc_action == GroundAction::Done {
-                        // Apply ground combat results to GameWorld.
-                        if let Some(gc) = ground_combat_state.take() {
-                            let sys_key = gc.system;
-                            let attacker_is_alliance = gc.attacker_is_alliance;
-                            let regiment_strengths: Vec<_> = gc
-                                .regiments
-                                .iter()
-                                .map(|regiment| (regiment.troop, regiment.strength))
-                                .collect();
-                            tactical_flow::apply_tactical_ground_strengths(
-                                &mut world,
-                                sys_key,
-                                &regiment_strengths,
-                            );
-
-                            let occupying_faction = match gc.winner {
-                                Some(rebellion_render::GroundWinner::Attacker) => {
-                                    Some(if attacker_is_alliance {
-                                        Faction::Alliance
-                                    } else {
-                                        Faction::Empire
-                                    })
-                                }
-                                Some(rebellion_render::GroundWinner::Defender) => {
-                                    Some(if attacker_is_alliance {
-                                        Faction::Empire
-                                    } else {
-                                        Faction::Alliance
-                                    })
-                                }
-                                _ => None,
-                            };
-                            if let Some(winner) = occupying_faction {
-                                tactical_flow::apply_system_occupation(
-                                    &mut world,
-                                    sys_key,
-                                    winner,
-                                    clock.tick,
-                                    &mut msg_log,
-                                );
-                            }
-
-                            let gc_winner_str = match gc.winner {
-                                Some(rebellion_render::GroundWinner::Attacker) => {
-                                    "Attacker ground victory"
-                                }
-                                Some(rebellion_render::GroundWinner::Defender) => {
-                                    "Defender holds ground"
-                                }
-                                Some(rebellion_render::GroundWinner::Draw) | None => {
-                                    "Ground combat draw"
-                                }
-                            };
-                            msg_log.push(GameMessage::at_system(
-                                clock.tick,
-                                format!("Ground battle at {} — {}", gc.system_name, gc_winner_str),
-                                MessageCategory::Combat,
-                                gc.system,
-                            ));
-                        }
-                        game_mode = GameMode::Galaxy;
-                    }
-                } else {
-                    game_mode = GameMode::Galaxy;
-                }
-            }
-
-            GameMode::VictoryModal { alliance_won } => {
-                // Frozen galaxy backdrop with modal overlay.
-                clear_background(Color::new(0.02, 0.02, 0.06, 1.0));
-                egui_macroquad::ui(|ctx| {
-                    use egui_macroquad::egui;
-                    let title = if alliance_won {
-                        "Alliance Victory!"
-                    } else {
-                        "Imperial Victory!"
-                    };
-                    let body = if alliance_won {
-                        "The Rebel Alliance has triumphed. Freedom is restored to the galaxy."
-                    } else {
-                        "The Galactic Empire has crushed the Rebellion. Order reigns supreme."
-                    };
-                    egui::Area::new(egui::Id::new("victory_modal"))
-                        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-                        .order(egui::Order::Foreground)
-                        .show(ctx, |ui| {
-                            egui::Frame::new()
-                                .fill(egui::Color32::from_rgba_unmultiplied(10, 15, 30, 230))
-                                .inner_margin(egui::Margin::same(32))
-                                .show(ui, |ui| {
-                                    ui.set_width(400.0);
-                                    ui.vertical_centered(|ui| {
-                                        ui.label(
-                                            egui::RichText::new(title)
-                                                .size(24.0)
-                                                .color(egui::Color32::from_rgb(230, 200, 100)),
-                                        );
-                                        ui.add_space(16.0);
-                                        ui.label(
-                                            egui::RichText::new(body)
-                                                .size(14.0)
-                                                .color(egui::Color32::from_rgb(200, 195, 185)),
-                                        );
-                                        ui.add_space(24.0);
-                                        if ui.button("Continue").clicked() {
-                                            game_mode = GameMode::MainMenu;
-                                        }
-                                    });
-                                });
-                        });
-                });
-                egui_macroquad::draw();
-            }
         }
 
         if tactical_frame {
             // Under the Battle Alert or the results, the command center pass
             // above has drawn the droids; the window is all that is left.
+            tactical_state
+                .set_frame_key_downs(strategic_raw_input_events.key_downs.iter().copied());
             let rendered_tac_action = draw_tactical_view(
                 &mut tactical_state,
                 &mut bmp_cache,
@@ -16207,6 +17540,7 @@ async fn main() {
                     // Advance from placement to combat phase.
                     if let Some(ref mut session) = tactical_state.session {
                         session.phase = rebellion_render::BattlePhase::Combat;
+                        session.arm_docked_hangars();
                         session.queue_battle_ready_voice();
                     }
                 }
@@ -16215,7 +17549,7 @@ async fn main() {
                     // window (FUN_0040a050 state 8), then shows the same
                     // Battle Results window as a played engagement.
                     let mut result_presented = false;
-                    if tactical_state.simulate_battle() {
+                    if tactical_state.simulate_battle(&world) {
                         let session = tactical_state
                             .session
                             .clone()
@@ -16225,6 +17559,7 @@ async fn main() {
                             &mut world,
                             &mut troop_transport_state,
                             &mut movement_state,
+                            &ProductRoom::new(&mfg_state, &delivery_state),
                         );
                         if let (Some(destination), Some(shown)) =
                             (battle_return.withdrawal, tactical_state.session.as_mut())
@@ -16233,37 +17568,6 @@ async fn main() {
                                 .systems
                                 .get(destination)
                                 .map(|system| system.name.clone());
-                        }
-                        tactical_flow::reconcile_death_star_result(
-                            &world,
-                            &mut death_star_state,
-                            &mut victory_state,
-                        );
-
-                        let ground_attacker = battle_return
-                            .winner_fleet
-                            .filter(|&fleet| world.fleets.contains_key(fleet));
-                        if let Some(winner_fleet) = ground_attacker {
-                            let ground_rolls: Vec<f64> =
-                                (0..256).map(|_| sim_rng.gen::<f64>()).collect();
-                            let outcome = tactical_flow::resolve_post_battle(
-                                &mut world,
-                                &victory_state,
-                                &mut troop_transport_state,
-                                winner_fleet,
-                                session.system,
-                                session.start_tick,
-                                &mut msg_log,
-                                tactical_flow::PostBattleGroundMode::Automatic {
-                                    rolls: &ground_rolls,
-                                },
-                            );
-                            macroquad::logging::info!(
-                                "[post_battle] mode=automatic landed={} bombardment_damage={} headquarters_destroyed={}",
-                                outcome.landed_regiments,
-                                outcome.bombardment_damage,
-                                outcome.headquarters_destroyed,
-                            );
                         }
 
                         let alliance_won = match battle_return.winner {
@@ -16324,6 +17628,7 @@ async fn main() {
                                 &mut world,
                                 &mut troop_transport_state,
                                 &mut movement_state,
+                                &ProductRoom::new(&mfg_state, &delivery_state),
                             );
                             let after = tactical_flow::persistence_snapshot(&session, &world);
                             macroquad::logging::info!(
@@ -16348,13 +17653,6 @@ async fn main() {
                             result
                         };
                         if !strategic_results_applied {
-                            tactical_flow::reconcile_death_star_result(
-                                &world,
-                                &mut death_star_state,
-                                &mut victory_state,
-                            );
-                        }
-                        if !strategic_results_applied {
                             let winner_str = match battle_return.winner {
                                 Some(rebellion_render::CombatWinner::Attacker) => {
                                     "Attacker victory"
@@ -16375,39 +17673,9 @@ async fn main() {
                             ));
                         }
 
-                        // Auto-resolve already completed bombardment and
-                        // ground resolution before presenting its result.
-                        if strategic_results_applied {
-                            game_mode = GameMode::Galaxy;
-                        } else if let Some(winner_fleet) = battle_return.winner_fleet {
-                            let outcome = tactical_flow::resolve_post_battle(
-                                &mut world,
-                                &victory_state,
-                                &mut troop_transport_state,
-                                winner_fleet,
-                                session.system,
-                                session.start_tick,
-                                &mut msg_log,
-                                tactical_flow::PostBattleGroundMode::Interactive,
-                            );
-                            macroquad::logging::info!(
-                                "[post_battle] mode=interactive landed={} bombardment_damage={} headquarters_destroyed={}",
-                                outcome.landed_regiments,
-                                outcome.bombardment_damage,
-                                outcome.headquarters_destroyed,
-                            );
-                            match outcome.continuation {
-                                tactical_flow::PostBattleContinuation::Galaxy => {
-                                    game_mode = GameMode::Galaxy;
-                                }
-                                tactical_flow::PostBattleContinuation::GroundCombat(state) => {
-                                    ground_combat_state = Some(state);
-                                    game_mode = GameMode::GroundCombat;
-                                }
-                            }
-                        } else {
-                            game_mode = GameMode::Galaxy;
-                        }
+                        // No landing follows a battle: regiments go down only
+                        // by the assault order (ghidra/notes/ground-assault.md).
+                        game_mode = GameMode::Galaxy;
                     } else {
                         game_mode = GameMode::Galaxy;
                     }
@@ -16427,36 +17695,9 @@ async fn main() {
                         session.combat_speed = speed.clamp(1, 4);
                     }
                 }
-                TacticalAction::RetreatSelected => {
-                    if let Some(ref mut session) = tactical_state.session {
-                        let player_side = session.player_is_attacker;
-                        for ship in &mut session.ships {
-                            if ship.selected && ship.is_attacker == player_side && ship.alive {
-                                ship.retreating = true;
-                                ship.selected = false;
-                            }
-                        }
-                        session.selected_ship = None;
-                    }
-                }
-                TacticalAction::WithdrawFromBattle => {
-                    if let Some(ref mut session) = tactical_state.session {
-                        let player_side = session.player_is_attacker;
-                        for ship in &mut session.ships {
-                            if ship.alive
-                                && !ship.retreating
-                                && ship.is_attacker == player_side
-                                && ship.subsystem_capacity.hyperdrive > 0
-                                && ship.subsystem_condition.hyperdrive > 0
-                            {
-                                ship.retreating = true;
-                                ship.selected = false;
-                            }
-                        }
-                        session.selected_ship = None;
-                        session.selected_fighter_group = None;
-                    }
-                }
+                // FUN_0059fd40 -> FUN_005ad530: the player's side withdraws
+                // through its controller's countdown and the Withdraw order.
+                TacticalAction::WithdrawFromBattle => tactical_state.withdraw_player_side(),
                 TacticalAction::RetreatBeforeBattle => {
                     if let Some(ref mut session) = tactical_state.session {
                         session.queue_withdrawal_started_voice();
@@ -16473,6 +17714,7 @@ async fn main() {
                         }
                         session.selected_ship = None;
                         session.selected_fighter_group = None;
+                        session.selected_task_force = None;
                         session.paused = false;
                     }
                 }
@@ -16492,18 +17734,15 @@ async fn main() {
 
             if game_mode == GameMode::TacticalCombat {
                 if let Some(outcome) = tactical_state.take_pending_trench_run_cinematic() {
-                    cutscene_player = open_cutscene(
-                        Path::new(trench_run_cutscene_path(outcome)),
-                        audio_vol.cutscene_volume(),
-                        &mut msg_log,
-                        clock.tick,
+                    let kind = CutsceneKind::TrenchRun(outcome);
+                    cutscene_player = open_movie(
+                        kind.movie(),
+                        &audio_vol,
                         #[cfg(not(target_arch = "wasm32"))]
                         &mut audio_engine,
                     );
                     if cutscene_player.is_some() {
-                        game_mode = GameMode::Cutscene {
-                            kind: CutsceneKind::TrenchRun(outcome),
-                        };
+                        game_mode = GameMode::Cutscene { kind };
                     }
                 }
             }
@@ -16566,7 +17805,6 @@ async fn main() {
                         player_faction: &mut player_faction,
                         blockade: &mut blockade_state,
                         uprising: &mut uprising_state,
-                        death_star: &mut death_star_state,
                         research: &mut research_state,
                         jedi: &mut jedi_state,
                         victory: &mut victory_state,
@@ -16583,11 +17821,28 @@ async fn main() {
                         campaign_config: &mut campaign_config,
                     }
                     .snapshot();
+                    let interface = saved_interface(
+                        &world,
+                        &cockpit_state,
+                        &sector_window_state,
+                        &system_window_state,
+                        &fleet_window_state,
+                        &defenses_window_state,
+                        &missions_window_state,
+                        &strategic_windowing.begin_frame(),
+                        &strategic_windowing.saved_galaxy_order(),
+                    );
                     let active_mods = mod_runtime.enabled_mod_list();
                     // A `Save:` names its file; it opens no slot and logs nothing.
                     #[cfg(not(target_arch = "wasm32"))]
                     if let Some(path) = dev_save_file.take() {
-                        match rebellion_data::save::save_file(&path, &name, &state, &active_mods) {
+                        match rebellion_data::save::save_file_with_interface(
+                            &path,
+                            &name,
+                            &state,
+                            &interface,
+                            &active_mods,
+                        ) {
                             Ok(fingerprint) => {
                                 dev_channel.set_path(&path);
                                 dev_channel.note(&format!(
@@ -16599,11 +17854,12 @@ async fn main() {
                         }
                         continue;
                     }
-                    match rebellion_data::save::save_slot(
+                    match rebellion_data::save::save_slot_with_interface(
                         &saves_dir,
                         slot,
                         &name,
                         &state,
+                        &interface,
                         &active_mods,
                     ) {
                         Ok(fingerprint) => {
@@ -16613,9 +17869,9 @@ async fn main() {
                                 state.clock.tick,
                                 fingerprint
                             );
-                            save_load_panel_state.error_message = None;
                             save_slots = read_save_slots(&saves_dir);
                             game_options_state.refresh_saves(&save_slots);
+                            game_options_state.save_result(slot, true);
                             game_options_state.error = None;
                             msg_log.push(GameMessage::new(
                                 clock.tick,
@@ -16624,7 +17880,7 @@ async fn main() {
                             ));
                         }
                         Err(error) => {
-                            save_load_panel_state.error_message = Some(error.to_string());
+                            game_options_state.save_result(slot, false);
                             game_options_state.error = Some(error.to_string());
                         }
                     }
@@ -16635,13 +17891,13 @@ async fn main() {
                     let dev_loaded = dev_load_file.take();
                     #[cfg(not(target_arch = "wasm32"))]
                     let loaded = match &dev_loaded {
-                        Some(path) => rebellion_data::save::load_file(path, slot),
-                        None => rebellion_data::save::load_slot(&saves_dir, slot),
+                        Some(path) => rebellion_data::save::load_file_with_interface(path, slot),
+                        None => rebellion_data::save::load_slot_with_interface(&saves_dir, slot),
                     };
                     #[cfg(target_arch = "wasm32")]
-                    let loaded = rebellion_data::save::load_slot(&saves_dir, slot);
+                    let loaded = rebellion_data::save::load_slot_with_interface(&saves_dir, slot);
                     match loaded {
-                        Ok((meta, state)) => {
+                        Ok((meta, state, interface)) => {
                             macroquad::logging::info!(
                                 "load_state_fingerprint slot={} tick={} fingerprint={}",
                                 slot,
@@ -16661,7 +17917,6 @@ async fn main() {
                                 player_faction: &mut player_faction,
                                 blockade: &mut blockade_state,
                                 uprising: &mut uprising_state,
-                                death_star: &mut death_star_state,
                                 research: &mut research_state,
                                 jedi: &mut jedi_state,
                                 victory: &mut victory_state,
@@ -16707,8 +17962,14 @@ async fn main() {
                             } else {
                                 CockpitFaction::Empire
                             };
-                            advisor_state
-                                .resume_saved_game(AdvisorFaction::from(cockpit_state.faction));
+                            cockpit_state.gid_mode = saved_gid_mode(&interface);
+                            cockpit_state.gid_highlight = rebellion_render::GidHighlight::default();
+                            resume_saved_advisor(
+                                &mut advisor_state,
+                                AdvisorFaction::from(cockpit_state.faction),
+                                victory_state.word,
+                            );
+                            movie_queue = movies::MovieQueue::default();
                             advice_topics = rebellion_render::advice_topics::AdviceTopics::new(
                                 AdvisorFaction::from(cockpit_state.faction),
                                 |id| text_templates.get(id),
@@ -16721,6 +17982,30 @@ async fn main() {
                             fleet_window_state.clear();
                             defenses_window_state.clear();
                             missions_window_state.clear();
+                            // The loaded game's view builds its own GID menu.
+                            cockpit_state.gid_ui.close_menu();
+                            cockpit_state.gid_ui.built = false;
+                            restore_interface(
+                                &interface.windows,
+                                &world,
+                                if player_faction == MissionFaction::Alliance {
+                                    &fog_alliance_state
+                                } else {
+                                    &fog_empire_state
+                                },
+                                &mission_state,
+                                cockpit_state.faction,
+                                cockpit_state.layout(),
+                                RestoredWindows {
+                                    sectors: &mut sector_window_state,
+                                    systems: &mut system_window_state,
+                                    fleets: &fleet_window_state,
+                                    defenses: &mut defenses_window_state,
+                                    missions: &mut missions_window_state,
+                                },
+                                &mut strategic_windowing,
+                            );
+                            pending_window_restore = Some(interface.windows);
                             object_menu = None;
                             indexed_status_menu_witness = None;
                             cockpit_state.gid_ui = rebellion_render::cockpit::GidUiState::default();
@@ -16730,6 +18015,7 @@ async fn main() {
                             mission_dialog_state = MissionDialogState::default();
                             move_confirmation_state = MoveConfirmationState::default();
                             scrap_confirmation_state = ScrapConfirmationState::default();
+                            stop_confirmation_state = StopConfirmationState::default();
                             status_window_state = StatusWindowState::default();
                             fleet_finder_state = FleetFinderState::default();
                             troop_finder_state = TroopFinderState::default();
@@ -16738,19 +18024,17 @@ async fn main() {
                             pending_personnel_finder_open = None;
                             message_index.reset();
                             advice_saved_speed = None;
-                            bombardment_panel_state = BombardmentPanelState::default();
+                            encyclopedia_surface.reset();
+                            operation_report_state = OperationReportState::default();
+                            advice_saved_speed = None;
                             encyclopedia_surface.reset();
                             show_fleets = false;
                             show_missions = false;
-                            show_bombardment = false;
-                            show_death_star = false;
-                            save_load_panel_state.close();
                             tactical_state = TacticalState::new();
                             reset_pending_tactical_handoff(
                                 &mut pending_tactical_window_action,
                                 &mut pending_tactical_destination,
                             );
-                            ground_combat_state = None;
                             dual_ai_mode = secondary_ai_state.is_some();
                             msg_log = MessageLog::default();
                             // Mission ids and message ids start over with the save.
@@ -16785,37 +18069,93 @@ async fn main() {
                             if dev_loaded.is_some() {
                                 dev_channel.refuse(&format!("{error:#}"));
                             }
-                            save_load_panel_state.error_message = Some(error.to_string());
-                            game_options_state.error = Some(error.to_string());
-                        }
-                    }
-                }
-                PanelAction::DeleteSave { slot } => {
-                    match rebellion_data::save::delete_slot(&saves_dir, slot) {
-                        Ok(()) => {
-                            save_load_panel_state.selected_slot = None;
-                            save_load_panel_state.error_message = None;
-                            save_slots = read_save_slots(&saves_dir);
-                            game_options_state.refresh_saves(&save_slots);
-                            game_options_state.error = None;
-                            msg_log.push(GameMessage::new(
-                                clock.tick,
-                                format!("Deleted save in slot {}", slot + 1),
-                                MessageCategory::Event,
-                            ));
-                        }
-                        Err(error) => {
-                            save_load_panel_state.error_message = Some(error.to_string());
                             game_options_state.error = Some(error.to_string());
                         }
                     }
                 }
                 PanelAction::SetGameSpeed(speed) => choose_game_speed(&mut clock, speed),
-                PanelAction::CloseSaveLoadPanel => {
-                    save_load_panel_state.close();
-                    if game_mode == GameMode::LoadGame {
-                        game_mode = GameMode::MainMenu;
+                PanelAction::Bombard { fleets, kind } => {
+                    let result = strike_orders::issue(
+                        &mut world,
+                        &fleets,
+                        kind,
+                        &mut rebellion_data::integrator::StrikeStates {
+                            movement: &mut movement_state,
+                            manufacturing: &mut mfg_state,
+                            transport: &mut troop_transport_state,
+                            deliveries: &mut delivery_state,
+                            missions: &mut mission_state,
+                            uprisings: &uprising_state,
+                            blockade: &mut blockade_state,
+                            tick: clock.tick,
+                            // hyp: the order's command runs in the next step's phase 5,
+                            // before that step's AI round (FUN_0051df30, FUN_004361a0).
+                            step: ai_state.scheduler.next_step(),
+                        },
+                        &mut || sim_rng.gen::<f64>(),
+                        &text_templates,
+                        &mut msg_log,
+                    );
+                    if let Ok(runs) = &result {
+                        movie_queue.file(strike_orders::strike_movies(
+                            &world,
+                            &text_templates,
+                            runs,
+                            Faction::of_alliance(player_faction == MissionFaction::Alliance),
+                        ));
                     }
+                    macroquad::logging::info!(
+                        "[interface] command={:#x} destination=bombardment status={}",
+                        kind.order(),
+                        // No run: every fleet was in transit and kept no
+                        // flag; an idle run: both sides flagged there.
+                        match &result {
+                            Ok(runs) if runs.is_empty() => "refused reason=InTransit".to_owned(),
+                            Ok(runs) if runs.iter().all(|strike| strike.report.is_none()) => {
+                                format!("idle runs={}", runs.len())
+                            }
+                            Ok(runs) => format!(
+                                "issued runs={} hits={}",
+                                runs.len(),
+                                runs.iter()
+                                    .filter_map(|strike| strike.report.as_ref())
+                                    .map(|report| report.hits.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(",")
+                            ),
+                            Err(refusal) => format!("refused reason={refusal:?}"),
+                        }
+                    );
+                }
+                PanelAction::Assault { fleets } => {
+                    let result = assault_orders::issue(
+                        &mut world,
+                        &fleets,
+                        Faction::of_alliance(player_faction == MissionFaction::Alliance),
+                        &mut rebellion_data::integrator::StrikeStates {
+                            movement: &mut movement_state,
+                            manufacturing: &mut mfg_state,
+                            transport: &mut troop_transport_state,
+                            deliveries: &mut delivery_state,
+                            missions: &mut mission_state,
+                            uprisings: &uprising_state,
+                            blockade: &mut blockade_state,
+                            tick: clock.tick,
+                            // hyp: the order's command runs in the next step's phase 5,
+                            // before that step's AI round (FUN_0051df30, FUN_004361a0).
+                            step: ai_state.scheduler.next_step(),
+                        },
+                        &mut || sim_rng.gen::<f64>(),
+                        &text_templates,
+                        &mut msg_log,
+                    );
+                    macroquad::logging::info!(
+                        "[interface] command=0x234 destination=assault status={}",
+                        match &result {
+                            Ok(runs) => format!("issued runs={}", runs.len()),
+                            Err(refusal) => format!("refused reason={refusal:?}"),
+                        }
+                    );
                 }
                 action => {
                     let active_fog_state = if player_faction == MissionFaction::Alliance {
@@ -16828,12 +18168,12 @@ async fn main() {
                         &mut world,
                         &mut map_state,
                         &mut mfg_state,
+                        &delivery_state,
                         &mut mission_state,
                         &mut movement_state,
                         &mut troop_transport_state,
                         active_fog_state,
                         &mut ai_state,
-                        &mut death_star_state,
                         &mut msg_log,
                         &mut advisor_state,
                         &mut player_faction,
@@ -16856,6 +18196,29 @@ async fn main() {
                         &audio_vol,
                         #[cfg(not(target_arch = "wasm32"))]
                         &sounds_dir,
+                    );
+                    // A player's order runs in the next step's phase 5,
+                    // which serves its regiments' holder reruns
+                    // (FUN_00508660, FUN_0051df30).
+                    let step = ai_state.scheduler.next_step();
+                    fire_support_events(
+                        &mut world,
+                        &mut mfg_state,
+                        &mut troop_transport_state,
+                        &movement_state,
+                        &mut delivery_state,
+                        &text_templates,
+                        &mut msg_log,
+                        clock.tick,
+                        step,
+                    );
+                    sweep_flagged(
+                        &mut world,
+                        &mut mission_state,
+                        &troop_transport_state,
+                        &movement_state,
+                        &blockade_state,
+                        clock.tick,
                     );
                 }
             }
@@ -17086,10 +18449,7 @@ async fn main() {
                         fleets: &fleet_window_state,
                         sectors: &sector_window_state,
                         map: &map_state,
-                        left_panel_open: show_fleets
-                            || show_missions
-                            || show_bombardment
-                            || show_death_star,
+                        left_panel_open: show_fleets || show_missions,
                     },
                 );
                 quadrant_watch.observe(
@@ -17240,6 +18600,18 @@ async fn main() {
                 today: clock.tick,
             },
         ));
+        if let Some(window) = operation_report_window_id
+            .filter(|window| strategic_frame_boundary.snapshot().key(*window).is_some())
+        {
+            strategic_content_reports.push(rebellion_windowing::ContentReport {
+                window,
+                status: if operation_report_state.is_open() {
+                    rebellion_windowing::ContentStatus::Ready
+                } else {
+                    rebellion_windowing::ContentStatus::Unpaintable
+                },
+            });
+        }
         strategic_content_reports.extend(
             strategic_windowing.tactical_content_reports(
                 strategic_frame_boundary.snapshot(),
@@ -17298,7 +18670,84 @@ async fn main() {
                 status_content_id,
                 prepared_sector,
                 sector_content_id,
+                minimized_fleet,
+                restored_fleet,
             } = applied;
+            let pending_report_message = operation_report_state.message();
+            let report_open_command = pending_report_message.is_some_and(|message_id| {
+                let report_key =
+                    rebellion_render::windowing_policy::operation_report_spec(message_id).key;
+                match &command {
+                    rebellion_windowing::WindowCommand::Open(spec) => spec.key == report_key,
+                    rebellion_windowing::WindowCommand::Replace { new, .. } => {
+                        new.key == report_key
+                    }
+                    _ => false,
+                }
+            });
+            if report_open_command && operation_report_open_pending {
+                match &result {
+                    Ok(commit) => {
+                        let id = match commit.transition {
+                            rebellion_windowing::WindowTransition::Opened { id }
+                            | rebellion_windowing::WindowTransition::Replaced { new: id, .. } => {
+                                Some(id)
+                            }
+                            _ => None,
+                        };
+                        if let Some(id) = id.filter(|id| strategic_windowing.attach_content(*id)) {
+                            operation_report_window_id = Some(id);
+                            operation_report_open_pending = false;
+                        } else {
+                            macroquad::logging::error!(
+                                "[windowing] Operation Report open receipt did not publish content"
+                            );
+                            operation_report_state = OperationReportState::default();
+                            operation_report_open_pending = false;
+                            pending_report_reopen_index = None;
+                        }
+                    }
+                    Err(error) => {
+                        macroquad::logging::warn!(
+                            "[windowing] Operation Report open rejected error={error:?}"
+                        );
+                        operation_report_state = OperationReportState::default();
+                        operation_report_open_pending = false;
+                        pending_report_reopen_index = None;
+                    }
+                }
+            }
+            if operation_report_close_pending
+                && operation_report_window_id.is_some_and(|window| {
+                    command == rebellion_windowing::WindowCommand::Close(window)
+                })
+            {
+                let closed = result.as_ref().is_ok_and(|commit| {
+                    operation_report_window_id.is_some_and(|window| {
+                        matches!(
+                            &commit.transition,
+                            rebellion_windowing::WindowTransition::Closed { root, closed, .. }
+                                if *root == window && closed.contains(&window)
+                        )
+                    }) && operation_report_window_id
+                        .is_some_and(|window| removed_content.contains(&window))
+                });
+                operation_report_close_pending = false;
+                if closed {
+                    operation_report_window_id = None;
+                    operation_report_state.close();
+                    if let Some(message_id) = operation_report_state.message() {
+                        strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Open(
+                            rebellion_render::windowing_policy::operation_report_spec(message_id),
+                        ));
+                        operation_report_open_pending = true;
+                    } else if let Some(category) = pending_report_reopen_index.take() {
+                        if let Some(prepared) = MessageIndexState::prepare_open(category) {
+                            strategic_windowing.enqueue_message_index_open(prepared);
+                        }
+                    }
+                }
+            }
             let pending_object_menu = pending_object_menu_publications
                 .iter()
                 .position(|(prepared, _, _)| prepared.command() == command)
@@ -17735,25 +19184,72 @@ async fn main() {
                 &result,
             );
             removed_content.extend(missions_rollback);
+            let activated_fleet = matches!(
+                command,
+                rebellion_windowing::WindowCommand::Activate(id)
+                    if fleet_window_state.contains_window(id)
+            );
+            let mut committed_fleet_open = false;
             if let (Some(prepared), Some(id), Ok(commit)) =
                 (prepared_fleet, fleet_content_id, &result)
             {
                 if fleet_window_state.commit_open(prepared, &commit.transition) == Some(id) {
-                    let committed = strategic_windowing.has_content(id)
+                    committed_fleet_open = strategic_windowing.has_content(id)
                         || strategic_windowing.acknowledge_fleet_publication(id);
-                    if !committed {
+                    if !committed_fleet_open {
                         fleet_window_state.remove_content(&[id]);
                         removed_content.extend(strategic_windowing.rollback_fleet_publication(id));
                     }
                 } else {
                     macroquad::logging::error!(
-                        "[windowing] Fleet content commit did not match identity={id:?}"
+                        "[windowing] Fleet content commit did not match identity={:?}",
+                        id
                     );
                     if matches!(
                         commit.transition,
                         rebellion_windowing::WindowTransition::Opened { .. }
                     ) {
                         removed_content.extend(strategic_windowing.rollback_fleet_publication(id));
+                    }
+                }
+            }
+            if let Some(window) = restored_fleet {
+                system_window_state.restore_fleet_window(window);
+            }
+            if let (Some((window, system, logical_position)), Ok(commit)) =
+                (minimized_fleet, &result)
+            {
+                if matches!(
+                    &commit.transition,
+                    rebellion_windowing::WindowTransition::Minimized { .. }
+                ) {
+                    if let Some(evicted) =
+                        system_window_state.minimize_fleet_window(window, system, logical_position)
+                    {
+                        strategic_input_router.cancel_window(evicted);
+                        fleet_window_state.cancel_pointer_capture(evicted);
+                        removed_content
+                            .extend(strategic_windowing.rollback_fleet_publication(evicted));
+                    }
+                }
+            }
+            if let Some(window) = restored_fleet {
+                system_window_state.restore_fleet_window(window);
+            }
+            if let (Some((window, system, logical_position)), Ok(commit)) =
+                (minimized_fleet, &result)
+            {
+                if matches!(
+                    commit.transition,
+                    rebellion_windowing::WindowTransition::Minimized { .. }
+                ) {
+                    if let Some(evicted) =
+                        system_window_state.minimize_fleet_window(window, system, logical_position)
+                    {
+                        strategic_input_router.cancel_window(evicted);
+                        fleet_window_state.cancel_pointer_capture(evicted);
+                        removed_content
+                            .extend(strategic_windowing.rollback_fleet_publication(evicted));
                     }
                 }
             }
@@ -17934,12 +19430,12 @@ async fn main() {
                     &mut world,
                     &mut map_state,
                     &mut mfg_state,
+                    &delivery_state,
                     &mut mission_state,
                     &mut movement_state,
                     &mut troop_transport_state,
                     active_fog_state,
                     &mut ai_state,
-                    &mut death_star_state,
                     &mut msg_log,
                     &mut advisor_state,
                     &mut player_faction,
@@ -18056,8 +19552,9 @@ async fn main() {
                 }
                 Err(error) => {
                     macroquad::logging::warn!(
-                        "[windowing] rejected command={:?} error={error:?}",
-                        command
+                        "[windowing] rejected command={:?} error={:?}",
+                        command,
+                        error
                     );
                 }
             }
@@ -18194,6 +19691,20 @@ async fn main() {
                 );
             }
         }
+        // The load's Fleet windows have committed: the saved order and the
+        // focus come back (FUN_00440f80).
+        if let Some(order) = pending_window_restore.take() {
+            let hidden = finish_interface_restore(
+                &order,
+                &world,
+                &mut system_window_state,
+                &mut defenses_window_state,
+                &mut missions_window_state,
+                &mut fleet_window_state,
+                &mut strategic_windowing,
+            );
+            let _ = hidden;
+        }
         next_frame().await;
     }
 }
@@ -18204,7 +19715,6 @@ struct FleetMoveContext<'a> {
     movement: &'a MovementState,
     blockaded: &'a HashSet<SystemKey>,
     faction: MissionFaction,
-    tick: u64,
 }
 
 /// A team of fleets' Move (`0x201`) or Confirmed Move (`0x202`) with its
@@ -18218,7 +19728,6 @@ fn issue_fleet_move(
     fleets: &[FleetKey],
     confirmed: bool,
     target: ReleaseTarget,
-    msg_log: &mut MessageLog,
     move_confirmation_state: &mut MoveConfirmationState,
     strategic_windowing: &mut StrategicWindowing,
     panel_actions: &mut Vec<PanelAction>,
@@ -18229,8 +19738,12 @@ fn issue_fleet_move(
         ReleaseTarget::System(system) => (system, None),
         ReleaseTarget::Fleet { fleet, system } => (system, Some(fleet)),
     };
-    let checked = match join {
-        Some(target) if !fleets.is_empty() => fleets.iter().try_for_each(|fleet| {
+    // FUN_0053c4b0: a team with no object is refused 1/0x16 before any
+    // sub-order runs; then every sub-order's validator (FUN_0053c1a0).
+    let refusal = if fleets.is_empty() {
+        Some(Some((1, 0x16)))
+    } else if let Some(target) = join {
+        fleets.iter().find_map(|fleet| {
             rebellion_core::fleet_join::validate_join(
                 world,
                 context.movement,
@@ -18238,20 +19751,25 @@ fn issue_fleet_move(
                 target,
                 is_alliance,
             )
-            .map(|_| ())
-            .map_err(|error| error.to_string())
-        }),
-        _ => validate_fleets_dispatch(context.movement, world, fleets, destination, is_alliance)
-            .map_err(|error| error.to_string()),
+            .err()
+            .map(|error| {
+                macroquad::logging::info!("[order] fleet join refused: {:?}", error);
+                fleet_order_refusal_status(error)
+            })
+        })
+    } else {
+        validate_fleets_dispatch(context.movement, world, fleets, destination, is_alliance)
+            .err()
+            .map(|error| {
+                macroquad::logging::info!("[order] fleet move refused: {:?}", error);
+                fleet_dispatch_refusal_status(error)
+            })
     };
-    if let Err(error) = checked {
-        // port: FUN_00487c90 plays the side's advisor reaction; this line
-        // stands in.
-        msg_log.push(GameMessage::new(
-            context.tick,
-            format!("Fleet move rejected: {error}"),
-            MessageCategory::Event,
-        ));
+    if let Some(status) = refusal {
+        // FUN_00487c90: no text; the side's advisor reacts to the status.
+        if let Some(status) = status {
+            panel_actions.push(PanelAction::AdvisorRefusal(status));
+        }
         return false;
     }
     let asks = fleets.iter().any(|fleet| match join {
@@ -18265,17 +19783,11 @@ fn issue_fleet_move(
         None => fleet_move_confirms(world, context.blockaded, *fleet, confirmed),
     });
     if !asks {
-        panel_actions.extend(fleets.iter().map(|fleet| match join {
-            Some(target) => PanelAction::JoinFleet {
-                mover: FleetMover::Fleet(*fleet),
-                target,
-            },
-            None => PanelAction::DispatchFleet {
-                fleet: *fleet,
-                destination,
-                troops: Vec::new(),
-            },
-        }));
+        panel_actions.extend(
+            fleets
+                .iter()
+                .map(|&fleet| mover_move_action(FleetMover::Fleet(fleet), destination, join)),
+        );
         return false;
     }
     // FUN_0048a340 → FUN_0049a350: a line per member, its name and days.
@@ -18295,6 +19807,8 @@ fn issue_fleet_move(
         faction: context.faction,
         fleets: fleets.to_vec(),
         members: Vec::new(),
+        ships: None,
+        units: Vec::new(),
         destination,
         join,
         blockaded: false,
@@ -18307,6 +19821,275 @@ fn issue_fleet_move(
                 .enqueue_move_confirmation_open(prepared)
                 .is_ok()
         })
+}
+
+/// A capital ship team's Move (`0x201`) or Confirmed Move (`0x202`) with
+/// its target set, each ship a per-object move (`0x204`, `FUN_0053ca50`):
+/// `FUN_00487740` validates it (a refusal reaches the side's advisor,
+/// `FUN_00487c90`), then `FUN_00487cc0` asks for `0x202`, and for `0x201`
+/// only when the first member's container is a blockaded system; a ship's
+/// container is its fleet, so its Move never asks. The window lists each
+/// ship's name (`FUN_004f6270`) and days (`fleet_join::ship_move_days`).
+/// Whether the window opened.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The release hands over the order and every window it may open."
+)]
+fn issue_ship_move(
+    context: &FleetMoveContext<'_>,
+    fleet: FleetKey,
+    ships: Vec<usize>,
+    roster: u64,
+    confirmed: bool,
+    target: ReleaseTarget,
+    move_confirmation_state: &mut MoveConfirmationState,
+    panel_actions: &mut Vec<PanelAction>,
+) -> bool {
+    let world = context.world;
+    let is_alliance = context.faction == MissionFaction::Alliance;
+    let (destination, join) = match target {
+        ReleaseTarget::System(system) => (system, None),
+        ReleaseTarget::Fleet { fleet, system } => (system, Some(fleet)),
+    };
+    let checked = match join {
+        Some(target) => rebellion_core::fleet_join::validate_join(
+            world,
+            context.movement,
+            &FleetMover::Ships {
+                fleet,
+                ships: ships.clone(),
+                roster,
+            },
+            target,
+            is_alliance,
+        )
+        .map(drop),
+        None => rebellion_core::fleet_join::validate_ships_to_system(
+            world,
+            context.movement,
+            fleet,
+            &ships,
+            roster,
+            destination,
+            is_alliance,
+        )
+        .map(drop),
+    };
+    if let Err(error) = checked {
+        macroquad::logging::info!("[order] ship move refused: {:?}", error);
+        if let Some(status) = fleet_order_refusal_status(error) {
+            panel_actions.push(PanelAction::AdvisorRefusal(status));
+        }
+        return false;
+    }
+    if !confirmed {
+        panel_actions.push(mover_move_action(
+            FleetMover::Ships {
+                fleet,
+                ships,
+                roster,
+            },
+            destination,
+            join,
+        ));
+        return false;
+    }
+    let lines = ships
+        .iter()
+        .filter_map(|&index| {
+            Some((
+                world.ship_name(fleet, index)?.to_owned(),
+                rebellion_core::fleet_join::ship_move_days(world, fleet, index, destination)?,
+            ))
+        })
+        .collect();
+    move_confirmation_state.open(MoveConfirmation {
+        faction: context.faction,
+        fleets: Vec::new(),
+        members: Vec::new(),
+        ships: Some(FleetMover::Ships {
+            fleet,
+            ships,
+            roster,
+        }),
+        units: Vec::new(),
+        destination,
+        join,
+        blockaded: false,
+        lines,
+    });
+    true
+}
+
+/// The panel action that carries out a mover's validated move: onto the
+/// fleet it joins (`FUN_004ffc90`), else to the system.
+fn mover_move_action(
+    mover: FleetMover,
+    destination: SystemKey,
+    join: Option<FleetKey>,
+) -> PanelAction {
+    match (join, mover) {
+        (Some(target), mover) => PanelAction::JoinFleet { mover, target },
+        (
+            None,
+            FleetMover::Ships {
+                fleet,
+                ships,
+                roster,
+            },
+        ) => PanelAction::MoveShips {
+            fleet,
+            ships,
+            roster,
+            system: destination,
+        },
+        (None, FleetMover::Fleet(fleet)) => PanelAction::DispatchFleet {
+            fleet,
+            destination,
+            troops: Vec::new(),
+        },
+    }
+}
+
+/// A regiment's or squadron's Move (`0x201`) or Confirmed Move (`0x202`)
+/// with its target set, the unit's own per-object move (`0x204`,
+/// `FUN_0053ca50`): `FUN_00487740` validates it (a refusal reaches the
+/// side's advisor, `FUN_00487c90`), then `FUN_00487cc0` asks for `0x202`,
+/// and for `0x201` when the unit's container is a blockaded system of its
+/// side; that window warns of the evacuation (0x7056, `FUN_0049a350`). A
+/// unit aboard a fleet has the ship for its container. The window lists the
+/// unit's name (`FUN_004f6270`) and days (`FUN_0053d200`). Whether the
+/// window opened.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The release hands over the order, the transport state and every window it may open."
+)]
+fn issue_unit_move(
+    context: &FleetMoveContext<'_>,
+    transport: &TroopTransportState,
+    products: &ProductRoom,
+    unit: UnitMover,
+    confirmed: bool,
+    target: ReleaseTarget,
+    move_confirmation_state: &mut MoveConfirmationState,
+    panel_actions: &mut Vec<PanelAction>,
+) -> bool {
+    use rebellion_core::troop_transport::TroopTransportError;
+    let world = context.world;
+    let (destination, join) = match target {
+        ReleaseTarget::System(system) => (system, None),
+        ReleaseTarget::Fleet { fleet, system } => (system, Some(fleet)),
+    };
+    let order = join.map_or(RegimentTarget::System(destination), RegimentTarget::Fleet);
+    let (is_alliance, standing, name) = match unit {
+        UnitMover::Regiment(troop) => {
+            let value = world.troops.get(troop);
+            (
+                value.map(|value| value.is_alliance),
+                world
+                    .systems
+                    .iter()
+                    .find(|(_, system)| system.ground_units.contains(&troop))
+                    .map(|(key, _)| key),
+                value
+                    .and_then(|value| world.buildable_classes.get(&value.class_dat_id))
+                    .map(|class| class.name.clone()),
+            )
+        }
+        UnitMover::Squadron(SquadronSource::Fleet { fleet, index }) => {
+            let value = world.fleets.get(fleet);
+            let class = value
+                .and_then(|value| value.fighters.get(index))
+                .and_then(|entry| world.fighter_classes.get(entry.class));
+            (
+                value.map(|value| value.is_alliance),
+                None,
+                class.map(|class| class.name.clone()),
+            )
+        }
+        UnitMover::Squadron(SquadronSource::System {
+            system,
+            class,
+            is_alliance,
+        }) => (
+            Some(is_alliance),
+            Some(system),
+            world
+                .fighter_classes
+                .get(class)
+                .map(|class| class.name.clone()),
+        ),
+    };
+    let player_is_alliance = context.faction == MissionFaction::Alliance;
+    let days = if is_alliance == Some(player_is_alliance) {
+        match unit {
+            UnitMover::Regiment(troop) => transport.regiment_move_days(
+                world,
+                context.movement,
+                context.blockaded,
+                products,
+                troop,
+                order,
+            ),
+            UnitMover::Squadron(source) => transport.squadron_move_days(
+                world,
+                context.movement,
+                context.blockaded,
+                products,
+                source,
+                order,
+            ),
+        }
+    } else {
+        Err(TroopTransportError::WrongFaction)
+    };
+    let days = match days {
+        Ok(days) => days,
+        Err(error) => {
+            macroquad::logging::info!("[order] unit move refused: {:?}", error);
+            if let Some(status) = transport_refusal_status(error) {
+                panel_actions.push(PanelAction::AdvisorRefusal(status));
+            }
+            return false;
+        }
+    };
+    let side = if player_is_alliance {
+        Faction::Alliance
+    } else {
+        Faction::Empire
+    };
+    let blockaded = standing.is_some_and(|system| {
+        context.blockaded.contains(&system)
+            && world
+                .systems
+                .get(system)
+                .is_some_and(|value| value.control.is_controlled_by(side))
+    });
+    if !confirmed && !blockaded {
+        panel_actions.push(unit_move_action(unit, order));
+        return false;
+    }
+    move_confirmation_state.open(MoveConfirmation {
+        faction: context.faction,
+        fleets: Vec::new(),
+        members: Vec::new(),
+        ships: None,
+        units: vec![unit],
+        destination,
+        join,
+        blockaded,
+        lines: vec![(name.unwrap_or_default(), days)],
+    });
+    true
+}
+
+/// The panel action that carries out a unit's validated move
+/// (`FUN_00578f30` → `FUN_00556390`).
+fn unit_move_action(unit: UnitMover, target: RegimentTarget) -> PanelAction {
+    match unit {
+        UnitMover::Regiment(troop) => PanelAction::MoveRegiment { troop, target },
+        UnitMover::Squadron(source) => PanelAction::MoveSquadron { source, target },
+    }
 }
 
 /// Issue a character's or special force's Move or Confirmed Move with its
@@ -18343,7 +20126,8 @@ fn issue_member_move(
         mission_state.move_refusal(world, context.movement, context.faction, &members, order);
     if let Some(refusal) = refusal {
         macroquad::logging::info!(
-            "[interface] command=0x241 destination={order:?} status=refused code={:?}",
+            "[interface] command=0x241 destination={:?} status=refused code={:?}",
+            order,
             refusal.status()
         );
         advisor_state.refuse(refusal.status());
@@ -18405,6 +20189,8 @@ fn issue_member_move(
         faction: context.faction,
         fleets: Vec::new(),
         members,
+        ships: None,
+        units: Vec::new(),
         destination,
         join,
         blockaded,
@@ -18587,7 +20373,6 @@ mod encyclopedia_route_tests {
         let troop = world.troops.insert(rebellion_core::world::TroopUnit {
             class_dat_id: rebellion_core::ids::DatId::new(0x1000_0002),
             is_alliance: true,
-            regiment_strength: 10,
         });
         let fighter_class = world
             .fighter_classes
@@ -18606,7 +20391,7 @@ mod encyclopedia_route_tests {
             }],
             characters: Vec::new(),
             is_alliance: true,
-            has_death_star: false,
+            bombarding: false,
         });
         let defense =
             world
@@ -18665,13 +20450,329 @@ mod encyclopedia_route_tests {
     }
 }
 
+/// The ship a band's Rename (0x215) names: the band manager's current
+/// product (`FUN_0052be30`), when it takes a rename. `FUN_00527f40` asks the
+/// product's `+0x64` for kind 0x203: a capital ship runs the object check
+/// `FUN_004f9860`, which passes an unfinished ship of the side that is not
+/// en route; a squadron refuses (`FUN_004f66a0`, 1/0x17), and an idle band
+/// has no product (0xa0/1). Under Wine Rename was enabled on the route-1
+/// Empire save's ships band building Death Star 1 (day 123 played on).
+fn band_rename_target(
+    world: &GameWorld,
+    manufacturing: &ManufacturingState,
+    system: SystemKey,
+    area: rebellion_core::manufacturing::ProductionArea,
+    is_alliance: bool,
+) -> Option<(FleetKey, usize)> {
+    let item = manufacturing.queue(system, area)?.active()?;
+    let (fleet, index) = rebellion_core::carriage::ship_of_tag(world, item.ship)?;
+    let value = world.fleets.get(fleet)?;
+    let ship = value.capital_ships.get(index)?;
+    (value.is_alliance == is_alliance && ship.alive && ship.transit.is_none())
+        .then_some((fleet, index))
+}
+
+/// The system whose DAT id is `id`: how a save names a window's subject.
+fn system_by_dat_id(world: &GameWorld, id: rebellion_core::ids::DatId) -> Option<SystemKey> {
+    world
+        .systems
+        .iter()
+        .find(|(_, system)| system.dat_id == id)
+        .map(|(key, _)| key)
+}
+
+/// The galaxy child a saved detail window is, while it is open.
+fn saved_child(
+    world: &GameWorld,
+    fleets: &FleetWindowState,
+    window: &rebellion_data::save::SavedWindow,
+) -> Option<GalaxyChild> {
+    use rebellion_data::save::SavedWindowKind;
+    match window.kind {
+        SavedWindowKind::Sector { .. } => None,
+        SavedWindowKind::System { system } => {
+            system_by_dat_id(world, system).map(GalaxyChild::System)
+        }
+        SavedWindowKind::Defenses { system } => {
+            system_by_dat_id(world, system).map(GalaxyChild::Defenses)
+        }
+        SavedWindowKind::Missions { system } => {
+            system_by_dat_id(world, system).map(GalaxyChild::Missions)
+        }
+        SavedWindowKind::Fleet { system, .. } => system_by_dat_id(world, system)
+            .and_then(|system| fleets.window_id(system))
+            .map(GalaxyChild::Fleet),
+    }
+}
+
+/// The manager key represented by a serialized window record.
+fn saved_window_key(
+    world: &GameWorld,
+    window: &rebellion_data::save::SavedWindow,
+) -> Option<rebellion_windowing::WindowKey> {
+    use rebellion_data::save::SavedWindowKind;
+    use rebellion_windowing::{WindowKey, WindowKind};
+
+    let (kind, subject) = match window.kind {
+        SavedWindowKind::Sector { sector } => {
+            let key = world
+                .sectors
+                .iter()
+                .find_map(|(key, value)| (value.dat_id == sector).then_some(key))?;
+            (
+                WindowKind::Sector,
+                rebellion_render::windowing_policy::sector_subject(world, key)?,
+            )
+        }
+        SavedWindowKind::System { system } => (
+            WindowKind::System,
+            rebellion_render::windowing_policy::system_subject(
+                world,
+                system_by_dat_id(world, system)?,
+            )?,
+        ),
+        SavedWindowKind::Fleet { system, .. } => (
+            WindowKind::Fleet,
+            rebellion_render::windowing_policy::system_subject(
+                world,
+                system_by_dat_id(world, system)?,
+            )?,
+        ),
+        SavedWindowKind::Defenses { system } => (
+            WindowKind::Defenses,
+            rebellion_render::windowing_policy::system_subject(
+                world,
+                system_by_dat_id(world, system)?,
+            )?,
+        ),
+        SavedWindowKind::Missions { system } => (
+            WindowKind::Missions,
+            rebellion_render::windowing_policy::system_subject(
+                world,
+                system_by_dat_id(world, system)?,
+            )?,
+        ),
+    };
+    Some(WindowKey::contextual(kind, subject))
+}
+
+/// The interface a save keeps (`FUN_00440ea0`): the GID mode and the galaxy
+/// view's windows in one list from the bottom of the z-order up, shown and
+/// hidden alike, each hidden window at its own place (`FUN_00440ea0.c:19-24`).
+/// `FUN_00440f80` rebuilds them in that order and appends each hidden one to
+/// the rail as it meets it (`FUN_00428b40`), so a load's rail is in the
+/// hidden windows' z-order. A
+/// window the open GID menu hides saves hidden (its slot `+0x08` clears
+/// `+0x110`) and so comes back on the rail: under Wine Coruscant's System
+/// window, hidden by the menu at the save, came back minimized (Empire day-2
+/// start, played on to day 8).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The interface reads every galaxy window family."
+)]
+fn saved_interface(
+    world: &GameWorld,
+    cockpit: &rebellion_render::CockpitState,
+    sectors: &SectorWindowState,
+    systems: &SystemWindowState,
+    fleets: &FleetWindowState,
+    defenses: &DefensesWindowState,
+    missions: &MissionsWindowState,
+    snapshot: &rebellion_windowing::RoutingSnapshot,
+    order: &[(rebellion_windowing::WindowId, bool)],
+) -> rebellion_data::save::SavedInterface {
+    let mut content = BTreeMap::new();
+    for (_, window) in systems
+        .saved_windows(world)
+        .into_iter()
+        .chain(defenses.saved_windows(world))
+        .chain(missions.saved_windows(world))
+        .chain(fleets.saved_windows(world, |id| systems.rail_holds_fleet(id)))
+        .chain(sectors.saved_windows(world))
+        .chain(systems.saved_rail(world, |id| fleets.saved_tab(id).map(|tab| (tab, 0))))
+    {
+        if let Some(key) = saved_window_key(world, &window) {
+            content.insert(key, window);
+        }
+    }
+    let windows = order
+        .iter()
+        .filter_map(|(id, visible)| {
+            let key = snapshot.key(*id)?;
+            let mut window = *content.get(&key)?;
+            let hidden_by_gid = saved_child(world, fleets, &window)
+                .is_some_and(|child| cockpit.gid_ui.hides(child));
+            window.shown = *visible && !hidden_by_gid;
+            Some(window)
+        })
+        .collect();
+    rebellion_data::save::SavedInterface {
+        gid_mode: Some(cockpit.gid_mode.command_id()),
+        windows,
+    }
+}
+
+/// The galaxy window families a load rebuilds into.
+struct RestoredWindows<'a> {
+    sectors: &'a mut SectorWindowState,
+    systems: &'a mut SystemWindowState,
+    fleets: &'a FleetWindowState,
+    defenses: &'a mut DefensesWindowState,
+    missions: &'a mut MissionsWindowState,
+}
+
+/// Rebuild a load's windows in saved order (`FUN_00440f80` →
+/// `FUN_00441190`): each family's own restore, a hidden detail window back
+/// on the rail. Fleet windows open through the window manager, which
+/// commits them at the end of the frame (`finish_interface_restore`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The restore reads the world, the player's fog and missions, and the layout."
+)]
+fn restore_interface(
+    order: &[rebellion_data::save::SavedWindow],
+    world: &GameWorld,
+    fog: &FogState,
+    mission_state: &MissionState,
+    faction: CockpitFaction,
+    layout: rebellion_render::CockpitLayout,
+    windows: RestoredWindows<'_>,
+    strategic_windowing: &mut strategic_windowing::StrategicWindowing,
+) {
+    use rebellion_data::save::SavedWindowKind;
+    for window in order {
+        match window.kind {
+            SavedWindowKind::Sector { .. } => {
+                windows.sectors.restore_saved(world, faction, window);
+            }
+            SavedWindowKind::System { .. } => {
+                windows.systems.restore_saved(world, faction, window);
+            }
+            SavedWindowKind::Defenses { .. } if window.shown => {
+                windows.defenses.restore_saved(world, faction, window);
+            }
+            SavedWindowKind::Missions { .. } if window.shown => {
+                windows
+                    .missions
+                    .restore_saved(world, fog, mission_state, faction, window);
+            }
+            SavedWindowKind::Defenses { .. } | SavedWindowKind::Missions { .. } => {
+                windows.systems.restore_saved(world, faction, window);
+            }
+            SavedWindowKind::Fleet { system, tab } => {
+                let prepared = system_by_dat_id(world, system).and_then(|system| {
+                    windows.fleets.prepare_open(
+                        world,
+                        system,
+                        window.position,
+                        faction,
+                        layout,
+                        None,
+                    )
+                });
+                let tab = rebellion_render::fleet_window::FleetWindowTab::from_control_id(tab);
+                if let (Some(prepared), Some(tab)) = (prepared, tab) {
+                    strategic_windowing.enqueue_fleet_open(prepared.with_tab(tab));
+                }
+            }
+        }
+    }
+}
+
+/// After a load's Fleet windows commit: a hidden one takes its slot on the
+/// rail, where `FUN_00441190` appends each hidden window in save order
+/// (slot `+0x08`, `FUN_00428b40`), and the shown windows take the saved
+/// z-order again, each above the last, hidden and shown alike, since the
+/// Fleet windows committed last. Sector windows stay at the bottom
+/// (`FUN_00440f80.c:31-35`). A shown Fleet window brings the Fleet windows'
+/// layer forward (`fleet_front`, the serial `galaxy_front` reads) at its
+/// place in that order. Returns the Fleet windows going to the rail, which
+/// take no focus.
+fn finish_interface_restore(
+    order: &[rebellion_data::save::SavedWindow],
+    world: &GameWorld,
+    systems: &mut SystemWindowState,
+    defenses: &mut DefensesWindowState,
+    missions: &mut MissionsWindowState,
+    fleets: &mut FleetWindowState,
+    strategic_windowing: &mut strategic_windowing::StrategicWindowing,
+) -> Vec<GalaxyChild> {
+    let mut hidden = Vec::new();
+    let mut slot = 0;
+    for window in order {
+        let child = saved_child(world, fleets, window);
+        match child {
+            Some(GalaxyChild::Fleet(id)) if !window.shown => {
+                if let rebellion_data::save::SavedWindowKind::Fleet { system, .. } = window.kind {
+                    if let Some(system) = system_by_dat_id(world, system) {
+                        systems.insert_fleet_rail(slot, id, system, window.position);
+                        strategic_windowing.enqueue_fleet_minimize_with_rail(
+                            id,
+                            system,
+                            window.position,
+                        );
+                    }
+                }
+                hidden.push(GalaxyChild::Fleet(id));
+            }
+            Some(GalaxyChild::Fleet(id)) => {
+                strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
+            }
+            Some(child) if !window.shown => {
+                systems.lift_hidden(child);
+            }
+            Some(GalaxyChild::System(system)) => {
+                if let Some(id) = systems.window_id(system) {
+                    strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
+                }
+            }
+            Some(GalaxyChild::Defenses(system)) => {
+                if let Some(id) = defenses.window_id(system) {
+                    strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
+                }
+            }
+            Some(GalaxyChild::Missions(system)) => {
+                if let Some(id) = missions.window_id(system) {
+                    strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
+                }
+            }
+            Some(GalaxyChild::Sector(_)) | None => {}
+        }
+        if !window.shown
+            && !matches!(
+                window.kind,
+                rebellion_data::save::SavedWindowKind::Sector { .. }
+            )
+        {
+            slot += 1;
+        }
+    }
+    hidden
+}
+
+/// The GID mode a loaded game shows: the save's (view `+0xc8`), which
+/// `FUN_00440f80` replays as the row choice (`WM_COMMAND` 0x140), or the
+/// new-game default when the save has none. A highlight's systems (`+0x2cc`)
+/// are not saved.
+fn saved_gid_mode(interface: &rebellion_data::save::SavedInterface) -> rebellion_render::GidMode {
+    interface
+        .gid_mode
+        .and_then(rebellion_render::GidMode::from_command_id)
+        .unwrap_or(rebellion_render::GidMode::PopularSupport)
+}
+
 /// Whether each order of `selection`'s menu passes its own rule (`+0x18`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The gates read every state an order's rule reaches."
+)]
 fn order_gates(
     selection: Option<MenuObject>,
     world: &GameWorld,
     mission_state: &MissionState,
     movement_state: &MovementState,
     troop_transport_state: &TroopTransportState,
+    blockade_state: &BlockadeState,
     manufacturing: &ManufacturingState,
     research: &rebellion_core::research::ResearchState,
     player_faction: MissionFaction,
@@ -18749,12 +20850,25 @@ fn order_gates(
             }),
         ship_move: match selection {
             Some(MenuObject::Ship { fleet, index, .. }) => {
-                fleet_move_enabled(movement_state, world, fleet, is_alliance)
-                    && world
-                        .fleets
-                        .get(fleet)
-                        .and_then(|value| value.capital_ships.get(index))
-                        .is_some_and(|ship| ship.alive)
+                rebellion_core::fleet_join::ship_move_enabled(
+                    world,
+                    movement_state,
+                    fleet,
+                    index,
+                    is_alliance,
+                )
+            }
+            _ => false,
+        },
+        create_fleet: match selection {
+            Some(MenuObject::Ship { fleet, index, .. }) => {
+                rebellion_core::fleet_join::create_fleet_enabled(
+                    world,
+                    movement_state,
+                    fleet,
+                    index,
+                    is_alliance,
+                )
             }
             _ => false,
         },
@@ -18792,7 +20906,10 @@ fn order_gates(
             }
             _ => false,
         },
-        // Stop clears a band that is building (manual p. 84).
+        // Stop clears a band that is building (manual p. 84). Its command's
+        // +0x18 (FUN_0057eaa0) asks the manager's +0x1cc (FUN_00528270),
+        // which refuses 0xa0/1 while no product resolves from ProductKey
+        // +0x74 (FUN_0052be30): an idle band's Stop is greyed.
         stop: match selection {
             Some(MenuObject::Producer { system, area }) => {
                 holds(system)
@@ -18803,8 +20920,14 @@ fn order_gates(
             _ => false,
         },
         // port: the player names its own fleets and ships; FUN_004f6e60
-        // refuses a destroyed object (FUN_0053a000). The order's own +0x18
-        // rule is untraced.
+        // refuses a destroyed object (FUN_0053a000), and FUN_004f9860.c:61
+        // one en route (its own leg); 0x203 is exempt from its completed
+        // test, so an unfinished ship keeps Rename (the route-1 Empire save,
+        // its day-123 Death Star played on). The order's own +0x18 rule is
+        // untraced. A band's Rename (FUN_0057e6a0 → manager +0x1c4,
+        // FUN_00527f40) refuses 0xa0/1 with no product, as Stop does, and
+        // otherwise asks the product's +0x64 for kind 0x203
+        // (band_rename_target).
         rename: match selection {
             Some(MenuObject::Fleet(fleet)) => world
                 .fleets
@@ -18816,11 +20939,24 @@ fn order_gates(
                         && value
                             .capital_ships
                             .get(index)
-                            .is_some_and(|ship| ship.alive)
+                            .is_some_and(|ship| ship.alive && ship.transit.is_none())
                 })
+            }
+            Some(MenuObject::Producer { system, area }) => {
+                holds(system)
+                    && band_rename_target(world, manufacturing, system, area, is_alliance).is_some()
             }
             _ => false,
         },
+        bombard: strike_orders::bombard_gates(world, movement_state, selection, is_alliance),
+        assault: assault_orders::assault_gate(
+            world,
+            movement_state,
+            troop_transport_state,
+            blockade_state,
+            selection,
+            is_alliance,
+        ),
         scrap: scrap_order(selection).is_some_and(|order| {
             rebellion_core::scrap::order_enabled(
                 world,
@@ -18889,12 +21025,18 @@ fn scrap_order(selection: Option<MenuObject>) -> Option<rebellion_core::scrap::S
 /// Manage Production toggle their module (`FUN_00439d60`), Agent Advice its
 /// bit (`FUN_00439e80`).
 /// Where a Finder's choice opens through `FUN_00429440`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FinderTarget {
     /// A system alone: its sector window.
     Sector,
+    /// A system's Defenses detail.
+    Defenses,
     /// The Fleet window (kind 4) with the fleet selected.
     Fleet(rebellion_core::ids::FleetKey),
+    /// The Fleet window with no selected object.
+    FleetWindow,
+    /// The Missions window showing the member's mission.
+    Missions(rebellion_core::missions::MissionMember),
 }
 
 /// Troop Finder destination held until the manager accepts the exact close
@@ -19174,17 +21316,26 @@ struct PendingSectorPublication {
     dependent: Option<SectorDependentIntent>,
 }
 
+/// The two waves a shown message plays (`FUN_00469de0`): `+0x30` from
+/// STRATEGY (module 7) and its voice line `+0x32` from the player's sprite
+/// DLL (module 9); 0 plays nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct MessageSounds {
+    sound: u16,
+    voice: u16,
+}
+
 /// Carry out what the Message Index asks: the Advice speed hold
 /// (`FUN_00487ff0`), marking read and queuing the shown message's sound
 /// (`FUN_0048a530`, `FUN_00469de0`), deleting (`FUN_005f54a0`) and the
 /// posting flags (`FUN_0041d230`, `FUN_0041d290`). The caller routes
-/// [`MessageIndexAction::GoTo`].
+/// [`MessageIndexAction::GoTo`] and [`MessageIndexAction::OpenReport`].
 fn apply_message_index_actions(
     actions: Vec<MessageIndexAction>,
     log: &mut MessageLog,
     clock: &mut GameClock,
     saved_speed: &mut Option<GameSpeed>,
-    sound: &mut Option<u16>,
+    sound: &mut Option<MessageSounds>,
 ) {
     for action in actions {
         match action {
@@ -19199,22 +21350,30 @@ fn apply_message_index_actions(
             MessageIndexAction::DeleteSelected(ids) => log.delete_by_ids(&ids),
             MessageIndexAction::MessageDisplayed(id) => {
                 log.mark_message_read(id);
-                *sound = log
-                    .messages()
-                    .iter()
-                    .find(|msg| msg.id == id)
-                    .and_then(|msg| msg.display.as_ref())
-                    .map(|display| display.sound)
-                    .filter(|&sound| sound != 0);
+                // FUN_00469de0: stop the last message's waves
+                // (FUN_0046a6e0), then play this one's +0x30 and +0x32.
+                *sound = Some(
+                    log.messages()
+                        .iter()
+                        .find(|msg| msg.id == id)
+                        .and_then(|msg| msg.display.as_ref())
+                        .map_or_else(MessageSounds::default, |display| MessageSounds {
+                            sound: display.sound,
+                            voice: display.voice,
+                        }),
+                );
             }
             MessageIndexAction::SetPostFlags { mask, flags } => {
                 log.set_post_flags(mask, flags);
                 macroquad::logging::info!(
-                    "[message_index] post_flags mask=0x{mask:x} silent={}",
+                    "[message_index] post_flags mask=0x{:x} silent={}",
+                    mask,
                     flags & rebellion_render::message_log::POST_SILENTLY != 0
                 );
             }
-            MessageIndexAction::Close | MessageIndexAction::GoTo(_) => {}
+            MessageIndexAction::Close
+            | MessageIndexAction::GoTo(_)
+            | MessageIndexAction::OpenReport(_) => {}
         }
     }
 }
@@ -19237,8 +21396,10 @@ fn apply_agent_command(
         AgentCommand::AgentAdvice => ("agent_advice", agent.toggle_advice()),
     };
     macroquad::logging::info!(
-        "[agent] command={name} status={} source={source}",
-        if on { "on" } else { "off" }
+        "[agent] command={} status={} source={}",
+        name,
+        if on { "on" } else { "off" },
+        source
     );
 }
 
@@ -19263,12 +21424,12 @@ fn apply_panel_action(
     world: &mut GameWorld,
     map_state: &mut GalaxyMapState,
     mfg_state: &mut ManufacturingState,
+    delivery_state: &DeliveryState,
     mission_state: &mut MissionState,
     movement_state: &mut MovementState,
     troop_transport_state: &mut TroopTransportState,
     fog_state: &mut FogState,
     ai_state: &mut AIState,
-    death_star_state: &mut DeathStarState,
     msg_log: &mut MessageLog,
     advisor_state: &mut AdvisorState,
     player_faction: &mut MissionFaction,
@@ -19302,6 +21463,7 @@ fn apply_panel_action(
                     world,
                     movement_state,
                     blockade_state.blockaded_systems(),
+                    &ProductRoom::new(mfg_state, delivery_state),
                     troop,
                     target,
                     clock.tick,
@@ -19309,13 +21471,9 @@ fn apply_panel_action(
             } else {
                 Err(rebellion_core::troop_transport::TroopTransportError::WrongFaction)
             };
-            // port: FUN_00487c90's advisor reaction; this line stands in.
-            if let Err(error) = result {
-                msg_log.push(GameMessage::new(
-                    clock.tick,
-                    format!("Regiment move rejected: {error}"),
-                    MessageCategory::Event,
-                ));
+            eprintln!("[order] regiment move {troop:?} to {target:?}: {result:?}");
+            if let Some(status) = result.err().and_then(transport_refusal_status) {
+                advisor_state.refuse(status);
             }
         }
         // FUN_00556390 for a squadron (TroopTransportState::move_squadron).
@@ -19332,6 +21490,7 @@ fn apply_panel_action(
                     world,
                     movement_state,
                     blockade_state.blockaded_systems(),
+                    &ProductRoom::new(mfg_state, delivery_state),
                     source,
                     target,
                     clock.tick,
@@ -19340,13 +21499,8 @@ fn apply_panel_action(
                 Err(rebellion_core::troop_transport::TroopTransportError::WrongFaction)
             };
             eprintln!("[order] squadron move {source:?} to {target:?}: {result:?}");
-            // port: FUN_00487c90's advisor reaction; this line stands in.
-            if let Err(error) = result {
-                msg_log.push(GameMessage::new(
-                    clock.tick,
-                    format!("Squadron move rejected: {error}"),
-                    MessageCategory::Event,
-                ));
+            if let Some(status) = result.err().and_then(transport_refusal_status) {
+                advisor_state.refuse(status);
             }
         }
         // FUN_0053c4b0: one 0x241 Move mission per location (command 0x250).
@@ -19371,7 +21525,8 @@ fn apply_panel_action(
                 ),
                 Err(refusal) => {
                     macroquad::logging::info!(
-                        "[interface] command=0x241 destination={destination:?} status=refused code={:?}",
+                        "[interface] command=0x241 destination={:?} status=refused code={:?}",
+                        destination,
                         refusal.status()
                     );
                     advisor_state.refuse(refusal.status());
@@ -19392,13 +21547,13 @@ fn apply_panel_action(
                 &mover,
                 target,
                 *player_faction == MissionFaction::Alliance,
+                clock.tick,
             );
             if let Err(error) = result {
-                msg_log.push(GameMessage::new(
-                    clock.tick,
-                    format!("Fleet move rejected: {error}"),
-                    MessageCategory::Event,
-                ));
+                macroquad::logging::info!("[order] fleet join refused: {:?}", error);
+                if let Some(status) = fleet_order_refusal_status(error) {
+                    advisor_state.refuse(status);
+                }
             }
         }
         PanelAction::SetDestination {
@@ -19406,16 +21561,37 @@ fn apply_panel_action(
             area,
             destination,
         } => {
-            let areas = area.map_or(
-                rebellion_core::manufacturing::ProductionArea::ALL.to_vec(),
-                |area| vec![area],
-            );
-            for area in &areas {
-                mfg_state.set_destination(system, *area, destination);
+            // A band orders its own manager; the facility icon orders all
+            // three, refused as one (FUN_00537180).
+            let result = match area {
+                Some(area) => rebellion_core::build_selection::order_destination(
+                    world,
+                    mfg_state,
+                    troop_transport_state,
+                    delivery_state,
+                    system,
+                    area,
+                    destination,
+                    movement_state,
+                ),
+                None => rebellion_core::build_selection::order_destination_all(
+                    world,
+                    mfg_state,
+                    troop_transport_state,
+                    delivery_state,
+                    system,
+                    destination,
+                    movement_state,
+                ),
+            };
+            let refusal = result.err();
+            if let Some(refusal) = refusal {
+                advisor_state.refuse(refusal.status());
             }
             macroquad::logging::info!(
-                "[interface] command=0x214 destination=production_destination status=set areas={} to={}",
-                areas.len(),
+                "[interface] command=0x214 destination=production_destination status={} areas={} to={}",
+                if refusal.is_some() { "refused" } else { "set" },
+                area.map_or(3, |_| 1),
                 rebellion_data::integrator::destination_name(&world, destination)
             );
         }
@@ -19425,8 +21601,9 @@ fn apply_panel_action(
                 None => world.rename_fleet(fleet, &name),
             };
             macroquad::logging::info!(
-                "[interface] command=0x203 destination=rename status={} name={name}",
-                if renamed { "applied" } else { "refused" }
+                "[interface] command=0x203 destination=rename status={} name={}",
+                if renamed { "applied" } else { "refused" },
+                name
             );
         }
         PanelAction::CreateFleet {
@@ -19444,11 +21621,10 @@ fn apply_panel_action(
                 *player_faction == MissionFaction::Alliance,
             );
             if let Err(error) = result {
-                msg_log.push(GameMessage::new(
-                    clock.tick,
-                    format!("Create Fleet rejected: {error}"),
-                    MessageCategory::Event,
-                ));
+                macroquad::logging::info!("[order] create fleet refused: {:?}", error);
+                if let Some(status) = fleet_order_refusal_status(error) {
+                    advisor_state.refuse(status);
+                }
             }
         }
         PanelAction::MoveShips {
@@ -19466,13 +21642,13 @@ fn apply_panel_action(
                 roster,
                 system,
                 *player_faction == MissionFaction::Alliance,
+                clock.tick,
             );
             if let Err(error) = result {
-                msg_log.push(GameMessage::new(
-                    clock.tick,
-                    format!("Fleet move rejected: {error}"),
-                    MessageCategory::Event,
-                ));
+                macroquad::logging::info!("[order] move ships refused: {:?}", error);
+                if let Some(status) = fleet_order_refusal_status(error) {
+                    advisor_state.refuse(status);
+                }
             }
         }
         PanelAction::DispatchFleet {
@@ -19488,20 +21664,19 @@ fn apply_panel_action(
                 destination,
                 expected_is_alliance,
             ) {
-                msg_log.push(GameMessage::new(
-                    clock.tick,
-                    format!("Fleet move rejected: {error}"),
-                    MessageCategory::Event,
-                ));
+                macroquad::logging::info!("[order] fleet dispatch refused: {:?}", error);
+                if let Some(status) = fleet_dispatch_refusal_status(error) {
+                    advisor_state.refuse(status);
+                }
                 return;
             }
-            if let Err(error) = troop_transport_state.embark(world, fleet, &troops) {
+            let products = ProductRoom::new(mfg_state, delivery_state);
+            if let Err(error) = troop_transport_state.embark(world, &products, fleet, &troops) {
                 if !troops.is_empty() {
-                    msg_log.push(GameMessage::new(
-                        clock.tick,
-                        format!("Troop embarkation rejected: {error}"),
-                        MessageCategory::Event,
-                    ));
+                    macroquad::logging::info!("[order] fleet dispatch embark refused: {:?}", error);
+                    if let Some(status) = transport_refusal_status(error) {
+                        advisor_state.refuse(status);
+                    }
                     return;
                 }
             }
@@ -19512,24 +21687,9 @@ fn apply_panel_action(
                 destination,
                 expected_is_alliance,
             ) {
-                Ok(departure) => {
-                    let origin_name = world
-                        .systems
-                        .get(departure.origin)
-                        .map_or("Unknown", |system| system.name.as_str());
-                    let destination_name = world
-                        .systems
-                        .get(departure.destination)
-                        .map_or("Unknown", |system| system.name.as_str());
-                    msg_log.push(GameMessage::at_system(
-                        clock.tick,
-                        format!(
-                            "Fleet departed {} for {} ({} days)",
-                            origin_name, destination_name, departure.transit_ticks,
-                        ),
-                        MessageCategory::Event,
-                        departure.destination,
-                    ));
+                // No message class files a departure (no TEXTSTRA template
+                // names one); the fleet's transit shows on the map.
+                Ok(_) => {
                     #[cfg(not(target_arch = "wasm32"))]
                     {
                         audio_engine.play_sfx(SfxKind::FleetDeparture, audio_vol);
@@ -19542,21 +21702,29 @@ fn apply_panel_action(
                             .get(fleet)
                             .map(|value| value.location)
                             .unwrap_or_default();
-                        let _ =
-                            troop_transport_state.disembark_selected(world, fleet, origin, &troops);
+                        if let Err(rollback) =
+                            troop_transport_state.disembark_selected(world, fleet, origin, &troops)
+                        {
+                            macroquad::logging::error!(
+                                "[order] fleet dispatch rollback failed: {:?}",
+                                rollback
+                            );
+                        }
                     }
-                    msg_log.push(GameMessage::new(
-                        clock.tick,
-                        format!("Fleet move rejected: {error}"),
-                        MessageCategory::Event,
-                    ));
+                    macroquad::logging::info!("[order] fleet dispatch refused: {:?}", error);
+                    if let Some(status) = fleet_dispatch_refusal_status(error) {
+                        advisor_state.refuse(status);
+                    }
                 }
             }
         }
         PanelAction::StopProduction { system, area } => {
             mfg_state.stop(system, area);
+            // FUN_0052a2c0: the stopped products go with their entries.
+            rebellion_core::manufacturing::seat_ordered_ships(world, mfg_state);
             macroquad::logging::info!(
-                "[interface] command=0x213 destination=production_stop status=stopped area={area:?} system={}",
+                "[interface] command=0x213 destination=production_stop status=stopped area={:?} system={}",
+                area,
                 world.systems.get(system).map_or("", |value| value.name.as_str())
             );
         }
@@ -19569,6 +21737,23 @@ fn apply_panel_action(
             count,
         } => {
             let is_alliance = *player_faction == MissionFaction::Alliance;
+            if let Some(refusal) = rebellion_core::build_selection::order_refusal(
+                world,
+                mfg_state,
+                troop_transport_state,
+                delivery_state,
+                system,
+                area,
+                kind,
+                count,
+                is_alliance,
+                movement_state,
+            ) {
+                // No text: the side's advisor reacts (FUN_004c1980,
+                // FUN_004c1550; death-star-product.md).
+                advisor_state.refuse(refusal.status());
+                return;
+            }
             if let Some(items) = rebellion_core::build_selection::order_items(
                 world,
                 system,
@@ -19578,8 +21763,20 @@ fn apply_panel_action(
                 is_alliance,
             ) {
                 mfg_state.build_units(system, items);
+                // FUN_0052a140 creates the ordered products at once, a
+                // fleet's squadrons and regiments aboard the ships the leg
+                // chose.
+                rebellion_core::carriage::seat_products(
+                    world,
+                    troop_transport_state,
+                    delivery_state,
+                    mfg_state,
+                );
+                rebellion_core::manufacturing::seat_ordered_ships(world, mfg_state);
                 macroquad::logging::info!(
-                    "[interface] command=0x21x destination=production_build status=queued area={area:?} count={count} system={}",
+                    "[interface] command=0x21x destination=production_build status=queued area={:?} count={} system={}",
+                    area,
+                    count,
                     world.systems.get(system).map_or("", |value| value.name.as_str())
                 );
             }
@@ -19591,6 +21788,7 @@ fn apply_panel_action(
             decoys,
             target,
             target_character,
+            target_object,
             tick,
         } => {
             apply_mission_dispatch(
@@ -19617,11 +21815,10 @@ fn apply_panel_action(
         // they require access to the full save state and are not routed through
         // this helper.
         PanelAction::SelectFaction(_)
-        | PanelAction::OpenSaveLoad
+        | PanelAction::Bombard { .. }
+        | PanelAction::Assault { .. }
         | PanelAction::SaveGame { .. }
         | PanelAction::LoadGame { .. }
-        | PanelAction::DeleteSave { .. }
-        | PanelAction::CloseSaveLoadPanel
         | PanelAction::OpenModManager => {
             // Handled by UI state toggle (not a world mutation)
         }
@@ -19676,113 +21873,6 @@ fn apply_panel_action(
                 MessageCategory::Event,
             ));
         }
-        PanelAction::OrderBombardment { fleet, system } => {
-            // Guard: both fleet and system must still exist (prevents panic in resolve).
-            if world.fleets.contains_key(fleet) && world.systems.contains_key(system) {
-                let attacker = if world.fleets[fleet].is_alliance {
-                    Faction::Alliance
-                } else {
-                    Faction::Empire
-                };
-                let result = BombardmentSystem::resolve_bombardment(
-                    world,
-                    fleet,
-                    system,
-                    world.difficulty_index,
-                    clock.tick,
-                );
-                let headquarters_destroyed = VictorySystem::apply_headquarters_bombardment(
-                    victory_state,
-                    world,
-                    &result,
-                    attacker,
-                );
-                // FUN_0058e320, as for the AI's Bombard
-                // (`integrator::resolve_ai_strike`). port: the bombardment
-                // rolls no hits, so +0x28 stays clear.
-                rebellion_core::bombardment::finalize(
-                    world,
-                    system,
-                    attacker,
-                    rebellion_core::bombardment::BombardmentRun::default(),
-                );
-                let strike = rebellion_data::integrator::StrikeEffects {
-                    bombardment: Some((system, result.damage, headquarters_destroyed)),
-                    ..Default::default()
-                };
-                rebellion_data::telemetry::native_strike(clock.tick, world, &strike);
-                strike_messages(world, msg_log, clock.tick, &strike);
-            }
-        }
-        PanelAction::FireDeathStar { system } => {
-            // Use DeathStarSystem::fire() for precondition validation (guards from Ghidra RE).
-            if let Some(rebellion_core::death_star::DeathStarEvent::PlanetDestroyed { .. }) =
-                DeathStarSystem::fire(death_star_state, world, system, clock.tick)
-            {
-                let killed = rebellion_data::integrator::destroy_system(
-                    world,
-                    system,
-                    victory_state,
-                    death_star_state,
-                    movement_state,
-                    mfg_state,
-                    blockade_state,
-                );
-                // FUN_0058e320 after a kill (FUN_0058d990 sets +0x28 and +0x2c).
-                rebellion_core::bombardment::finalize(
-                    world,
-                    system,
-                    Faction::Empire,
-                    rebellion_core::bombardment::BombardmentRun {
-                        support_loss: true,
-                        planet_destroyed: true,
-                    },
-                );
-                let strike = rebellion_data::integrator::StrikeEffects {
-                    destroyed: Some(system),
-                    killed,
-                    ..Default::default()
-                };
-                rebellion_data::telemetry::native_strike(clock.tick, world, &strike);
-                strike_messages(world, msg_log, clock.tick, &strike);
-            }
-        }
-        PanelAction::MoveDeathStar { system } => {
-            // Issue a movement order for the Death Star fleet to the target system.
-            if let Some(fleet_key) = death_star_state.death_star_fleet {
-                // Don't issue if already in transit.
-                if movement_state.get(fleet_key).is_some() {
-                    msg_log.push(GameMessage::new(
-                        clock.tick,
-                        "Death Star fleet is already in transit".to_string(),
-                        MessageCategory::Event,
-                    ));
-                } else if let Some(fleet) = world.fleets.get(fleet_key) {
-                    let origin = fleet.location;
-                    let ticks =
-                        rebellion_core::movement::fleet_transit_ticks(fleet, world, origin, system);
-                    if origin != system && ticks.is_none() {
-                        msg_log.push(GameMessage::new(
-                            clock.tick,
-                            "Death Star fleet cannot enter hyperspace".to_string(),
-                            MessageCategory::Event,
-                        ));
-                    } else if let (true, Some(ticks)) = (origin != system, ticks) {
-                        let dest_name = world
-                            .systems
-                            .get(system)
-                            .map_or_else(|| "Unknown".to_string(), |s| s.name.clone());
-                        if begin_fleet_transit(movement_state, world, fleet_key, system, ticks) {
-                            msg_log.push(GameMessage::new(
-                                clock.tick,
-                                format!("Death Star fleet moving to {dest_name} ({ticks} days)"),
-                                MessageCategory::Event,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
         PanelAction::AdvanceTicks(n) => {
             // Force-advance N ticks synchronously.
             // NOTE: This only advances the clock counter. Full simulation tick
@@ -19815,6 +21905,7 @@ fn apply_panel_action(
                 MessageCategory::Event,
             ));
         }
+        PanelAction::AdvisorRefusal(status) => advisor_state.refuse(status),
         PanelAction::ForceVictoryCheck => {
             let tick_ev = rebellion_core::tick::TickEvent { tick: clock.tick };
             let result = rebellion_core::victory::VictorySystem::check(
@@ -20119,42 +22210,28 @@ fn apply_mission_result(
                 *faction,
                 *pool_emptied,
             ),
+            // A sabotaged Death Star's message is a movie
+            // (strike_orders::sabotage_movies).
             MissionEffect::TargetSabotaged { target, .. } => {
                 rebellion_core::missions::destroy_target(world, *target);
-                if matches!(
-                    target,
-                    rebellion_core::missions::MissionTarget::DeathStar(_)
-                ) {
-                    // Notification 0x23, Death Star Sabotaged.
-                    log.push(filed(
-                        GameMessage::new(
-                            result.tick,
-                            "The Death Star has been sabotaged.".to_string(),
-                            MessageCategory::Mission,
-                        ),
-                        MessageRail::Mission,
-                        Some(RailAudience::side(
-                            result.faction == MissionFaction::Alliance,
-                        )),
-                    ));
-                }
             }
+            // As the integrator does: the destroyed character leaves every
+            // fleet and stays in the arena, marked killed.
             MissionEffect::CharacterKilled { character, .. } => {
-                // Remove character from any fleet they're assigned to
                 for (_, fleet) in &mut world.fleets {
                     fleet.characters.retain(|&k| k != *character);
                 }
-                world.characters.remove(*character);
+                if let Some(c) = world.characters.get_mut(*character) {
+                    c.mark_killed();
+                }
             }
             MissionEffect::CharacterCaptured {
                 character,
                 captured_by,
                 ..
             } => {
-                // Set captivity state — do NOT flip is_alliance/is_empire.
-                // Those fields encode faction *identity*, not current holder.
-                // Flipping them corrupts escape direction (check_escapes uses
-                // is_alliance to determine where the character escapes TO).
+                // is_alliance is the native side; a prisoner's side bits are
+                // its opposite while held (FUN_004f1a80 -> FUN_004eec60).
                 if let Some(c) = world.characters.get_mut(*character) {
                     c.is_captive = true;
                     c.captured_by = Some(match captured_by {
@@ -20162,6 +22239,7 @@ fn apply_mission_result(
                         MissionFaction::Empire => Faction::Empire,
                     });
                     c.capture_tick = Some(result.tick);
+                    c.leave_abode();
                 }
                 // Remove from current fleet assignments
                 for (_, fleet) in &mut world.fleets {
@@ -20193,6 +22271,7 @@ fn apply_mission_result(
                     c.is_captive = false;
                     c.captured_by = None;
                     c.capture_tick = None;
+                    c.leave_abode();
                 }
             }
             MissionEffect::MemberAvailable { member } => {
@@ -20207,34 +22286,9 @@ fn apply_mission_result(
             MissionEffect::EnRoute { member, en_route } => {
                 rebellion_core::missions::set_en_route(world, *member, *en_route);
             }
-            MissionEffect::CharacterEscaped {
-                character,
-                escaped_to_alliance,
-            } => {
-                if let Some(c) = world.characters.get_mut(*character) {
-                    c.is_alliance = *escaped_to_alliance;
-                    c.is_empire = !*escaped_to_alliance;
-                    c.is_captive = false;
-                    c.captured_by = None;
-                    c.capture_tick = None;
-                }
-                let name = world
-                    .characters
-                    .get(*character)
-                    .map_or_else(|| "Unknown".into(), |c| c.display_name().to_owned());
-                // FUN_00490340: the escape carries the character's code.
-                log.push(
-                    GameMessage::new(
-                        result.tick,
-                        format!("{name} has escaped captivity!"),
-                        MessageCategory::Event,
-                    )
-                    .with_advice_to(
-                        escape_advice(world, *character),
-                        RailAudience::side(*escaped_to_alliance),
-                    ),
-                );
-            }
+            // The escape step's own release (death_star::free_escapee); no
+            // mission result carries one.
+            MissionEffect::CharacterEscaped { .. } => {}
             MissionEffect::UprisingSubdued {
                 system,
                 side,
@@ -20298,7 +22352,7 @@ fn held_at(
     match action {
         AIAction::MoveFleet { fleet, .. }
         | AIAction::CreateFleet { fleet, .. }
-        | AIAction::Assault { fleet }
+        | AIAction::Assault { fleet, .. }
         | AIAction::MoveCharacterToFleet { fleet, .. } => at(fleet),
         AIAction::JoinFleet { fleet, target, .. } => at(fleet).or_else(|| at(target)),
         AIAction::Bombard {
@@ -20345,6 +22399,7 @@ fn show_ai_records(
     records: &[rebellion_data::simulation::AiOrderRecord],
     tick: u64,
     world: &GameWorld,
+    templates: &rebellion_data::text_templates::TextTemplates,
     log: &mut MessageLog,
     #[cfg(not(target_arch = "wasm32"))] audio_engine: &mut audio::AudioEngine,
     #[cfg(not(target_arch = "wasm32"))] audio_vol: &AudioVolumeState,
@@ -20396,121 +22451,135 @@ fn show_ai_records(
                 ));
             }
             AIAction::Bombard { .. } | AIAction::DestroySystem { .. } => {
-                strike_messages(world, log, tick, &record.strike);
-            }
-            _ => {}
-        }
-    }
-}
-
-/// The messages of a bombardment or a Death Star shot, the player's or the
-/// AI's: the damage, the Alliance headquarters destroyed, each character
-/// killed and the planet destroyed.
-fn strike_messages(
-    world: &GameWorld,
-    log: &mut MessageLog,
-    tick: u64,
-    strike: &rebellion_data::integrator::StrikeEffects,
-) {
-    let system_name = |system: SystemKey| {
-        world
-            .systems
-            .get(system)
-            .map_or_else(|| "Unknown".to_string(), |s| s.name.clone())
-    };
-    if let Some((system, damage, headquarters_destroyed)) = strike.bombardment {
-        log.push(GameMessage::new(
-            tick,
-            format!("Orbital bombardment — {damage} damage"),
-            MessageCategory::Combat,
-        ));
-        if headquarters_destroyed {
-            // Notification 0x1f, Rebel HQ Destroyed.
-            log.push(filed(
-                GameMessage::new(
-                    tick,
-                    format!("Alliance headquarters destroyed at {}", system_name(system)),
-                    MessageCategory::Combat,
-                ),
-                MessageRail::Resource,
-                Some(RailAudience::Both),
-            ));
-        }
-    }
-    if let Some(system) = strike.destroyed {
-        for &character in &strike.killed {
-            if let Some(c) = world.characters.get(character) {
-                // Notification 0x1a, Character Health.
-                log.push(filed(
-                    GameMessage::new(
-                        tick,
-                        format!("{} has been killed.", c.display_name()),
-                        MessageCategory::Event,
-                    ),
-                    MessageRail::Mission,
-                    character_audience(world, character),
-                ));
-            }
-        }
-        // Notification 0x15, Planet Destroyed.
-        log.push(filed(
-            GameMessage::new(
-                tick,
-                format!(
-                    "{} DESTROYED by Death Star superlaser!",
-                    system_name(system)
-                ),
-                MessageCategory::Combat,
-            ),
-            MessageRail::Mission,
-            Some(RailAudience::Both),
-        ));
-    }
-}
-
-/// Write the blockade events and show their messages: a blockade started
-/// or lifted, and the regiments a run destroyed aboard a departing fleet.
-fn show_blockade_events(
-    events: &[rebellion_core::blockade::BlockadeEvent],
-    world: &mut GameWorld,
-    transport: &mut TroopTransportState,
-    templates: &rebellion_data::text_templates::TextTemplates,
-    log: &mut MessageLog,
-) {
-    rebellion_data::telemetry::native_blockade_events(world, events);
-    for evt in events {
-        match evt {
-            rebellion_core::blockade::BlockadeEvent::BlockadeStarted { system, tick } => {
-                let name = world
-                    .systems
-                    .get(*system)
-                    .map_or_else(|| "unknown".into(), |s| s.name.clone());
-                for message in blockade_messages(
-                    world,
-                    templates,
-                    *system,
-                    *tick,
-                    format!("Blockade established at {name}"),
-                ) {
+                for message in
+                    strike_orders::strike_messages(world, templates, tick, &record.strike)
+                {
                     log.push(message);
                 }
             }
-            rebellion_core::blockade::BlockadeEvent::BlockadeEnded { system, tick } => {
-                let name = world
-                    .systems
-                    .get(*system)
-                    .map_or_else(|| "unknown".into(), |s| s.name.clone());
-                // Notification 7, Blockade Message.
-                log.push(filed(
-                    GameMessage::at_system(
-                        *tick,
-                        format!("Blockade lifted at {name}"),
-                        MessageCategory::Combat,
-                        *system,
-                    ),
-                    MessageRail::Conflict,
-                    Some(RailAudience::Both),
-                ));
+            AIAction::Assault { .. } => {
+                for message in
+                    assault_orders::assault_messages(world, templates, tick, &record.assault)
+                {
+                    log.push(message);
+                }
+            }
+            _ => {}
+        }
+        // The holder changes the order's regiments made (FUN_00508660 ->
+        // FUN_0050b610).
+        for change in &record.fired.controls {
+            for message in control_change_messages(world, templates, tick, change) {
+                log.push(message);
+            }
+        }
+    }
+}
+
+/// The messages of a blockade starting: event `0x14e`'s Blockade Message
+/// (`blockade_messages`). A lift files nothing: `FUN_004960f0` files only
+/// for a set bit and a blockading fleet (`FUN_0052bed0`). Other events have
+/// none.
+fn blockade_transition_messages(
+    world: &GameWorld,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    evt: &rebellion_core::blockade::BlockadeEvent,
+) -> Vec<GameMessage> {
+    match *evt {
+        rebellion_core::blockade::BlockadeEvent::BlockadeStarted { system, tick } => {
+            blockade_messages(world, templates, system, tick)
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Event `0x340`'s notice (`FUN_00495e90`; `FUN_00504a00` raises the event
+/// for a regiment lost running a blockade): "Evacuation Losses" (`0x70a8`),
+/// "The following units were lost running an enemy blockade of |."
+/// (`0x70a9`, the system as argument 2) and a line per regiment (`0x70aa`,
+/// argument 1), with code `0x10`; picture `0x407` and sound `0x460` for side
+/// 1, `0x406` and `0x45f` for side 2. The class adds each later regiment to
+/// its message (`+0x68`); the port gathers a system's regiments of one
+/// tick. hyp: both sides file it, as `FUN_00504850` raises the event in
+/// both side views; its rail is untraced, and the port uses the Blockade
+/// Message's. Without the TEXTSTRA entries nothing is filed.
+fn evacuation_losses_messages(
+    world: &GameWorld,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    system: SystemKey,
+    tick: u64,
+    units: &[String],
+) -> Vec<GameMessage> {
+    use rebellion_data::text_templates::TemplateArg;
+    let Some(sys) = world.systems.get(system) else {
+        return Vec::new();
+    };
+    if units.is_empty() {
+        return Vec::new();
+    }
+    let place = TemplateArg::named(sys.name.clone());
+    [true, false]
+        .into_iter()
+        .filter_map(|alliance| {
+            let title = templates.format(0x70a8, &[])?;
+            let mut body = templates.format(0x70a9, &[None, Some(&place)])?;
+            for unit in units {
+                body += &templates.format(0x70aa, &[Some(&TemplateArg::named(unit.clone()))])?;
+            }
+            let (background, sound) = if alliance {
+                (0x407, 0x460)
+            } else {
+                (0x406, 0x45f)
+            };
+            Some(
+                GameMessage::at_system(tick, title.clone(), MessageCategory::Combat, system)
+                    .with_advice(0x10)
+                    .with_target(MessageTarget::System(system))
+                    .on_rail(MessageRail::Conflict, RailAudience::side(alliance))
+                    .with_display(MessageDisplay {
+                        title,
+                        body,
+                        background,
+                        overlay: 0,
+                        sound,
+                        voice: 0,
+                    }),
+            )
+        })
+        .collect()
+}
+
+/// Write the blockade events and show their messages: a blockade started
+/// or lifted, and the regiments a run destroyed aboard a departing fleet;
+/// then fire the support shifts posted on `tick`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The events, the world, the states a holder change moves, the blockade and the message templates and log."
+)]
+fn show_blockade_events(
+    tick: u64,
+    events: &[rebellion_core::blockade::BlockadeEvent],
+    world: &mut GameWorld,
+    manufacturing: &mut ManufacturingState,
+    transport: &mut TroopTransportState,
+    movement: &MovementState,
+    deliveries: &mut DeliveryState,
+    blockade: &BlockadeState,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    log: &mut MessageLog,
+) {
+    // The regiments lost at each system on each tick, for one notice each.
+    let mut lost: Vec<(SystemKey, u64, Vec<String>)> = Vec::new();
+    for evt in events {
+        rebellion_data::telemetry::native_blockade_event(world, blockade, evt);
+        match evt {
+            rebellion_core::blockade::BlockadeEvent::BlockadeStarted { .. } => {
+                for message in blockade_transition_messages(world, templates, evt) {
+                    log.push(message);
+                }
+            }
+            rebellion_core::blockade::BlockadeEvent::BlockadeEnded { system, .. } => {
+                rebellion_core::support_shift::blockade_ended(world, blockade, *system);
             }
             rebellion_core::blockade::BlockadeEvent::TroopDestroyed {
                 system,
@@ -20518,24 +22587,20 @@ fn show_blockade_events(
                 tick,
             } => {
                 // The regiment was aboard a fleet leaving the system.
+                let name = rebellion_core::scrap::target_name(
+                    world,
+                    rebellion_core::scrap::ScrapTarget::Troop(*troop),
+                );
                 if transport.destroy_embarked(world, *troop) {
                     rebellion_data::telemetry::native_troop_destroyed(*tick, world, *system);
+                    match lost
+                        .iter_mut()
+                        .find(|(at, on, _)| at == system && on == tick)
+                    {
+                        Some((_, _, units)) => units.push(name),
+                        None => lost.push((*system, *tick, vec![name])),
+                    }
                 }
-                let name = world
-                    .systems
-                    .get(*system)
-                    .map_or_else(|| "unknown".into(), |s| s.name.clone());
-                // Notification 7, Blockade Message.
-                log.push(filed(
-                    GameMessage::at_system(
-                        *tick,
-                        format!("Troops destroyed by blockade at {name}"),
-                        MessageCategory::Combat,
-                        *system,
-                    ),
-                    MessageRail::Conflict,
-                    Some(RailAudience::Both),
-                ));
             }
             // Timer 0x386 raises no notice (FUN_0050cb20).
             rebellion_core::blockade::BlockadeEvent::SupportShift {
@@ -20551,6 +22616,71 @@ fn show_blockade_events(
             }
         }
     }
+    for (system, on, units) in &lost {
+        for message in evacuation_losses_messages(world, templates, *system, *on, units) {
+            log.push(message);
+        }
+    }
+    fire_support_events(
+        world,
+        manufacturing,
+        transport,
+        movement,
+        deliveries,
+        templates,
+        log,
+        tick,
+        0,
+    );
+}
+
+/// A message movie in the 640 by 480 movie window, with its caption field
+/// (`FUN_00421790`): the body, wrapped, white, font 4. hyp: font 4 at entry
+/// 10's size, as the Message Index body measures (`message_index.rs`).
+fn draw_message_movie(frame: Option<&Texture2D>, caption: &str) {
+    use egui_macroquad::egui;
+    let screen = egui::Rect::from_min_size(
+        egui::Pos2::ZERO,
+        egui::vec2(screen_width(), screen_height()),
+    );
+    if let Some(frame) = frame {
+        let (picture, _, _) =
+            movies::message_layout(screen, egui::vec2(frame.width(), frame.height()));
+        draw_texture_ex(
+            frame,
+            picture.min.x,
+            picture.min.y,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(picture.width(), picture.height())),
+                ..Default::default()
+            },
+        );
+    }
+    if caption.is_empty() {
+        return;
+    }
+    egui_macroquad::ui(|ctx| {
+        let (_, field, scale) = movies::message_layout(ctx.screen_rect(), egui::Vec2::ZERO);
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::new("movie_caption"),
+        ));
+        let mut job = egui::text::LayoutJob::simple(
+            caption.to_owned(),
+            rebellion_render::theme::game_font_on(ctx, 10, scale),
+            egui::Color32::WHITE,
+            field.width(),
+        );
+        for section in &mut job.sections {
+            section.format.line_height = Some(16.0 * scale);
+        }
+        let galley = painter.layout_job(job);
+        painter
+            .with_clip_rect(field)
+            .galley(field.min, galley, egui::Color32::WHITE);
+    });
+    egui_macroquad::draw();
 }
 
 fn draw_fullscreen_texture(texture: &Texture2D) {
@@ -21318,6 +23448,7 @@ fn uprising_messages(
             background,
             overlay: 0,
             sound,
+            voice: 0,
         });
     [true, false]
         .into_iter()
@@ -21389,16 +23520,15 @@ fn battle_alert_text(
 /// `0x70a3`, code `0xe`), the other side "Fleet Initiates Blockade of |"
 /// (`0x70a0` / `0x70a1`, code `0xd`); both show the holder's picture (`0x404`
 /// Alliance, `0x403` Empire) and play `0x45e`. A neutral system, or one with
-/// no blockading fleet (`FUN_0052bed0`), files nothing; the port logs
-/// `fallback` off the rail. The original also files nothing when system
-/// flag `+0x22 & 0x4000` is set; port: that flag is untraced and not
+/// no blockading fleet (`FUN_0052bed0`), files nothing, as does a side
+/// without the TEXTSTRA entries. The original also files nothing when
+/// system flag `+0x22 & 0x4000` is set; port: that flag is untraced and not
 /// checked.
 fn blockade_messages(
     world: &GameWorld,
     templates: &rebellion_data::text_templates::TextTemplates,
     system: SystemKey,
     tick: u64,
-    fallback: String,
 ) -> Vec<GameMessage> {
     use rebellion_data::text_templates::TemplateArg;
     let Some(sys) = world.systems.get(system) else {
@@ -21418,12 +23548,7 @@ fn blockade_messages(
             .map(|(key, _)| world.fleet_name(key).unwrap_or_default().to_owned())
     });
     let (Some(holder_is_alliance), Some(blockader)) = (holder_is_alliance, blockader) else {
-        return vec![GameMessage::at_system(
-            tick,
-            fallback,
-            MessageCategory::Combat,
-            system,
-        )];
+        return Vec::new();
     };
     let place = TemplateArg::named(sys.name.clone());
     let enemy = TemplateArg::side(!holder_is_alliance);
@@ -21431,34 +23556,29 @@ fn blockade_messages(
     let background = if holder_is_alliance { 0x404 } else { 0x403 };
     [true, false]
         .into_iter()
-        .map(|side_is_alliance| {
+        .filter_map(|side_is_alliance| {
             let holds = side_is_alliance == holder_is_alliance;
             let (title, body, advice) = if holds {
                 (0x70a2, 0x70a3, 0xe)
             } else {
                 (0x70a0, 0x70a1, 0xd)
             };
-            let display = templates
-                .format(title, &[Some(&place)])
-                .zip(templates.format(body, &[Some(&enemy), Some(&place), Some(&fleet)]))
-                .map(|(title, body)| MessageDisplay {
-                    title,
-                    body,
-                    background,
-                    overlay: 0,
-                    sound: 0x45e,
-                });
-            let text = display
-                .as_ref()
-                .map_or_else(|| fallback.clone(), |display| display.title.clone());
-            let message = GameMessage::at_system(tick, text, MessageCategory::Combat, system)
-                .with_advice(advice)
-                .with_target(MessageTarget::System(system))
-                .on_rail(MessageRail::Conflict, RailAudience::side(side_is_alliance));
-            match display {
-                Some(display) => message.with_display(display),
-                None => message,
-            }
+            let title = templates.format(title, &[Some(&place)])?;
+            let body = templates.format(body, &[Some(&enemy), Some(&place), Some(&fleet)])?;
+            Some(
+                GameMessage::at_system(tick, title.clone(), MessageCategory::Combat, system)
+                    .with_advice(advice)
+                    .with_target(MessageTarget::System(system))
+                    .on_rail(MessageRail::Conflict, RailAudience::side(side_is_alliance))
+                    .with_display(MessageDisplay {
+                        title,
+                        body,
+                        background,
+                        overlay: 0,
+                        sound: 0x45e,
+                        voice: 0,
+                    }),
+            )
         })
         .collect()
 }
@@ -21518,6 +23638,7 @@ fn fleet_arrival_display(
         background: if alliance { 0x3fa } else { 0x3fb },
         overlay: 0,
         sound: 0x45a,
+        voice: 0,
     })
 }
 
@@ -21553,6 +23674,7 @@ fn maintenance_shortfall_message(
             background: if alliance { 0x3f5 } else { 0x3f6 },
             overlay: 0,
             sound: 0x456,
+            voice: 0,
         })
     });
     let message = GameMessage::at_system(
@@ -21572,15 +23694,103 @@ fn maintenance_shortfall_message(
     ))
 }
 
+/// The Loyalty Change Messages of a holder change ([`loyalty_messages`]):
+/// only a change of side is a loyalty change, and a contested system has
+/// not declared neutrality. A change with regiment bits in either control
+/// word files none: `FUN_00510d70.c:12-18` clears the loyalty bit
+/// (`+0x88` `0x2000`) before the owner write posts notification `0x100`,
+/// and `FUN_00499760.c:23-29` files only with the bit set.
+fn control_change_messages(
+    world: &GameWorld,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    tick: u64,
+    change: &rebellion_core::support_shift::ControlRerun,
+) -> Vec<GameMessage> {
+    let side = |faction: Option<Faction>| match faction {
+        Some(Faction::Alliance) => Some(true),
+        Some(Faction::Empire) => Some(false),
+        _ => None,
+    };
+    let (old, new) = (
+        side(change.previous.faction()),
+        side(change.control.faction()),
+    );
+    let (old_troops, new_troops) = change.troops;
+    if new == old || old_troops || new_troops {
+        return Vec::new();
+    }
+    loyalty_messages(world, templates, change.system, tick, new, old)
+}
+
+/// Phase 5 of in-day step `step` of day `tick` (`FUN_0051df30`): serve the
+/// support shifts, regiment reruns and holder changes the operation raised
+/// (`support_shift::fire`), record them, and file the Loyalty Change
+/// Messages of each holder change without regiments
+/// ([`control_change_messages`]). The day's own work runs
+/// in its first step (0); a player's order in the scheduler's next step.
+/// Each holder change's autoscrap requests for what is bound for the
+/// system follow (event `0x307`,
+/// `rebellion_core::death_star::serve_holder_requests`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Phase 5 reads the world, the states a holder change moves, the message templates and log, and the step."
+)]
+fn fire_support_events(
+    world: &mut GameWorld,
+    manufacturing: &mut ManufacturingState,
+    transport: &mut TroopTransportState,
+    movement: &MovementState,
+    deliveries: &mut DeliveryState,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    log: &mut MessageLog,
+    tick: u64,
+    step: u16,
+) {
+    let fired = rebellion_data::integrator::fire_holder_changes(
+        world,
+        manufacturing,
+        rebellion_core::support_shift::step(tick, step),
+    );
+    rebellion_core::death_star::serve_holder_requests(
+        world,
+        movement,
+        transport,
+        manufacturing,
+        deliveries,
+    );
+    rebellion_data::telemetry::native_support_shifts(tick, world, &fired);
+    for change in &fired.controls {
+        for message in control_change_messages(world, templates, tick, change) {
+            log.push(message);
+        }
+    }
+}
+
+/// The characters the operation's holder changes flagged leave (event
+/// `0x307`, `integrator::sweep_requests`), with their trips' records. The
+/// original files no message for them (`FUN_00536ac0` only logs).
+fn sweep_flagged(
+    world: &mut GameWorld,
+    missions: &mut MissionState,
+    transport: &TroopTransportState,
+    movement: &MovementState,
+    blockade: &BlockadeState,
+    tick: u64,
+) {
+    let swept = rebellion_data::integrator::sweep_requests(
+        world, missions, transport, movement, blockade, tick,
+    );
+    rebellion_data::telemetry::native_swept(tick, world, &swept);
+}
+
 /// Notification 4, the Loyalty Change Message (`FUN_00499760`, event
 /// `0x100`), built for each side over the crowd picture `0x3ed`. The side
 /// the world joins reads "| Joins" (`0x7038` / `0x703b`, code 1), the other
 /// "| Joins Enemy" (`0x7039` / `0x703c`, code 2), both playing `0x450`; a
 /// world turning neutral "| Declares Neutrality" (`0x703a` / `0x703d`,
-/// naming the side it left), playing `0x451` with no code. hyp: the port
-/// files it where troop and support resolution changes the holder
-/// (`FUN_0050b610`); the original's gate (system flag `0x2000`) is
-/// untraced.
+/// naming the side it left), playing `0x451` with no code. It files for
+/// each holder change whose loyalty bit (`+0x88` `0x2000`) is set
+/// ([`control_change_messages`]).
 fn loyalty_messages(
     world: &GameWorld,
     templates: &rebellion_data::text_templates::TextTemplates,
@@ -21613,6 +23823,7 @@ fn loyalty_messages(
                     background: 0x3ed,
                     overlay: 0,
                     sound,
+                    voice: 0,
                 });
             let text = display.as_ref().map_or_else(
                 || format!("Loyalty change at {}", sys.name),
@@ -21660,10 +23871,458 @@ fn personnel_advice(world: &GameWorld, character: CharacterKey) -> u8 {
         .map_or(0x15, |slot| [0x17, 0x18, 0x16, 0x19, 0x1a, 0x1b][slot])
 }
 
-/// The advice code of `character`'s escape (`FUN_00490340`).
-fn escape_advice(world: &GameWorld, character: CharacterKey) -> u8 {
+/// The advice code of `character`'s escape for the side `own` or not
+/// (`FUN_00490340.c:207-244`, `:297-319`): a major's own code; another
+/// major's none; a minor's `0x15` for its own side, `0x24` for the other.
+fn escape_advice(world: &GameWorld, character: CharacterKey, own: bool) -> Option<u8> {
+    if let Some(slot) = major_character_slot(world, character) {
+        return Some([0x26, 0x18, 0x25, 0x19, 0x27, 0x28][slot]);
+    }
+    let major = world.characters.get(character)?.is_major;
+    (!major).then_some(if own { 0x15 } else { 0x24 })
+}
+
+/// Where a prisoner is held, for its release message: its jail, its fleet's
+/// system, or its system.
+fn prison_name(world: &GameWorld, character: CharacterKey) -> Option<String> {
+    let value = world.characters.get(character)?;
+    if let Some(abode) = value.held_abode() {
+        return Some(abode.name().to_owned());
+    }
+    let system = value
+        .current_fleet
+        .and_then(|fleet| world.fleets.get(fleet))
+        .map(|fleet| fleet.location)
+        .or(value.current_system)?;
+    world.systems.get(system).map(|sys| sys.name.clone())
+}
+
+/// Notification `0x1e0` on a prisoner's status write (`FUN_004f1fd0`),
+/// filed by `FUN_00490340` for an escape (status 1) and a release (status
+/// 2) alike: to its own side "escaped from the {captor} at {location}"
+/// (`0x715c`/`0x715d`), to the other "has escaped from imprisonment at
+/// {location}" (`0x715e`/`0x715f`), picture `0x405`, sound `0x469`.
+/// hyp: both sides hold a view of every character (the view gate,
+/// `FUN_004fd3d0`, is untraced); the rail of class `0x19` is untraced, so
+/// it files on the Mission rail with the port's other personnel reports.
+fn release_messages(
+    world: &GameWorld,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    tick: u64,
+    character: CharacterKey,
+    location: &str,
+    voice: u16,
+) -> Vec<GameMessage> {
+    use rebellion_data::text_templates::TemplateArg;
+    let Some(value) = world.characters.get(character) else {
+        return Vec::new();
+    };
+    let who = TemplateArg::named(value.display_name().to_owned());
+    let place = TemplateArg::place(location.to_owned());
+    let captor = TemplateArg::side(!value.is_alliance);
+    [true, false]
+        .into_iter()
+        .filter_map(|own| {
+            let (title, body) = if own {
+                (0x715c, 0x715d)
+            } else {
+                (0x715e, 0x715f)
+            };
+            let args = [Some(&who), Some(&place), Some(&captor)];
+            // The message has only TEXTSTRA's text; without it, none.
+            let title = templates.format(title, &args)?;
+            let body = templates.format(body, &args)?;
+            let audience = RailAudience::side(value.is_alliance == own);
+            let message = GameMessage::new(tick, body.clone(), MessageCategory::Event)
+                .on_rail(MessageRail::Mission, audience);
+            let message = match escape_advice(world, character, own) {
+                Some(advice) => message.with_advice_to(advice, audience),
+                None => message,
+            };
+            // FUN_00490340.c:207-244: the escapee's own side hears its
+            // voice line; the other side none.
+            Some(message.with_display(MessageDisplay {
+                title,
+                body,
+                background: 0x405,
+                overlay: 0,
+                sound: 0x469,
+                voice: if own { voice } else { 0 },
+            }))
+        })
+        .collect()
+}
+
+/// A character's message portrait (`FUN_004c5000`): STRATEGY
+/// `(class & 0xfff) + 0x1000`, the same class bits as its GOKRES mini at
+/// `+ 0x4000` (STRATEGY 6208-6211, 6224, 6272-6273 are the majors, 6720
+/// on the minors).
+fn character_message_portrait(world: &GameWorld, character: CharacterKey) -> Option<u16> {
+    let value = world.characters.get(character)?;
+    let mini = rebellion_core::tactical::character_mini_resource_id(value.dat_id, value.is_major)?;
+    u16::try_from(mini.checked_sub(0x3000)?).ok()
+}
+
+/// A message picture STRATEGY lacks, from its ENCYBMAP EDATA file
+/// (`FUN_0046a280` -> `FUN_0045f970`): the staged ENCYBMAP string table's
+/// file name for `id`, read from the Encyclopedia session.
+fn encyclopedia_picture(
+    session: Option<&rebellion_data::encyclopedia_session::EncyclopediaSession>,
+    id: u16,
+) -> Option<Vec<u8>> {
+    let session = session?;
+    let file = session.source_catalog().artwork.get(&id)?;
+    session.artwork_bytes(file).map(<[u8]>::to_vec)
+}
+
+/// A special force's message portrait (`FUN_004c5000` over slot `+0x30`,
+/// `FUN_004f63d0`): STRATEGY `(TEXTSTRA id & 0xfff) + 0x1000`, its GOKRES
+/// mini less `0x3000` (5440-5443, 5504-5508). STRATEGY holds none of them;
+/// the picture loader `FUN_0046a280` falls back to ENCYBMAP's EDATA files.
+fn special_force_message_portrait(
+    world: &GameWorld,
+    unit: rebellion_core::ids::SpecialForceKey,
+) -> Option<u16> {
+    let class = world.special_forces.get(unit)?.class_dat_id;
+    let (mini, _) = rebellion_render::system_window::special_force_mini(class)?;
+    u16::try_from(mini.checked_sub(0x3000)?).ok()
+}
+
+/// Where an ended mission's personnel go (`FUN_00491500.c:141-195`): the
+/// first team member still alive and free, at the system its Return heads
+/// for, else its fleet, else its system; `None` when none is left.
+/// port: the Return is queued, so its destination stands for the
+/// container the original reparents the member into at once.
+fn mission_returning_place(
+    world: &GameWorld,
+    missions: &MissionState,
+    ended: &rebellion_core::missions::MissionEnded,
+    started: &[u64],
+) -> Option<String> {
+    ended.team.iter().find_map(|&member| {
+        let fleet = match member {
+            MissionMember::Character(key) => {
+                let value = world
+                    .characters
+                    .get(key)
+                    .filter(|c| !c.is_killed && !c.is_captive)?;
+                value.current_fleet
+            }
+            MissionMember::SpecialForce(key) => {
+                world.special_forces.get(key)?;
+                None
+            }
+        };
+        let returning = missions
+            .missions()
+            .iter()
+            .find(|mission| started.contains(&mission.id) && mission.team.contains(&member))
+            .map(|mission| mission.target_system);
+        let name = match (returning, fleet) {
+            (Some(system), _) => world.systems.get(system).map(|sys| sys.name.clone()),
+            (None, Some(fleet)) => world.fleet_name(fleet).map(str::to_owned),
+            (None, None) => rebellion_core::missions::member_location(world, member)
+                .and_then(|system| world.systems.get(system))
+                .map(|sys| sys.name.clone()),
+        };
+        Some(name)
+    })?
+}
+
+/// The window a character's or special force's Display opens
+/// (`FUN_00429440`, families `0x30`-`0x3f`): aboard, its fleet's Fleet
+/// window; at a system, the Missions window while on a mission that is not
+/// hidden (`FUN_00520b70`), else the Defenses window; in an abode, none.
+/// Where the Operation Report's Display buttons go (`FUN_0044df90` cases
+/// `0xb`/`0xc`): `FUN_0045c8e0(sector window, system, kind)`. The system
+/// button opens the sector window; the fleet button, kind 4, its top-right
+/// Fleet icon (`FUN_0045aac0`), which opens the Fleet window with nothing
+/// selected and does not look for the report's fleets.
+fn report_destination(action: &OperationReportAction) -> Option<(SystemKey, FinderTarget)> {
+    match *action {
+        OperationReportAction::GotoSystem { system } => Some((system, FinderTarget::Sector)),
+        OperationReportAction::GotoFleet { system } => Some((system, FinderTarget::FleetWindow)),
+        OperationReportAction::Closed { .. } => None,
+    }
+}
+
+#[cfg(test)]
+mod report_destination_tests {
+    use super::*;
+
+    #[test]
+    fn the_reports_fleet_button_opens_the_systems_fleet_window_with_nothing_selected() {
+        // FUN_0044df90 case 0xc -> FUN_0045c8e0(.., 4) -> FUN_0045aac0: the
+        // system's Fleet window, no fleet selected; case 0xb the sector.
+        let mut world = GameWorld::default();
+        let system = world
+            .systems
+            .insert(rebellion_core::world::System::default());
+        assert_eq!(
+            report_destination(&OperationReportAction::GotoSystem { system }),
+            Some((system, FinderTarget::Sector))
+        );
+        assert_eq!(
+            report_destination(&OperationReportAction::GotoFleet { system }),
+            Some((system, FinderTarget::FleetWindow))
+        );
+        assert_eq!(
+            report_destination(&OperationReportAction::Closed { reopen_index: None }),
+            None
+        );
+    }
+}
+
+fn personnel_window(
+    world: &GameWorld,
+    movement: &MovementState,
+    member: MissionMember,
+) -> Option<(SystemKey, FinderTarget)> {
+    use rebellion_render::personnel_finder::{character_target, CharacterTarget};
+    match member {
+        MissionMember::Character(key) => {
+            let value = world.characters.get(key)?;
+            if value.held_abode().is_some() {
+                return None;
+            }
+            match character_target(value) {
+                CharacterTarget::Fleet(fleet) => {
+                    rebellion_core::movement::listed_location(movement, world, fleet)
+                        .map(|system| (system, FinderTarget::Fleet(fleet)))
+                }
+                CharacterTarget::Missions => value
+                    .current_system
+                    .map(|system| (system, FinderTarget::Missions(member))),
+                CharacterTarget::Defenses => value
+                    .current_system
+                    .map(|system| (system, FinderTarget::Defenses)),
+            }
+        }
+        MissionMember::SpecialForce(key) => {
+            let unit = world.special_forces.get(key)?;
+            let system = rebellion_core::missions::member_location(world, member)?;
+            let target = if unit.on_mission && !unit.on_hidden_mission {
+                FinderTarget::Missions(member)
+            } else {
+                FinderTarget::Defenses
+            };
+            Some((system, target))
+        }
+    }
+}
+
+/// A major character's voice lists for one message class, the module 9
+/// RCDATA that `FUN_004c4990` draws `+0x32` from, by record: Mon Mothma,
+/// Leia, Luke, Luke with `+0xb0` bit 3 (his Dagobah training done), Han,
+/// the Emperor, Vader.
+type MajorVoices = [u16; 7];
+
+/// The end-code message's lists (`FUN_00491500.c:214-256`).
+const MISSION_END_VOICES: MajorVoices = [0xf3, 0xdf, 0xcb, 0xd5, 0xe9, 0x107, 0xfd];
+
+/// The escape message's lists, own side (`FUN_00490340.c:207-244`).
+const RELEASE_VOICES: MajorVoices = [0xf6, 0xe2, 0xce, 0xd8, 0xec, 0x10a, 0x100];
+
+/// `character`'s voice list in `lists`; none for a minor character.
+/// port: Luke's `+0xb0` bit 3 is the story event `0x210`
+/// (`EVT_DAGOBAH_COMPLETED`) having fired.
+fn major_voice_list(
+    world: &GameWorld,
+    character: CharacterKey,
+    luke_trained: bool,
+    lists: MajorVoices,
+) -> Option<u16> {
+    let [mothma, leia, luke, trained, han, emperor, vader] = lists;
+    let luke = if luke_trained { trained } else { luke };
     major_character_slot(world, character)
-        .map_or(0x24, |slot| [0x26, 0x18, 0x25, 0x19, 0x27, 0x28][slot])
+        .map(|slot| [mothma, leia, luke, han, emperor, vader][slot])
+}
+
+/// The voice list of a mission end's lead (`FUN_00491500.c:214-256`); none
+/// for a special force or a minor character.
+fn mission_end_voice_list(
+    world: &GameWorld,
+    ended: &rebellion_core::missions::MissionEnded,
+    luke_trained: bool,
+) -> Option<u16> {
+    let MissionMember::Character(lead) = ended.lead? else {
+        return None;
+    };
+    major_voice_list(world, lead, luke_trained, MISSION_END_VOICES)
+}
+
+/// Notification `0x1f1` on a mission's end code (`FUN_00521900` ->
+/// `FUN_00523ef0` -> `FUN_00525070`), filed by `FUN_00491500` on the
+/// Mission rail (`mission-lifecycle.md`, "End-code messages"). The
+/// mission's side hears from its lead: codes 3-5 "Mission Foiled"
+/// (`0x7148`-`0x714b`, picture `0x416`/`0x417`, sound `0x480`), 6, 7, 9
+/// and 10 "Mission Failed" (`0x7138`-`0x713b`, none for Research), 8
+/// "Mission Aborted" (`0x7140`-`0x7145`) and `0xc` Research's "no research
+/// facilities" (`0x713c`/`0x713d`), first person from a major character;
+/// each body ends with `0x70e6` "Personnel are returning to …" or `0x70e7`.
+/// The defender hears "Enemy Mission Foiled" (`0x713e`/`0x713f`, picture
+/// `0x431`/`0x432`) only when a detection ended it, codes 3 and 4
+/// (`FUN_00547f60.c:71-95`).
+/// port: the subject key (`+0x5c`) is the target system, as the port's
+/// messages open systems and fleets only; a special force lead's portrait
+/// is not resolved, so it keeps the base picture.
+fn mission_end_messages(
+    world: &GameWorld,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    ended: &rebellion_core::missions::MissionEnded,
+    returning_to: Option<&str>,
+    voice: u16,
+) -> Vec<GameMessage> {
+    use rebellion_data::text_templates::TemplateArg;
+    // FUN_00488de0.c:317-330: the class (0x17) only for a mission outside
+    // families 0x40-0x4f, whose record is not hidden (FUN_00520b70) and
+    // whose result +0x60 is 0.
+    let listed = ended.kind.record_id().is_some_and(|id| {
+        !(0x40..0x50).contains(&id.family())
+            && !world.mission_record(id).is_some_and(|record| record.hidden)
+    });
+    if !listed || ended.result != 0 {
+        return Vec::new();
+    }
+    let Some(sys) = world.systems.get(ended.target_system) else {
+        return Vec::new();
+    };
+    let is_alliance = ended.faction == MissionFaction::Alliance;
+    let side_offset = |alliance: bool| u16::from(!alliance);
+    let mission = TemplateArg::named(ended.kind.name());
+    let place = TemplateArg::named(sys.name.clone());
+    let mut out = Vec::new();
+    let file = |title: String, body: String, audience, display: (u16, u16, u16, u16), subject| {
+        let (background, overlay, sound, voice) = display;
+        GameMessage::at_system(
+            ended.tick,
+            body.clone(),
+            MessageCategory::Mission,
+            ended.target_system,
+        )
+        .with_target(subject)
+        .on_rail(MessageRail::Mission, audience)
+        .with_display(MessageDisplay {
+            title,
+            body,
+            background,
+            overlay,
+            sound,
+            voice,
+        })
+    };
+
+    // The mission's side (`FUN_00491500.c:109-650`), from its lead.
+    let lead = ended.lead.and_then(|member| match member {
+        MissionMember::Character(key) => world
+            .characters
+            .get(key)
+            .filter(|c| !c.is_killed)
+            .map(|c| (c.display_name().to_owned(), Some(key), c.is_major)),
+        MissionMember::SpecialForce(key) => world
+            .special_forces
+            .get(key)
+            .and_then(|unit| world.buildable_classes.get(&unit.class_dat_id))
+            .map(|class| (class.name.clone(), None, false)),
+    });
+    if let Some((name, character, major)) = lead {
+        let research = matches!(ended.kind, MissionKind::Research(_));
+        let pick = |first: (u16, u16), third: (u16, u16)| if major { first } else { third };
+        let holder = rebellion_core::bombardment::holder(world, ended.target_system);
+        let (ids, foiled) = match ended.end_code {
+            3..=5 => (Some(pick((0x7148, 0x7149), (0x714a, 0x714b))), true),
+            6 | 7 | 9 | 10 if !research => (Some(pick((0x7138, 0x7139), (0x713a, 0x713b))), false),
+            8 if holder == Faction::Neutral => {
+                (Some(pick((0x7140, 0x7144), (0x7142, 0x7145))), false)
+            }
+            8 => (Some(pick((0x7140, 0x7141), (0x7142, 0x7143))), false),
+            0xc if research => (Some(pick((0x7138, 0x713c), (0x713a, 0x713d))), false),
+            _ => (None, false),
+        };
+        let leader = TemplateArg::named(name);
+        let joined = TemplateArg::side(holder == Faction::Alliance);
+        let args = [Some(&leader), Some(&mission), Some(&place), Some(&joined)];
+        let suffix = match returning_to {
+            Some(at) => templates.format(0x70e6, &[Some(&TemplateArg::named(at.to_owned()))]),
+            None => templates.format(0x70e7, &[]),
+        };
+        if let Some((title, body, suffix)) = ids.and_then(|(title, body)| {
+            Some((
+                templates.format(title, &args)?,
+                templates.format(body, &args)?,
+                suffix?,
+            ))
+        }) {
+            // :273-313: the base picture; a character lead's portrait is the
+            // overlay, any other lead's the background; codes 3-5 take
+            // 0x416/0x417 for the background (no Reconnaissance kind).
+            let mut background = 0x412 + side_offset(is_alliance);
+            let mut overlay = 0;
+            match ended.lead {
+                Some(MissionMember::Character(key)) => {
+                    overlay = character_message_portrait(world, key).unwrap_or(0);
+                }
+                Some(MissionMember::SpecialForce(unit)) => {
+                    background = special_force_message_portrait(world, unit).unwrap_or(background);
+                }
+                None => {}
+            }
+            if foiled {
+                background = 0x416 + side_offset(is_alliance);
+            }
+            let base = background;
+            let sound = if foiled {
+                0x480
+            } else {
+                0x47c + side_offset(is_alliance)
+            };
+            let audience = RailAudience::side(is_alliance);
+            // The subject key +0x5c: the lead unless it is a prisoner
+            // (+0xac bit 0), else the target system (:128-137).
+            let free = character
+                .and_then(|key| world.characters.get(key))
+                .is_none_or(|c| !c.is_captive);
+            let subject = match ended.lead {
+                Some(lead) if free => MessageTarget::Personnel(lead),
+                _ => MessageTarget::System(ended.target_system),
+            };
+            let message = file(
+                title,
+                body + &suffix,
+                audience,
+                (base, overlay, sound, voice),
+                subject,
+            );
+            out.push(match character {
+                Some(key) => message.with_advice_to(personnel_advice(world, key), audience),
+                None => message,
+            });
+        }
+    }
+
+    // The defending side (`FUN_00491500.c:87-105`), only after a detection.
+    if matches!(ended.end_code, 3 | 4) {
+        let args = [Some(&mission), Some(&place)];
+        if let (Some(title), Some(body)) = (
+            templates.format(0x713e, &args),
+            templates.format(0x713f, &args),
+        ) {
+            let defender = !is_alliance;
+            out.push(file(
+                title,
+                body,
+                RailAudience::side(defender),
+                (
+                    0x431 + side_offset(defender),
+                    0,
+                    0x47c + side_offset(defender),
+                    0,
+                ),
+                MessageTarget::System(ended.target_system),
+            ));
+        }
+    }
+    out
 }
 
 /// The side a character serves, whose Message Index receives its reports.
@@ -21681,19 +24340,48 @@ fn load_message_sounds(engine: &mut audio::AudioEngine, ui_root: &Path) -> usize
         .count()
 }
 
-/// Play the sound of the message the Message Index just showed
-/// (`FUN_00469de0` → `FUN_00610c30`).
-fn play_message_sound(engine: &mut audio::AudioEngine, sound: Option<u16>, vol: &AudioVolumeState) {
-    let Some(sound) = sound else {
+/// The waves a shown message starts after stopping the last one's
+/// (`FUN_00469de0`, `FUN_0046a6e0`): `+0x30`, a STRATEGY WAVE, and `+0x32`,
+/// the key of a WAVE of the player's sprite DLL; each only when non-zero.
+fn message_waves(sounds: MessageSounds, advisor: &AdvisorState) -> (Option<u32>, Option<String>) {
+    (
+        (sounds.sound != 0).then_some(u32::from(sounds.sound)),
+        (sounds.voice != 0).then(|| advisor.sprite_voice(sounds.voice).key),
+    )
+}
+
+/// Play the waves of the message the Message Index just showed
+/// (`FUN_00469de0` → `FUN_00610c30`), the last message's stopped first
+/// (`FUN_0046a6e0`). The sprite DLL's sounds are the droids'
+/// (`play_advisor_voices` loads them).
+fn play_message_sound(
+    engine: &mut audio::AudioEngine,
+    sounds: Option<MessageSounds>,
+    advisor: &AdvisorState,
+    vol: &AudioVolumeState,
+) {
+    let Some(sounds) = sounds else {
         return;
     };
-    if engine.play_message_sound(u32::from(sound), vol) {
-        macroquad::logging::info!(
-            "[message] sound 0x{sound:x} started volume={:.2}",
-            vol.effective_sfx_volume()
-        );
-    } else {
-        macroquad::logging::warn!("[message] sound 0x{:x} is not staged", sound);
+    engine.stop_message_sounds();
+    let (sound, voice) = message_waves(sounds, advisor);
+    if let Some(sound) = sound {
+        if engine.play_message_sound(sound, vol) {
+            macroquad::logging::info!(
+                "[message] sound 0x{:x} started volume={:.2}",
+                sound,
+                vol.effective_sfx_volume()
+            );
+        } else {
+            macroquad::logging::warn!("[message] sound 0x{:x} is not staged", sound);
+        }
+    }
+    if let Some(voice) = voice {
+        if engine.play_message_voice(&voice, vol) {
+            macroquad::logging::info!("[message] voice {} started", voice);
+        } else {
+            macroquad::logging::warn!("[message] voice {} is not staged", voice);
+        }
     }
 }
 
@@ -21778,23 +24466,6 @@ fn character_audience(world: &GameWorld, character: CharacterKey) -> Option<Rail
     }
 }
 
-fn victory_winner_is_alliance(outcome: &rebellion_core::victory::VictoryOutcome) -> bool {
-    match outcome {
-        rebellion_core::victory::VictoryOutcome::HqCaptured { winner, .. }
-        | rebellion_core::victory::VictoryOutcome::HqDestroyed { winner, .. } => {
-            *winner == Faction::Alliance
-        }
-        rebellion_core::victory::VictoryOutcome::DeathStarVictory { .. } => false,
-    }
-}
-
-const fn trench_run_cutscene_path(outcome: TacticalTrenchRunOutcome) -> &'static str {
-    match outcome {
-        TacticalTrenchRunOutcome::Success => TRENCH_RUN_SUCCESS_CUTSCENE,
-        TacticalTrenchRunOutcome::Failure => TRENCH_RUN_FAILURE_CUTSCENE,
-    }
-}
-
 /// Whether an `OPEN_REBELLION_MUTE` or `OPEN_REBELLION_DEV` value turns its
 /// switch on: 1, true, yes or on, in any case.
 #[cfg(not(target_arch = "wasm32"))]
@@ -21804,14 +24475,32 @@ fn env_flag_on(value: &str) -> bool {
         .any(|on| value.trim().eq_ignore_ascii_case(on))
 }
 
+/// Open movie id `movie` over the whole screen.
+fn open_movie(
+    movie: u8,
+    audio_vol: &AudioVolumeState,
+    #[cfg(not(target_arch = "wasm32"))] audio_engine: &mut audio::AudioEngine,
+) -> Option<VideoPlayer> {
+    movies::path(movie).and_then(|path| {
+        open_cutscene(
+            Path::new(&path),
+            audio_vol.cutscene_volume(),
+            movies::FULL_SCREEN,
+            #[cfg(not(target_arch = "wasm32"))]
+            audio_engine,
+        )
+    })
+}
+
+/// Open the movie at `path`; the browser shows it in `bounds`
+/// (`movies::video_bounds`).
 fn open_cutscene(
     path: &Path,
     volume: f32,
-    msg_log: &mut MessageLog,
-    tick: u64,
+    bounds: [f32; 4],
     #[cfg(not(target_arch = "wasm32"))] audio_engine: &mut audio::AudioEngine,
 ) -> Option<VideoPlayer> {
-    match VideoPlayer::open(path, volume) {
+    match VideoPlayer::open(path, volume, bounds) {
         Ok(player) => {
             // A skipped movie leaves the music playing; nothing would restart it.
             #[cfg(not(target_arch = "wasm32"))]
@@ -21820,16 +24509,14 @@ fn open_cutscene(
             Some(player)
         }
         Err(VideoError::NotDecoded { .. }) => {
-            let message =
-                "cutscene skipped — run scripts/decode-cutscenes.sh to enable".to_string();
-            eprintln!("[cutscene] {message}");
-            msg_log.push(GameMessage::new(tick, message, MessageCategory::Event));
+            macroquad::logging::warn!(
+                "[cutscene] skipped path={}: run scripts/decode-cutscenes.sh to enable",
+                path.display()
+            );
             None
         }
         Err(error) => {
-            let message = format!("cutscene skipped — {error}");
-            eprintln!("[cutscene] {message}");
-            msg_log.push(GameMessage::new(tick, message, MessageCategory::Event));
+            macroquad::logging::warn!("[cutscene] skipped path={}: {}", path.display(), error);
             None
         }
     }
@@ -21840,9 +24527,7 @@ mod tactical_ground_tests {
     use super::*;
     use rebellion_core::dat::{ExplorationStatus, SectorGroup};
     use rebellion_core::ids::{CapitalShipKey, DatId, FighterKey};
-    use rebellion_core::world::{
-        ControlKind, FighterEntry, Fleet, Sector, ShipInstance, System, TroopUnit,
-    };
+    use rebellion_core::world::{ControlKind, FighterEntry, Fleet, Sector, ShipInstance, System};
 
     #[test]
     fn indexed_status_menu_witness_rejects_compacted_ship_and_fighter_rows() {
@@ -21879,7 +24564,7 @@ mod tactical_ground_tests {
             ],
             characters: Vec::new(),
             is_alliance: true,
-            has_death_star: false,
+            bombarding: false,
         });
 
         let ship_selection = MenuObject::Ship {
@@ -21924,103 +24609,17 @@ mod tactical_ground_tests {
 
     #[test]
     fn trench_run_outcomes_route_to_their_source_movies() {
+        // FUN_0059cc60 plays 0x71 on success, FUN_0059cc80 0x70 on failure;
+        // FUN_00421ba0 names MDATA.201 and MDATA.202.
+        let path = |outcome| movies::path(CutsceneKind::TrenchRun(outcome).movie());
         assert_eq!(
-            trench_run_cutscene_path(TacticalTrenchRunOutcome::Success),
-            "assets/references/ref-videos/201.webm"
+            path(TacticalTrenchRunOutcome::Success).as_deref(),
+            Some("assets/references/ref-videos/201.webm")
         );
         assert_eq!(
-            trench_run_cutscene_path(TacticalTrenchRunOutcome::Failure),
-            "assets/references/ref-videos/202.webm"
+            path(TacticalTrenchRunOutcome::Failure).as_deref(),
+            Some("assets/references/ref-videos/202.webm")
         );
-    }
-
-    #[test]
-    fn each_victory_outcome_names_its_winning_faction() {
-        let system = rebellion_core::ids::SystemKey::default();
-        assert!(victory_winner_is_alliance(
-            &rebellion_core::victory::VictoryOutcome::HqCaptured {
-                winner: Faction::Alliance,
-                loser: Faction::Empire,
-                hq_system: system,
-            }
-        ));
-        assert!(!victory_winner_is_alliance(
-            &rebellion_core::victory::VictoryOutcome::HqCaptured {
-                winner: Faction::Empire,
-                loser: Faction::Alliance,
-                hq_system: system,
-            }
-        ));
-        assert!(!victory_winner_is_alliance(
-            &rebellion_core::victory::VictoryOutcome::HqDestroyed {
-                winner: Faction::Empire,
-                loser: Faction::Alliance,
-                hq_system: system,
-            }
-        ));
-        assert!(!victory_winner_is_alliance(
-            &rebellion_core::victory::VictoryOutcome::DeathStarVictory {
-                target_system: system,
-            }
-        ));
-    }
-
-    #[test]
-    fn tactical_ground_results_persist_survivor_damage_and_remove_losses() {
-        let mut world = GameWorld::default();
-        let sector = world.sectors.insert(Sector {
-            dat_id: DatId::new(1),
-            name: "Test Sector".into(),
-            group: SectorGroup::Core,
-            x: 0,
-            y: 0,
-            systems: vec![],
-        });
-        let system = world.systems.insert(System {
-            dat_id: DatId::new(2),
-            name: "Test System".into(),
-            sector,
-            x: 0,
-            y: 0,
-            exploration_status: ExplorationStatus::Explored,
-            popularity_alliance: 0.5,
-            popularity_empire: 0.5,
-            is_populated: true,
-            total_energy: 0,
-            raw_materials: 0,
-            espionage_rating: 0.0,
-            fleets: vec![],
-            ground_units: vec![],
-            special_forces: vec![],
-            fighters: Vec::new(),
-            defense_facilities: vec![],
-            manufacturing_facilities: vec![],
-            production_facilities: vec![],
-            is_headquarters: false,
-            is_destroyed: false,
-            control: ControlKind::Uncontrolled,
-        });
-        let survivor = world.troops.insert(TroopUnit {
-            class_dat_id: DatId::new(3),
-            is_alliance: true,
-            regiment_strength: 100,
-        });
-        let destroyed = world.troops.insert(TroopUnit {
-            class_dat_id: DatId::new(4),
-            is_alliance: false,
-            regiment_strength: 100,
-        });
-        world.systems[system].ground_units = vec![survivor, destroyed];
-
-        tactical_flow::apply_tactical_ground_strengths(
-            &mut world,
-            system,
-            &[(survivor, 37), (destroyed, 0)],
-        );
-
-        assert_eq!(world.troops[survivor].regiment_strength, 37);
-        assert!(!world.troops.contains_key(destroyed));
-        assert_eq!(world.systems[system].ground_units, vec![survivor]);
     }
 
     #[test]
@@ -22028,7 +24627,7 @@ mod tactical_ground_tests {
         clippy::too_many_lines,
         reason = "The tactical result regression keeps its opposing fleets and exact roster assertions together."
     )]
-    fn tactical_space_results_preserve_exact_capital_and_fighter_roster_slots() {
+    fn tactical_space_results_preserve_capital_slots_and_redock_surviving_squadrons() {
         let mut world = GameWorld::default();
         let sector = world.sectors.insert(Sector {
             dat_id: DatId::new(1),
@@ -22060,12 +24659,49 @@ mod tactical_ground_tests {
             production_facilities: vec![],
             is_headquarters: false,
             is_destroyed: false,
-            // The defender holds the system, so the post-battle pass keeps its
-            // fleet there (FUN_00516ef0 → FUN_00515480, chain stage 1).
+            // The defender holds the system and loses the battle; the
+            // post-battle pass moves its fleet to another system it holds
+            // (VM, `empire-day660-deathstar-pre-alert.sav`: a loser at its own
+            // held Carida and Ando ended at Halowan).
             control: ControlKind::Controlled(rebellion_core::dat::Faction::Empire),
         });
+        let refuge = world.systems.insert(System {
+            dat_id: DatId::new(4),
+            name: "Refuge".into(),
+            sector,
+            x: 30,
+            y: 0,
+            exploration_status: ExplorationStatus::Explored,
+            is_populated: true,
+            control: ControlKind::Controlled(rebellion_core::dat::Faction::Empire),
+            ..System::default()
+        });
+        // The defender's ship can jump; a fleet that cannot travel is
+        // destroyed (FUN_00515480, reason 5).
+        let defender_class =
+            world
+                .capital_ship_classes
+                .insert(rebellion_core::world::CapitalShipClass {
+                    family: 0x14,
+                    is_empire: true,
+                    hull: 100,
+                    hyperdrive: 1,
+                    ..Default::default()
+                });
         let ship_class = CapitalShipKey::default();
         let fighter_class = FighterKey::default();
+        // FUN_005003d0: the fleet's Death Star is its family-0x18 ship; the
+        // fleet loop exports it as the station alone (FUN_0040b0e0), whose
+        // hull 0 after trench-run state 6 kills it (FUN_0040d170).
+        let death_star_class =
+            world
+                .capital_ship_classes
+                .insert(rebellion_core::world::CapitalShipClass {
+                    family: 0x18,
+                    is_alliance: true,
+                    hull: 100,
+                    ..Default::default()
+                });
         let mut preexisting_dead_ship = ShipInstance::new(ship_class, 100, true);
         preexisting_dead_ship.hull_current = 0;
         preexisting_dead_ship.alive = false;
@@ -22075,6 +24711,7 @@ mod tactical_ground_tests {
                 preexisting_dead_ship,
                 ShipInstance::new(ship_class, 100, true),
                 ShipInstance::new(ship_class, 100, true),
+                ShipInstance::new(death_star_class, 100, true),
             ],
             fighters: vec![
                 FighterEntry {
@@ -22090,18 +24727,18 @@ mod tactical_ground_tests {
             ],
             characters: vec![],
             is_alliance: true,
-            has_death_star: true,
+            bombarding: false,
         });
         let defender = world.fleets.insert(Fleet {
             location: system,
-            capital_ships: vec![ShipInstance::new(ship_class, 100, false)],
+            capital_ships: vec![ShipInstance::new(defender_class, 100, false)],
             fighters: vec![],
             characters: vec![],
             is_alliance: false,
-            has_death_star: false,
+            bombarding: false,
         });
         world.systems[system].fleets = vec![attacker, defender];
-        let session = rebellion_render::BattleSession {
+        let mut session = rebellion_render::BattleSession {
             system,
             system_name: "Test System".into(),
             system_picture_id: 1,
@@ -22113,11 +24750,14 @@ mod tactical_ground_tests {
             ships: vec![
                 test_tactical_ship(ship_class, attacker, true, 1, 43, true),
                 test_tactical_ship(ship_class, attacker, true, 2, 0, false),
-                test_tactical_ship(ship_class, defender, false, 0, 91, true),
+                test_tactical_ship(defender_class, defender, false, 0, 91, true),
             ],
             fighters: vec![
                 rebellion_render::tactical_view::TacticalFighter {
                     held_by_system: false,
+                    off_field: false,
+                    carrier: None,
+                    docked: None,
                     class_key: fighter_class,
                     identity: rebellion_render::tactical_view::TacticalObjectIdentity {
                         class_dat_id: DatId::new(3),
@@ -22161,6 +24801,9 @@ mod tactical_ground_tests {
                 },
                 rebellion_render::tactical_view::TacticalFighter {
                     held_by_system: false,
+                    off_field: false,
+                    carrier: None,
+                    docked: None,
                     class_key: fighter_class,
                     identity: rebellion_render::tactical_view::TacticalObjectIdentity {
                         class_dat_id: DatId::new(3),
@@ -22212,18 +24855,23 @@ mod tactical_ground_tests {
                     y: 0.0,
                     z: 0.0,
                 },
+                hull_max: 100.0,
                 hull: 0.0,
                 laser_charge: 0.0,
-                destroyed: true,
+                shielded: false,
+                not_completed: false,
                 action_committed: false,
+                hangar_capacity: 0,
+                ship: Some((attacker, 3)),
             }),
             death_star_beam: None,
             trench_run_outcome: None,
             trench_run_remaining_ms: None,
             trench_run_group: None,
-            trench_run_success_rating: 1,
+            trench_run_commander: None,
             trench_run_pending_outcome: None,
             trench_run_participants: vec![],
+            trench_run_snapshot: vec![],
             trench_run_chatter: [0x13d; 9],
             trench_run_chatter_cursor: 0,
             trench_run_cinematic_pending: false,
@@ -22231,10 +24879,14 @@ mod tactical_ground_tests {
             source_layout: rebellion_render::tactical_view::OriginalTacticalLayout::default(),
             selected_ship: None,
             selected_fighter_group: None,
+            selected_task_force: None,
+            player_command: true,
             placement_confirmed: true,
             start_tick: 1,
             combat_tick: 1,
             tactical_rng: rebellion_render::OriginalTacticalRng::new(0x5eed_ba77),
+            battle_rng: rebellion_core::tactical::OriginalBattleRng::default(),
+            settled_crew: None,
             weapon_effects: vec![],
             impact_effects: vec![],
             pending_audio_cues: vec![],
@@ -22247,26 +24899,47 @@ mod tactical_ground_tests {
             step_accumulator: 0.0,
             winner: Some(rebellion_render::CombatWinner::Attacker),
             stalemate: rebellion_render::tactical_view::TacticalStalemateWatch::default(),
+            death_star_ai: rebellion_render::tactical_view::TacticalDeathStarAi::default(),
+            hangars: rebellion_render::tactical_view::TacticalHangars::default(),
             morale: rebellion_render::tactical_view::TacticalMorale::default(),
             engagement: rebellion_render::tactical_view::TacticalEngagementState::default(),
             holder_is_alliance: None,
+            arrival_holder_is_alliance: None,
             blockaded_at_start: false,
             withdrawal_destination: None,
         };
 
+        // FUN_005bef90.c:72-96: the surviving squadron docks in the first
+        // ship of its side with room; FUN_0040d320 makes it that ship's child.
+        session.ships[0].fighter_capacity = 1;
+
+        let mut movement = MovementState::new();
         let battle_return = tactical_flow::apply_results(
             &session,
             &mut world,
             &mut TroopTransportState::default(),
-            &mut MovementState::new(),
+            &mut movement,
+            &ProductRoom::default(),
         );
 
         assert_eq!(world.fleets[attacker].capital_ships.len(), 1);
         assert_eq!(world.fleets[attacker].capital_ships[0].hull_current, 43);
-        assert_eq!(world.fleets[attacker].fighters[0].count, 1);
-        assert_eq!(world.fleets[attacker].fighters[1].count, 0);
-        assert!(!world.fleets[attacker].has_death_star);
+        let carrier = world.fleets[attacker].capital_ships[0].tag;
+        assert_ne!(carrier, 0);
+        assert_eq!(
+            world.fleets[attacker]
+                .fighters
+                .iter()
+                .map(|entry| (entry.count, entry.carrier))
+                .collect::<Vec<_>>(),
+            vec![(1, carrier)]
+        );
+        assert!(!world.fleet_has_death_star(attacker));
         assert_eq!(world.fleets[defender].capital_ships[0].hull_current, 91);
+        assert_eq!(
+            movement.get(defender).map(|order| order.destination),
+            Some(refuge)
+        );
         assert_eq!(
             battle_return.winner,
             Some(rebellion_render::CombatWinner::Attacker)
@@ -22291,7 +24964,6 @@ mod tactical_ground_tests {
                 is_alliance: is_attacker,
             },
             tactical_resource: rebellion_render::capital_ship_tactical_resource(DatId::new(1)),
-            death_star_resource: rebellion_render::death_star_tactical_resource(DatId::new(1)),
             source_position: rebellion_render::tactical_view::TacticalWorldPosition {
                 x: 0.0,
                 y: 0.0,
@@ -22349,6 +25021,7 @@ mod tactical_ground_tests {
             order: rebellion_render::tactical_view::TacticalOrder::None,
             tactic: rebellion_render::tactical_view::TacticalTactic::StandOff,
             task_force: u8::try_from(fleet_ship_index.min(7)).unwrap_or(7),
+            task_force_joined: 0,
             fleet: Some(fleet),
             fleet_ship_index,
             sprite_id: None,
@@ -22365,6 +25038,8 @@ mod tactical_ground_tests {
             retreating: false,
             retreat_progress: 0.0,
             retreated: false,
+            outstanding_hits: 0,
+            repair_timer_steps: 0,
         }
     }
 }
@@ -22376,13 +25051,30 @@ mod options_save_tests {
         let root =
             std::env::temp_dir().join(format!("options-corrupt-save-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
-        let path = rebellion_data::save::slot_path(&root, 9);
+        let path = rebellion_data::save::slot_path(&root, 5);
         std::fs::write(&path, b"corrupt save fixture").unwrap();
         let slots = super::read_save_slots(&root);
         assert_eq!(slots.len(), 1);
-        assert_eq!(slots[0].slot, 9);
+        assert_eq!(slots[0].slot, 5);
         assert_eq!(slots[0].name, "Unreadable save");
         assert_eq!(std::fs::read(&path).unwrap(), b"corrupt save fixture");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn the_options_window_reads_only_its_six_rows() {
+        // FUN_00407180 builds rows 1 to 6, row n reading save file n; a file
+        // past them is no row's.
+        let root = std::env::temp_dir().join(format!("options-six-rows-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        for slot in [6, 9] {
+            std::fs::write(
+                rebellion_data::save::slot_path(&root, slot),
+                b"past the rows",
+            )
+            .unwrap();
+        }
+        assert!(super::read_save_slots(&root).is_empty());
         std::fs::remove_dir_all(root).unwrap();
     }
 }
@@ -22452,7 +25144,7 @@ mod fleet_move_tests {
                     fighters: vec![],
                     characters: vec![],
                     is_alliance: true,
-                    has_death_star: false,
+                    bombarding: false,
                 });
                 world.systems[origin].fleets.push(fleet);
                 fleet
@@ -22464,7 +25156,6 @@ mod fleet_move_tests {
     struct Issued {
         actions: Vec<PanelAction>,
         confirmation: MoveConfirmationState,
-        log: MessageLog,
     }
 
     fn issue(world: &GameWorld, fleets: &[FleetKey], confirmed: bool, to: SystemKey) -> Issued {
@@ -22477,26 +25168,33 @@ mod fleet_move_tests {
         confirmed: bool,
         target: ReleaseTarget,
     ) -> Issued {
+        issue_as(world, fleets, confirmed, target, MissionFaction::Alliance)
+    }
+
+    fn issue_as(
+        world: &GameWorld,
+        fleets: &[FleetKey],
+        confirmed: bool,
+        target: ReleaseTarget,
+        faction: MissionFaction,
+    ) -> Issued {
         let movement = MovementState::new();
         let blockaded = HashSet::new();
         let mut coordinator = StrategicWindowing::new();
         let mut issued = Issued {
             actions: Vec::new(),
             confirmation: MoveConfirmationState::default(),
-            log: MessageLog::new(8),
         };
         issue_fleet_move(
             &FleetMoveContext {
                 world,
                 movement: &movement,
                 blockaded: &blockaded,
-                faction: MissionFaction::Alliance,
-                tick: 0,
+                faction,
             },
             fleets,
             confirmed,
             target,
-            &mut issued.log,
             &mut issued.confirmation,
             &mut coordinator,
             &mut issued.actions,
@@ -22559,6 +25257,8 @@ mod fleet_move_tests {
             faction: MissionFaction::Alliance,
             fleets: vec![Default::default()],
             members: Vec::new(),
+            ships: None,
+            units: Vec::new(),
             destination: SystemKey::default(),
             join: None,
             blockaded: false,
@@ -22649,6 +25349,8 @@ mod fleet_move_tests {
                         faction: MissionFaction::Alliance,
                         fleets: vec![fleet],
                         members: Vec::new(),
+                        ships: None,
+                        units: Vec::new(),
                         destination,
                         join: None,
                         blockaded: false,
@@ -22788,7 +25490,6 @@ mod fleet_move_tests {
                 movement: &movement,
                 blockaded: &HashSet::new(),
                 faction: MissionFaction::Alliance,
-                tick: 0,
             },
             &missions,
             vec![MissionMember::Character(character)],
@@ -22819,6 +25520,8 @@ mod fleet_move_tests {
                         faction: MissionFaction::Alliance,
                         fleets: vec![fleet],
                         members: Vec::new(),
+                        ships: None,
+                        units: Vec::new(),
                         destination,
                         join: None,
                         blockaded: false,
@@ -22986,33 +25689,419 @@ mod fleet_move_tests {
             })
             .collect();
         assert_eq!(joined, fleets);
-        assert!(issued.log.messages().is_empty());
+    }
+
+    /// The fleets of `world_with_two_fleets` given to `faction`.
+    fn sided(world: &mut GameWorld, fleets: &[FleetKey], faction: MissionFaction) {
+        let alliance = faction == MissionFaction::Alliance;
+        for fleet in fleets {
+            world.fleets[*fleet].is_alliance = alliance;
+        }
+    }
+
+    /// `ships` of `fleet`, Moved or Confirmed-Moved onto `target` by
+    /// `faction`.
+    fn issue_ships(
+        world: &GameWorld,
+        fleet: FleetKey,
+        ships: Vec<usize>,
+        confirmed: bool,
+        target: ReleaseTarget,
+        faction: MissionFaction,
+    ) -> Issued {
+        let movement = MovementState::new();
+        let blockaded = HashSet::new();
+        let mut issued = Issued {
+            actions: Vec::new(),
+            confirmation: MoveConfirmationState::default(),
+        };
+        issue_ship_move(
+            &FleetMoveContext {
+                world,
+                movement: &movement,
+                blockaded: &blockaded,
+                faction,
+            },
+            fleet,
+            ships,
+            rebellion_core::fleet_join::roster(world, fleet).unwrap(),
+            confirmed,
+            target,
+            &mut issued.confirmation,
+            &mut issued.actions,
+        );
+        issued
+    }
+
+    // FUN_00487cc0 asks for 0x202 always, and for 0x201 only when the first
+    // member's container is a blockaded system: a ship's is its fleet. The
+    // window lists each ship's days (FUN_0053d200): none for an unfinished
+    // ship, which is not mobile (FUN_00555d30 -> FUN_004f6410). The route-1
+    // Empire save, its day-123 Death Star played on: the unfinished Death
+    // Star's menu and a completed ship's both offered Confirmed Move.
+    #[test]
+    fn a_ships_confirmed_move_asks_with_each_ships_days_and_its_move_departs_for_either_side() {
+        for faction in [MissionFaction::Alliance, MissionFaction::Empire] {
+            let (mut world, fleets, destination) = world_with_two_fleets();
+            sided(&mut world, &fleets, faction);
+            let fleet = fleets[0];
+            let mut unfinished = world.fleets[fleet].capital_ships[0].clone();
+            unfinished.completed = false;
+            world.fleets[fleet].capital_ships.push(unfinished);
+            let to = ReleaseTarget::System(destination);
+
+            let moved = issue_ships(&world, fleet, vec![0], false, to, faction);
+            assert!(!moved.confirmation.is_open(), "{faction:?}");
+            assert!(
+                matches!(
+                    moved.actions.as_slice(),
+                    [PanelAction::MoveShips { fleet: from, ships, system, .. }]
+                        if *from == fleet && *ships == [0] && *system == destination
+                ),
+                "{faction:?}: {:?}",
+                moved.actions
+            );
+
+            let asked = issue_ships(&world, fleet, vec![0, 1], true, to, faction);
+            assert!(asked.actions.is_empty(), "{faction:?}");
+            let window = asked.confirmation.confirmation().expect("the window opens");
+            assert_eq!(
+                window.ships,
+                Some(FleetMover::Ships {
+                    fleet,
+                    ships: vec![0, 1],
+                    roster: rebellion_core::fleet_join::roster(&world, fleet).unwrap(),
+                }),
+                "{faction:?}"
+            );
+            assert!(window.fleets.is_empty() && !window.blockaded, "{faction:?}");
+            assert_eq!(window.lines.len(), 2, "{faction:?}");
+            assert!(
+                window.lines[0].1 > 0,
+                "{faction:?}: the completed ship's leg"
+            );
+            assert_eq!(window.lines[1].1, 0, "{faction:?}: the unfinished ship's");
+        }
+    }
+
+    // FUN_00487740 runs the validator before FUN_00487cc0 asks: a ship on
+    // its own leg is en route (FUN_004f9860, 1/1), so nothing asks.
+    #[test]
+    fn a_ships_confirmed_move_the_order_refuses_never_asks_for_either_side() {
+        for faction in [MissionFaction::Alliance, MissionFaction::Empire] {
+            let (mut world, fleets, destination) = world_with_two_fleets();
+            sided(&mut world, &fleets, faction);
+            let origin = world.fleets[fleets[0]].location;
+            world.fleets[fleets[0]].capital_ships[0].transit =
+                Some(rebellion_core::world::ShipTransit {
+                    from: origin,
+                    to: destination,
+                    arrival_tick: 9,
+                });
+
+            let to = ReleaseTarget::System(destination);
+            let issued = issue_ships(&world, fleets[0], vec![0], true, to, faction);
+            assert!(!issued.confirmation.is_open(), "{faction:?}");
+            assert!(
+                matches!(
+                    issued.actions.as_slice(),
+                    [PanelAction::AdvisorRefusal((1, 1))]
+                ),
+                "{faction:?}: {:?}",
+                issued.actions
+            );
+        }
+    }
+
+    /// `world_with_two_fleets` for `faction`: both systems its, a regiment
+    /// of a named class on the origin's surface and a squadron aboard the
+    /// first fleet.
+    fn unit_world(faction: MissionFaction) -> (GameWorld, Vec<FleetKey>, SystemKey, TroopKey) {
+        let (mut world, fleets, destination) = world_with_two_fleets();
+        sided(&mut world, &fleets, faction);
+        let is_alliance = faction == MissionFaction::Alliance;
+        let side = if is_alliance {
+            Faction::Alliance
+        } else {
+            Faction::Empire
+        };
+        let origin = world.fleets[fleets[0]].location;
+        for system in [origin, destination] {
+            world.systems[system].control = ControlKind::Controlled(side);
+        }
+        let class_dat_id = DatId::new(0x1000_0002);
+        world.buildable_classes.insert(
+            class_dat_id,
+            rebellion_core::world::BuildableClass {
+                name: "Army Regiment".into(),
+                ..Default::default()
+            },
+        );
+        let troop = world.troops.insert(rebellion_core::world::TroopUnit {
+            class_dat_id,
+            is_alliance,
+        });
+        world.systems[origin].ground_units.push(troop);
+        let fighters = world
+            .fighter_classes
+            .insert(rebellion_core::world::FighterClass {
+                name: "Fighter".into(),
+                ..Default::default()
+            });
+        world.fleets[fleets[0]]
+            .fighters
+            .push(rebellion_core::world::FighterEntry {
+                class: fighters,
+                count: 1,
+                carrier: 0,
+            });
+        (world, fleets, destination, troop)
+    }
+
+    /// `unit` Moved or Confirmed-Moved onto `target` by `faction`, with
+    /// `blockaded` systems under blockade.
+    fn issue_unit(
+        world: &GameWorld,
+        unit: UnitMover,
+        confirmed: bool,
+        target: ReleaseTarget,
+        (faction, blockaded): (MissionFaction, &HashSet<SystemKey>),
+    ) -> Issued {
+        let movement = MovementState::new();
+        let mut issued = Issued {
+            actions: Vec::new(),
+            confirmation: MoveConfirmationState::default(),
+        };
+        issue_unit_move(
+            &FleetMoveContext {
+                world,
+                movement: &movement,
+                blockaded,
+                faction,
+            },
+            &TroopTransportState::default(),
+            &ProductRoom::default(),
+            unit,
+            confirmed,
+            target,
+            &mut issued.confirmation,
+            &mut issued.actions,
+        );
+        issued
+    }
+
+    // FUN_00487cc0 asks for a unit's 0x202 always; FUN_0049a350 lists its
+    // name and days (FUN_0053d200: a regiment's trip at the default speed,
+    // a squadron's at its class's). Its 0x201 departs at once.
+    #[test]
+    fn a_units_confirmed_move_asks_with_its_days_and_its_move_departs_for_either_side() {
+        for faction in [MissionFaction::Alliance, MissionFaction::Empire] {
+            let (world, fleets, destination, troop) = unit_world(faction);
+            let to = ReleaseTarget::System(destination);
+            let open = (faction, &HashSet::new());
+            let squadron = UnitMover::Squadron(SquadronSource::Fleet {
+                fleet: fleets[0],
+                index: 0,
+            });
+            for (unit, name) in [
+                (UnitMover::Regiment(troop), "Army Regiment"),
+                (squadron, "Fighter"),
+            ] {
+                let moved = issue_unit(&world, unit, false, to, open);
+                assert!(!moved.confirmation.is_open(), "{faction:?} {unit:?}");
+                assert_eq!(moved.actions.len(), 1, "{faction:?} {unit:?}");
+
+                let asked = issue_unit(&world, unit, true, to, open);
+                assert!(asked.actions.is_empty(), "{faction:?} {unit:?}");
+                let window = asked.confirmation.confirmation().expect("the window opens");
+                assert_eq!(window.units, [unit], "{faction:?}");
+                assert!(!window.blockaded, "{faction:?} {unit:?}");
+                assert_eq!(window.lines.len(), 1, "{faction:?} {unit:?}");
+                assert_eq!(window.lines[0].0, name, "{faction:?}");
+                assert!(window.lines[0].1 > 0, "{faction:?} {unit:?}: its trip");
+            }
+            let origin = world.fleets[fleets[0]].location;
+            let asked = issue_unit(
+                &world,
+                UnitMover::Regiment(troop),
+                true,
+                ReleaseTarget::System(origin),
+                open,
+            );
+            assert_eq!(
+                asked
+                    .confirmation
+                    .confirmation()
+                    .map(|window| window.lines[0].1),
+                Some(0),
+                "{faction:?}: within its system"
+            );
+        }
+    }
+
+    // FUN_00487cc0 asks for a unit's 0x201 when its container is a
+    // blockaded system of its side, under the evacuation warning (0x7056,
+    // FUN_0049a350); a squadron aboard a fleet has the ship for its
+    // container, so it departs at once.
+    #[test]
+    fn a_units_move_off_its_sides_blockaded_planet_asks_under_the_evacuation_warning_for_either_side(
+    ) {
+        for faction in [MissionFaction::Alliance, MissionFaction::Empire] {
+            let (world, fleets, destination, troop) = unit_world(faction);
+            let origin = world.fleets[fleets[0]].location;
+            let blockaded = HashSet::from([origin]);
+            let to = ReleaseTarget::System(destination);
+
+            let asked = issue_unit(
+                &world,
+                UnitMover::Regiment(troop),
+                false,
+                to,
+                (faction, &blockaded),
+            );
+            assert!(asked.actions.is_empty(), "{faction:?}");
+            assert!(
+                asked
+                    .confirmation
+                    .confirmation()
+                    .is_some_and(|window| window.blockaded),
+                "{faction:?}"
+            );
+
+            let aboard = UnitMover::Squadron(SquadronSource::Fleet {
+                fleet: fleets[0],
+                index: 0,
+            });
+            let moved = issue_unit(&world, aboard, false, to, (faction, &blockaded));
+            assert!(!moved.confirmation.is_open(), "{faction:?}");
+            assert_eq!(moved.actions.len(), 1, "{faction:?}");
+        }
+    }
+
+    // FUN_00487740 runs the validator before FUN_00487cc0 asks: another
+    // side's populated system refuses a regiment (FUN_0053d430, 1/0x28),
+    // and so does the other side's unit (FUN_004f9860).
+    #[test]
+    fn a_units_confirmed_move_the_order_refuses_never_asks_for_either_side() {
+        for faction in [MissionFaction::Alliance, MissionFaction::Empire] {
+            let (mut world, _, destination, troop) = unit_world(faction);
+            let other = if faction == MissionFaction::Alliance {
+                MissionFaction::Empire
+            } else {
+                MissionFaction::Alliance
+            };
+            let unit = UnitMover::Regiment(troop);
+            let to = ReleaseTarget::System(destination);
+            let refused = issue_unit(&world, unit, true, to, (other, &HashSet::new()));
+            assert!(!refused.confirmation.is_open(), "{faction:?}");
+            assert!(
+                matches!(
+                    refused.actions.as_slice(),
+                    [PanelAction::AdvisorRefusal((1, 0x28))]
+                ),
+                "{faction:?}: {:?}",
+                refused.actions
+            );
+            world.systems[destination].control =
+                ControlKind::Controlled(if faction == MissionFaction::Alliance {
+                    Faction::Empire
+                } else {
+                    Faction::Alliance
+                });
+            let refused = issue_unit(&world, unit, true, to, (faction, &HashSet::new()));
+            assert!(!refused.confirmation.is_open(), "{faction:?}");
+            assert!(
+                matches!(
+                    refused.actions.as_slice(),
+                    [PanelAction::AdvisorRefusal((1, 0x28))]
+                ),
+                "{faction:?}: {:?}",
+                refused.actions
+            );
+        }
+    }
+
+    // FUN_0044f5e0 resubmits the confirmed order; each unit's 0x204 moves it
+    // onto the fleet or the system (FUN_00578f30 -> FUN_00556390).
+    #[test]
+    fn a_confirmed_units_move_carries_out_each_units_move() {
+        let (world, fleets, destination, troop) = unit_world(MissionFaction::Alliance);
+        let source = SquadronSource::Fleet {
+            fleet: fleets[0],
+            index: 0,
+        };
+        assert!(matches!(
+            unit_move_action(UnitMover::Regiment(troop), RegimentTarget::System(destination)),
+            PanelAction::MoveRegiment { troop: moved, target: RegimentTarget::System(to) }
+                if moved == troop && to == destination
+        ));
+        assert!(matches!(
+            unit_move_action(UnitMover::Squadron(source), RegimentTarget::Fleet(fleets[1])),
+            PanelAction::MoveSquadron { source: moved, target: RegimentTarget::Fleet(onto) }
+                if moved == source && onto == fleets[1]
+        ));
+        assert!(world.troops.contains_key(troop));
+    }
+
+    // FUN_0044f5e0 resubmits the confirmed order: a team released on a Fleet
+    // window joins it (FUN_004ffc90), else its ships go to the system and
+    // its fleets depart.
+    #[test]
+    fn a_confirmed_move_carries_out_each_movers_move() {
+        let (world, fleets, destination) = world_with_two_fleets();
+        let ships = FleetMover::Ships {
+            fleet: fleets[0],
+            ships: vec![0],
+            roster: 3,
+        };
+        assert!(matches!(
+            mover_move_action(ships.clone(), destination, Some(fleets[1])),
+            PanelAction::JoinFleet { mover, target } if mover == ships && target == fleets[1]
+        ));
+        assert!(matches!(
+            mover_move_action(ships, destination, None),
+            PanelAction::MoveShips { fleet, ships, roster: 3, system }
+                if fleet == fleets[0] && ships == [0] && system == destination
+        ));
+        assert!(matches!(
+            mover_move_action(FleetMover::Fleet(fleets[1]), destination, None),
+            PanelAction::DispatchFleet { fleet, destination: to, troops }
+                if fleet == fleets[1] && to == destination && troops.is_empty()
+        ));
+        assert!(world.fleets.contains_key(fleets[1]));
     }
 
     #[test]
     fn an_empty_team_moving_onto_a_fleet_is_refused() {
         // FUN_0053c4b0 refuses a move with no members (1/0x16) before any
-        // sub-order runs.
-        let (world, fleets, _) = world_with_two_fleets();
-        let origin = world.fleets[fleets[0]].location;
-        let issued = issue_onto(
-            &world,
-            &[],
-            false,
-            ReleaseTarget::Fleet {
-                fleet: fleets[0],
-                system: origin,
-            },
-        );
-        assert!(issued.actions.is_empty());
-        assert_eq!(issued.log.messages().len(), 1);
+        // sub-order runs; FUN_00487c90 shows no text, the advisor reacts.
+        for faction in [MissionFaction::Alliance, MissionFaction::Empire] {
+            let (mut world, fleets, _) = world_with_two_fleets();
+            sided(&mut world, &fleets, faction);
+            let origin = world.fleets[fleets[0]].location;
+            let issued = issue_as(
+                &world,
+                &[],
+                false,
+                ReleaseTarget::Fleet {
+                    fleet: fleets[0],
+                    system: origin,
+                },
+                faction,
+            );
+            assert!(
+                matches!(issued.actions[..], [PanelAction::AdvisorRefusal((1, 0x16))]),
+                "{faction:?}"
+            );
+        }
     }
 
     #[test]
     fn a_bands_stop_and_destination_belong_to_its_systems_holder() {
         // Manual p. 83-84: a construction yard's band takes Destination and
         // Stop; Stop clears what the band is building. Either side holds
-        // its own bands.
+        // its own bands. An idle band greys Stop (FUN_00528270.c:22-31) and
+        // Rename (FUN_00527f40.c:23-33): no product resolves from +0x74.
         for (holder, other) in [
             (MissionFaction::Alliance, MissionFaction::Empire),
             (MissionFaction::Empire, MissionFaction::Alliance),
@@ -23066,13 +26155,14 @@ mod fleet_move_tests {
                     &MissionState::new(),
                     &MovementState::new(),
                     &TroopTransportState::new(),
+                    &BlockadeState::new(),
                     manufacturing,
                     &rebellion_core::research::ResearchState::new(),
                     player,
                 )
             };
             let idle = gates(&world, &manufacturing, holder);
-            assert!(idle.destination && idle.build && !idle.stop);
+            assert!(idle.destination && idle.build && !idle.stop && !idle.rename);
             manufacturing.build(
                 system,
                 &QueueItem::new(
@@ -23092,6 +26182,131 @@ mod fleet_move_tests {
     }
 
     #[test]
+    fn a_ships_band_renames_its_ordered_ship_for_its_holder_only() {
+        // FUN_00527f40: a band's Rename (0x215) asks its current product's
+        // +0x64 for 0x203. An unfinished capital ship of the side passes
+        // FUN_004f9860; a squadron refuses (FUN_004f66a0, 1/0x17); an idle
+        // band has no product (0xa0/1). Under Wine Rename was enabled on the
+        // route-1 Empire save's ships band building Death Star 1 (day 123
+        // played on); no fighter band was at hand there.
+        for (holder, other) in [
+            (MissionFaction::Alliance, MissionFaction::Empire),
+            (MissionFaction::Empire, MissionFaction::Alliance),
+        ] {
+            let alliance = holder == MissionFaction::Alliance;
+            let mut world = GameWorld::default();
+            let control =
+                rebellion_core::world::ControlKind::Controlled(Faction::of_alliance(alliance));
+            let system = world.systems.insert(rebellion_core::world::System {
+                dat_id: rebellion_core::ids::DatId::new(0x9000_0001),
+                name: "Coruscant".into(),
+                sector: rebellion_core::ids::SectorKey::default(),
+                x: 0,
+                y: 0,
+                exploration_status: rebellion_core::dat::ExplorationStatus::Explored,
+                popularity_alliance: 0.5,
+                popularity_empire: 0.5,
+                is_populated: true,
+                total_energy: 0,
+                raw_materials: 0,
+                espionage_rating: 0.0,
+                fleets: vec![],
+                ground_units: vec![],
+                special_forces: vec![],
+                fighters: Vec::new(),
+                defense_facilities: vec![],
+                manufacturing_facilities: vec![],
+                production_facilities: vec![],
+                is_headquarters: false,
+                is_destroyed: false,
+                control,
+            });
+            let fighters = world.systems.insert(rebellion_core::world::System {
+                dat_id: rebellion_core::ids::DatId::new(0x9000_0002),
+                ..world.systems[system].clone()
+            });
+            let class =
+                world
+                    .capital_ship_classes
+                    .insert(rebellion_core::world::CapitalShipClass {
+                        name: "Death Star".into(),
+                        hull: 10,
+                        is_alliance: alliance,
+                        is_empire: !alliance,
+                        ..rebellion_core::world::CapitalShipClass::default()
+                    });
+            let squadron = world
+                .fighter_classes
+                .insert(rebellion_core::world::FighterClass::default());
+            let mut manufacturing = ManufacturingState::new();
+            let gate = |world: &GameWorld, manufacturing: &ManufacturingState, at, player| {
+                order_gates(
+                    Some(MenuObject::Producer {
+                        system: at,
+                        area: rebellion_core::manufacturing::ProductionArea::Shipyard,
+                    }),
+                    world,
+                    &MissionState::new(),
+                    &MovementState::new(),
+                    &TroopTransportState::new(),
+                    &BlockadeState::new(),
+                    manufacturing,
+                    &rebellion_core::research::ResearchState::new(),
+                    player,
+                )
+                .rename
+            };
+            assert!(!gate(&world, &manufacturing, system, holder));
+
+            manufacturing.build(
+                system,
+                &QueueItem::new(
+                    rebellion_core::manufacturing::BuildableKind::CapitalShip(class),
+                    10,
+                ),
+                1,
+            );
+            manufacturing.build(
+                fighters,
+                &QueueItem::new(
+                    rebellion_core::manufacturing::BuildableKind::Fighter(squadron),
+                    4,
+                ),
+                1,
+            );
+            rebellion_core::manufacturing::seat_ordered_ships(&mut world, &mut manufacturing);
+            assert!(gate(&world, &manufacturing, system, holder), "{holder:?}");
+            assert!(!gate(&world, &manufacturing, system, other), "{holder:?}");
+            assert!(
+                !gate(&world, &manufacturing, fighters, holder),
+                "{holder:?}"
+            );
+
+            let (fleet, index) = band_rename_target(
+                &world,
+                &manufacturing,
+                system,
+                rebellion_core::manufacturing::ProductionArea::Shipyard,
+                alliance,
+            )
+            .unwrap();
+            assert_eq!(world.ship_name(fleet, index), Some("Death Star 1"));
+            assert!(!world.fleets[fleet].capital_ships[index].completed);
+            // The other side's player names nothing there.
+            assert_eq!(
+                band_rename_target(
+                    &world,
+                    &manufacturing,
+                    system,
+                    rebellion_core::manufacturing::ProductionArea::Shipyard,
+                    !alliance,
+                ),
+                None
+            );
+        }
+    }
+
+    #[test]
     fn a_fleet_icons_move_is_enabled_only_where_its_side_has_fleets() {
         // FUN_0051d990 asks each order's +0x18; Move on the fleet icon
         // (kind 0x10) needs a team (FUN_0053c4b0) that may all move.
@@ -23107,6 +26322,7 @@ mod fleet_move_tests {
                 &MissionState::new(),
                 &MovementState::new(),
                 &TroopTransportState::new(),
+                &BlockadeState::new(),
                 &ManufacturingState::new(),
                 &rebellion_core::research::ResearchState::new(),
                 MissionFaction::Alliance,
@@ -23121,12 +26337,25 @@ mod fleet_move_tests {
     fn one_refused_fleet_keeps_the_whole_team_home() {
         // FUN_0053c1a0 runs every sub-order's validator; FUN_00487c90 reports
         // the refusal and nothing departs.
-        let (mut world, fleets, destination) = world_with_two_fleets();
-        world.fleets[fleets[1]].capital_ships.clear();
-        let issued = issue(&world, &fleets, false, destination);
-        assert!(issued.actions.is_empty());
-        assert!(!issued.confirmation.is_open());
-        assert_eq!(issued.log.messages().len(), 1);
+        // An empty fleet has no speed (FUN_00555920 → FUN_004fd900: 1/0x18),
+        // and the refusal shows no text.
+        for faction in [MissionFaction::Alliance, MissionFaction::Empire] {
+            let (mut world, fleets, destination) = world_with_two_fleets();
+            sided(&mut world, &fleets, faction);
+            world.fleets[fleets[1]].capital_ships.clear();
+            let issued = issue_as(
+                &world,
+                &fleets,
+                false,
+                ReleaseTarget::System(destination),
+                faction,
+            );
+            assert!(
+                matches!(issued.actions[..], [PanelAction::AdvisorRefusal((1, 0x18))]),
+                "{faction:?}"
+            );
+            assert!(!issued.confirmation.is_open());
+        }
     }
 }
 
@@ -23142,5 +26371,2272 @@ mod launch_mute_tests {
         for off in ["", "0", "false", "no", "off", "muted"] {
             assert!(!env_flag_on(off), "{off:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod release_message_tests {
+    use super::*;
+    use rebellion_core::ids::DatId;
+    use rebellion_core::world::Character;
+    use std::collections::HashMap;
+
+    /// The shipped TEXTSTRA entries `0x715c`-`0x715f`.
+    fn templates() -> rebellion_data::text_templates::TextTemplates {
+        let entries: HashMap<u16, &str> = [
+            (0x715c, "|\u{1}\u{1}\0\0\0 Escaped\u{1}"),
+            (
+                0x715d,
+                "|\u{1}\u{1}\0\0\0 escaped from the |\u{3}\u{1}\0\0\0 at |\u{2}\u{1}\0\0\0.\u{1}",
+            ),
+            (0x715e, "|\u{1}\u{1}\0\0\0 Escaped\u{1}"),
+            (
+                0x715f,
+                "|\u{1}\u{1}\0\0\0 has escaped from imprisonment at |\u{2}\u{1}\0\0\0.\u{1}",
+            ),
+        ]
+        .into_iter()
+        .collect();
+        rebellion_data::text_templates::TextTemplates::from_json(
+            &serde_json::to_vec(&entries).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn an_escape_without_its_textstra_entries_files_nothing() {
+        // FUN_00490340's text is TEXTSTRA 0x715c-0x715f alone.
+        let empty = rebellion_data::text_templates::TextTemplates::default();
+        for is_alliance in [true, false] {
+            let mut world = GameWorld::default();
+            let minor = world.characters.insert(Character {
+                name: "Agent".into(),
+                is_alliance,
+                is_empire: !is_alliance,
+                ..Character::default()
+            });
+            assert!(release_messages(&world, &empty, 9, minor, "Kessel", 0).is_empty());
+        }
+    }
+
+    #[test]
+    fn an_escapee_s_own_side_hears_its_voice_line_and_the_other_side_none() {
+        // FUN_00490340.c:207-244: case 1 (own side) draws +0x32 for a
+        // major from 0xf6, 0xe2, 0xce or 0xd8 (Luke, +0xb0 bit 3), 0xec,
+        // 0x10a, 0x100; case 2 (the other side) sets none.
+        for (record, untrained, trained) in [
+            (0x240, 0xf6, 0xf6),
+            (0x241, 0xe2, 0xe2),
+            (0x242, 0xce, 0xd8),
+            (0x243, 0xec, 0xec),
+            (0x280, 0x10a, 0x10a),
+            (0x281, 0x100, 0x100),
+        ] {
+            let is_alliance = record < 0x280;
+            let mut world = GameWorld::default();
+            let major = world.characters.insert(Character {
+                name: "Major".into(),
+                dat_id: DatId::new(0x3000_0000 | record),
+                is_major: true,
+                is_alliance,
+                is_empire: !is_alliance,
+                ..Character::default()
+            });
+            assert_eq!(
+                [false, true].map(|luke| major_voice_list(&world, major, luke, RELEASE_VOICES)),
+                [Some(untrained), Some(trained)],
+                "{record:#x}"
+            );
+            let voices: Vec<(u16, RailAudience)> =
+                release_messages(&world, &templates(), 9, major, "Kessel", 1358)
+                    .iter()
+                    .map(|message| (message.display.as_ref().unwrap().voice, message.audience))
+                    .collect();
+            assert_eq!(
+                voices,
+                [
+                    (1358, RailAudience::side(is_alliance)),
+                    (0, RailAudience::side(!is_alliance))
+                ],
+                "{record:#x}"
+            );
+        }
+        let mut world = GameWorld::default();
+        let minor = world.characters.insert(Character::default());
+        assert_eq!(major_voice_list(&world, minor, false, RELEASE_VOICES), None);
+    }
+
+    #[test]
+    fn a_release_files_its_own_and_the_other_sides_escape_message() {
+        // FUN_00490340 on notification 0x1e0: the native side reads
+        // 0x715c/0x715d with the captor, the other 0x715e/0x715f; picture
+        // 0x405, sound 0x469; a minor's code 0x15 own, 0x24 other.
+        for is_alliance in [true, false] {
+            let mut world = GameWorld::default();
+            let minor = world.characters.insert(Character {
+                name: "Agent".into(),
+                is_alliance,
+                is_empire: !is_alliance,
+                ..Character::default()
+            });
+
+            let messages = release_messages(&world, &templates(), 9, minor, "Kessel", 0);
+
+            let captor = if is_alliance { "Empire" } else { "Alliance" };
+            let shown: Vec<(String, String, Option<u8>, RailAudience)> = messages
+                .iter()
+                .map(|message| {
+                    let display = message.display.as_ref().unwrap();
+                    assert_eq!((display.background, display.sound), (0x405, 0x469));
+                    (
+                        display.title.clone(),
+                        display.body.clone(),
+                        message.advice,
+                        message.audience,
+                    )
+                })
+                .collect();
+            assert_eq!(
+                shown,
+                [
+                    (
+                        "Agent Escaped".to_owned(),
+                        format!("Agent escaped from the {captor} at Kessel."),
+                        Some(0x15),
+                        RailAudience::side(is_alliance),
+                    ),
+                    (
+                        "Agent Escaped".to_owned(),
+                        "Agent has escaped from imprisonment at Kessel.".to_owned(),
+                        Some(0x24),
+                        RailAudience::side(!is_alliance),
+                    ),
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn a_majors_release_carries_its_own_code_and_another_majors_none() {
+        // FUN_00490340.c:207-244: Han Solo (0x241) 0x18 for both sides; a
+        // major outside the six is unset.
+        let mut world = GameWorld::default();
+        let han = world.characters.insert(Character {
+            dat_id: DatId::new(0x3000_0241),
+            is_alliance: true,
+            is_major: true,
+            ..Character::default()
+        });
+        let other = world.characters.insert(Character {
+            dat_id: DatId::new(0x3000_0250),
+            is_alliance: true,
+            is_major: true,
+            ..Character::default()
+        });
+        assert_eq!(
+            [true, false].map(|own| escape_advice(&world, han, own)),
+            [Some(0x18); 2]
+        );
+        assert_eq!(
+            [true, false].map(|own| escape_advice(&world, other, own)),
+            [None; 2]
+        );
+    }
+}
+
+#[cfg(test)]
+mod mission_end_message_tests {
+    use super::*;
+    use rebellion_core::ids::{DatId, SystemKey};
+    use rebellion_core::missions::MissionEnded;
+    use rebellion_core::world::{Character, ControlKind, System};
+    use std::collections::HashMap;
+
+    /// The shipped TEXTSTRA entries `0x70e6`, `0x70e7`, `0x7138`-`0x7145`
+    /// and `0x7148`-`0x714b`.
+    fn templates() -> rebellion_data::text_templates::TextTemplates {
+        let entries: HashMap<u16, &str> = [
+            (0x70e6, "\nPersonnel are returning to |\u{1}\u{1}\0\0\0.\u{1}"),
+            (0x70e7, "\nAll personnel assigned to the mission have failed to return.\u{1}"),
+            (0x7138, "|\u{1}\u{1}\0\0\0 Mission Failed\u{1}"),
+            (0x7139, "My |\u{2}\u{1}\0\0\0 Mission to |\u{3}\u{1}\0\0\0 has failed because the target was not found at that location.  \u{1}"),
+            (0x713a, "|\u{2}\u{1}\0\0\0 Mission Failed\u{1}"),
+            (0x713b, "The |\u{2}\u{1}\0\0\0 Mission to |\u{3}\u{1}\0\0\0 has failed because the target was not found at that location.  \u{1}"),
+            (0x713c, "My |\u{2}\u{1}\0\0\0 Mission to |\u{3}\u{1}\0\0\0 has failed because we have no research facilities at that location.\u{1}"),
+            (0x713d, "The |\u{2}\u{1}\0\0\0 Mission to |\u{3}\u{1}\0\0\0 has failed because we have no research facilities at that location.  \u{1}"),
+            (0x713e, "Enemy Mission Foiled\u{1}"),
+            (0x713f, "An enemy |\u{1}\u{1}\0\0\0 mission to |\u{2}\u{1}\0\0\0 has been foiled by our forces.\u{1}"),
+            (0x7140, "|\u{1}\u{1}\0\0\0 Mission Aborted\u{1}"),
+            (0x7141, "My |\u{2}\u{1}\0\0\0 mission to |\u{3}\u{1}\0\0\0 has been aborted because the system has joined the |\u{4}\u{1}\0\0\0.  \u{1}"),
+            (0x7142, "|\u{2}\u{1}\0\0\0 Mission Aborted.\u{1}"),
+            (0x7143, "The |\u{2}\u{1}\0\0\0 mission to |\u{3}\u{1}\0\0\0 has been aborted because the system has joined the |\u{4}\u{1}\0\0\0.  \u{1}"),
+            (0x7144, "My |\u{2}\u{1}\0\0\0 mission to |\u{3}\u{1}\0\0\0 has been aborted because the system has declared neutrality.\u{1}"),
+            (0x7145, "The |\u{2}\u{1}\0\0\0 mission to |\u{3}\u{1}\0\0\0 has been aborted because the system has declared neutrality.\u{1}"),
+            (0x7148, "|\u{1}\u{1}\0\0\0 Mission Foiled\u{1}"),
+            (0x7149, "My |\u{2}\u{1}\0\0\0 mission to |\u{3}\u{1}\0\0\0 has been foiled by opposing forces.  \u{1}"),
+            (0x714a, "|\u{2}\u{1}\0\0\0 Mission Foiled\u{1}"),
+            (0x714b, "The |\u{2}\u{1}\0\0\0 mission to |\u{3}\u{1}\0\0\0 has been foiled by opposing forces.  \u{1}"),
+        ]
+        .into_iter()
+        .collect();
+        rebellion_data::text_templates::TextTemplates::from_json(
+            &serde_json::to_vec(&entries).unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// A world with the target system Coruscant held by `holder`, and a
+    /// `side` agent there: a minor (MNCHARSD 832) or Han Solo (MJCHARSD
+    /// 579). port: test fixture values, not rules.
+    fn world_with(
+        is_alliance: bool,
+        major: bool,
+        holder: ControlKind,
+    ) -> (GameWorld, SystemKey, CharacterKey) {
+        let mut world = GameWorld::default();
+        let target = world.systems.insert(System {
+            name: "Coruscant".into(),
+            control: holder,
+            ..System::default()
+        });
+        let agent = world.characters.insert(Character {
+            name: if major { "Han Solo" } else { "Agent" }.into(),
+            dat_id: DatId::new(if major { 0x3000_0243 } else { 0x3800_0340 }),
+            is_major: major,
+            is_alliance,
+            is_empire: !is_alliance,
+            current_system: Some(target),
+            ..Character::default()
+        });
+        (world, target, agent)
+    }
+
+    fn ended(
+        kind: MissionKind,
+        is_alliance: bool,
+        end_code: u8,
+        target: SystemKey,
+        lead: MissionMember,
+    ) -> MissionEnded {
+        MissionEnded {
+            mission_id: 42,
+            kind,
+            faction: if is_alliance {
+                MissionFaction::Alliance
+            } else {
+                MissionFaction::Empire
+            },
+            end_code,
+            tick: 467,
+            ordered_tick: 420,
+            rolls: 0,
+            team: vec![lead],
+            captured: Vec::new(),
+            origin: None,
+            set_out_from: None,
+            target_system: target,
+            lead: Some(lead),
+            result: 0,
+        }
+    }
+
+    /// Each filed message as (title, body, background, overlay, sound,
+    /// advice, audience).
+    fn shown(
+        messages: &[GameMessage],
+    ) -> Vec<(String, String, u16, u16, u16, Option<u8>, RailAudience)> {
+        messages
+            .iter()
+            .map(|message| {
+                let display = message.display.as_ref().unwrap();
+                assert_eq!(message.rail, Some(MessageRail::Mission));
+                (
+                    display.title.clone(),
+                    display.body.clone(),
+                    display.background,
+                    display.overlay,
+                    display.sound,
+                    message.advice,
+                    message.audience,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_detected_mission_is_foiled_for_its_side_and_for_the_defender() {
+        // FUN_00491500 on 0x1f1, codes 3 and 4: the lead's side reads
+        // 0x714a/0x714b (a minor speaks of "The" mission), picture
+        // 0x416/0x417 with the lead's portrait over it (FUN_004c5000:
+        // MNCHARSD 832 is STRATEGY 6720), sound 0x480, code 0x15, then
+        // 0x70e6; the defender reads 0x713e/0x713f, picture 0x431/0x432,
+        // sound 0x47c/0x47d (FUN_00491500.c:87-105, FUN_00547f60.c:71-95).
+        for (is_alliance, code) in [(true, 4), (false, 3)] {
+            let (world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let ended = ended(
+                MissionKind::Sabotage,
+                is_alliance,
+                code,
+                target,
+                MissionMember::Character(agent),
+            );
+
+            let messages = mission_end_messages(&world, &templates(), &ended, Some("Yavin"), 0);
+
+            let (own, other) = (u16::from(!is_alliance), u16::from(is_alliance));
+            assert_eq!(
+                shown(&messages),
+                [
+                    (
+                        "Sabotage Mission Foiled".to_owned(),
+                        "The Sabotage mission to Coruscant has been foiled by opposing forces.  \nPersonnel are returning to Yavin.".to_owned(),
+                        0x416 + own,
+                        6720,
+                        0x480,
+                        Some(0x15),
+                        RailAudience::side(is_alliance),
+                    ),
+                    (
+                        "Enemy Mission Foiled".to_owned(),
+                        "An enemy Sabotage mission to Coruscant has been foiled by our forces.".to_owned(),
+                        0x431 + other,
+                        0,
+                        0x47c + other,
+                        None,
+                        RailAudience::side(!is_alliance),
+                    ),
+                ],
+                "{is_alliance}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_major_lead_speaks_in_the_first_person_and_only_its_side_hears_a_resignation() {
+        // Code 5 (every member resigned) is foiled for the mission's side
+        // alone; Han Solo (0x30 family) titles it 0x7148 by name, writes
+        // 0x7149, shows his portrait (STRATEGY 6211) and carries his code
+        // 0x19; with no one left free the body ends with 0x70e7.
+        for is_alliance in [true, false] {
+            let (world, target, agent) =
+                world_with(is_alliance, true, ControlKind::Controlled(Faction::Empire));
+            let ended = ended(
+                MissionKind::DeathStarSabotage,
+                is_alliance,
+                5,
+                target,
+                MissionMember::Character(agent),
+            );
+
+            let messages = mission_end_messages(&world, &templates(), &ended, None, 0);
+
+            assert_eq!(
+                shown(&messages),
+                [(
+                    "Han Solo Mission Foiled".to_owned(),
+                    "My Death Star Sabotage mission to Coruscant has been foiled by opposing forces.  \nAll personnel assigned to the mission have failed to return.".to_owned(),
+                    0x416 + u16::from(!is_alliance),
+                    6211,
+                    0x480,
+                    Some(0x19),
+                    RailAudience::side(is_alliance),
+                )],
+                "{is_alliance}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_lost_target_fails_the_mission_except_for_research_which_fails_on_its_facilities() {
+        // Codes 6, 7, 9 and 10 read 0x713a/0x713b (none for family 0x53,
+        // Research); code 0xc reads 0x713a/0x713d for Research alone; base
+        // picture 0x412/0x413, sound 0x47c/0x47d; codes 1, 2 and 0xb file
+        // nothing (FUN_00491500.c:301-306, :376-386, :566-640).
+        let research = MissionKind::Research(rebellion_core::research::TechType::Ship);
+        for is_alliance in [true, false] {
+            let (world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let lead = MissionMember::Character(agent);
+            let side = u16::from(!is_alliance);
+            let titles = |kind, code| {
+                shown(&mission_end_messages(
+                    &world,
+                    &templates(),
+                    &ended(kind, is_alliance, code, target, lead),
+                    Some("Yavin"),
+                    0,
+                ))
+                .into_iter()
+                .map(|(title, body, background, _, sound, _, _)| (title, body, background, sound))
+                .collect::<Vec<_>>()
+            };
+            let failed = |name: &str, why: &str| {
+                vec![(
+                    format!("{name} Mission Failed"),
+                    format!("The {name} Mission to Coruscant has failed because {why}\nPersonnel are returning to Yavin."),
+                    0x412 + side,
+                    0x47c + side,
+                )]
+            };
+            for code in [6, 7, 9, 10] {
+                assert_eq!(
+                    titles(MissionKind::Espionage, code),
+                    failed("Espionage", "the target was not found at that location.  "),
+                    "{is_alliance} {code}"
+                );
+                assert!(titles(research, code).is_empty(), "{is_alliance} {code}");
+            }
+            assert_eq!(
+                titles(research, 0xc),
+                failed(
+                    "Ship Design Research",
+                    "we have no research facilities at that location.  "
+                )
+            );
+            for code in [0, 1, 2, 0xb, 0xd, 0x10] {
+                assert!(titles(MissionKind::Espionage, code).is_empty(), "{code}");
+            }
+            assert!(titles(MissionKind::Espionage, 0xc).is_empty());
+        }
+    }
+
+    #[test]
+    fn a_target_that_changes_sides_aborts_the_mission_naming_its_new_holder() {
+        // Code 8: 0x7142 with 0x7143 "has joined the {side}" for the new
+        // holder (FUN_004f3dd0), or 0x7145 when the system declared
+        // neutrality (owner bits 3) (FUN_00491500.c:452-563).
+        for is_alliance in [true, false] {
+            for (holder, ending) in [
+                (
+                    ControlKind::Controlled(Faction::Alliance),
+                    "has joined the Alliance.  ",
+                ),
+                (
+                    ControlKind::Controlled(Faction::Empire),
+                    "has joined the Empire.  ",
+                ),
+                (ControlKind::Uncontrolled, "has declared neutrality."),
+            ] {
+                let (world, target, agent) = world_with(is_alliance, false, holder);
+                let messages = mission_end_messages(
+                    &world,
+                    &templates(),
+                    &ended(
+                        MissionKind::Diplomacy,
+                        is_alliance,
+                        8,
+                        target,
+                        MissionMember::Character(agent),
+                    ),
+                    Some("Yavin"),
+                    0,
+                );
+                let display = messages[0].display.as_ref().unwrap();
+                assert_eq!(
+                    (messages.len(), display.title.as_str(), display.body.clone()),
+                    (
+                        1,
+                        "Diplomacy Mission Aborted.",
+                        format!("The Diplomacy mission to Coruscant has been aborted because the system {ending}\nPersonnel are returning to Yavin.")
+                    ),
+                    "{is_alliance} {holder:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_outcome_s_result_a_hidden_record_or_a_move_files_no_end_message() {
+        // FUN_00488de0.c:317-330 gives notification 0x1f1 its class (0x17)
+        // only for a mission outside families 0x40-0x4f whose record is not
+        // hidden (FUN_00520b70) and whose result +0x60 is 0.
+        for is_alliance in [true, false] {
+            let (mut world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let lead = MissionMember::Character(agent);
+            let filed = |world: &GameWorld, ended: &MissionEnded| {
+                mission_end_messages(world, &templates(), ended, Some("Yavin"), 0).len()
+            };
+            let foiled = ended(MissionKind::Sabotage, is_alliance, 4, target, lead);
+            assert_eq!(filed(&world, &foiled), 2);
+            let resolved = MissionEnded {
+                result: 3,
+                ..foiled.clone()
+            };
+            assert_eq!(filed(&world, &resolved), 0, "{is_alliance}");
+            let moved = ended(MissionKind::Move, is_alliance, 6, target, lead);
+            assert_eq!(filed(&world, &moved), 0, "{is_alliance}");
+            world.mission_records = vec![rebellion_core::world::MissionRecord {
+                dat_id: MissionKind::Sabotage.record_id().unwrap(),
+                timer_min_days: 1,
+                timer_spread_days: 2,
+                repeats: false,
+                hidden: true,
+                detection_phases: true,
+                can_resign: true,
+                return_policy: 1,
+                rules: Default::default(),
+                members: Default::default(),
+            }];
+            assert_eq!(filed(&world, &foiled), 0, "{is_alliance}");
+        }
+    }
+
+    #[test]
+    fn the_end_message_opens_its_free_lead_and_the_defender_s_opens_the_system() {
+        // FUN_00491500.c:128-137: the subject key +0x5c is the lead unless
+        // it is a prisoner (+0xac bit 0), else the target location; the
+        // defender's is the location (:84).
+        for is_alliance in [true, false] {
+            let (mut world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let lead = MissionMember::Character(agent);
+            let foiled = ended(MissionKind::Sabotage, is_alliance, 4, target, lead);
+            let targets = |world: &GameWorld| {
+                mission_end_messages(world, &templates(), &foiled, Some("Yavin"), 0)
+                    .iter()
+                    .map(|message| message.target)
+                    .collect::<Vec<_>>()
+            };
+
+            assert_eq!(
+                targets(&world),
+                [
+                    Some(MessageTarget::Personnel(lead)),
+                    Some(MessageTarget::System(target))
+                ],
+                "{is_alliance}"
+            );
+            world.characters[agent].is_captive = true;
+            assert_eq!(
+                targets(&world),
+                [
+                    Some(MessageTarget::System(target)),
+                    Some(MessageTarget::System(target))
+                ],
+                "{is_alliance}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_personnel_display_opens_its_fleet_its_mission_or_its_system_s_defenses() {
+        // FUN_00429440, families 0x30-0x3f: a ship parent opens the Fleet
+        // window (kind 4); a system parent opens kind 11 while the object's
+        // mission is not hidden (FUN_00520b70), else kind 10; an abode
+        // (0x98) opens nothing.
+        use rebellion_core::world::{Abode, Fleet, SpecialForceUnit};
+        for is_alliance in [true, false] {
+            let (mut world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let movement = MovementState::new();
+            let member = MissionMember::Character(agent);
+            let open = |world: &GameWorld, member| personnel_window(world, &movement, member);
+
+            assert_eq!(open(&world, member), Some((target, FinderTarget::Defenses)));
+            world.characters[agent].on_mission = true;
+            assert_eq!(
+                open(&world, member),
+                Some((target, FinderTarget::Missions(member)))
+            );
+            world.characters[agent].on_hidden_mission = true;
+            assert_eq!(open(&world, member), Some((target, FinderTarget::Defenses)));
+            let fleet = world.fleets.insert(Fleet {
+                location: target,
+                is_alliance,
+                ..Fleet::default()
+            });
+            world.characters[agent].current_fleet = Some(fleet);
+            assert_eq!(
+                open(&world, member),
+                Some((target, FinderTarget::Fleet(fleet)))
+            );
+            let jailed = &mut world.characters[agent];
+            jailed.current_fleet = None;
+            jailed.current_system = None;
+            jailed.is_captive = true;
+            jailed.abode = Some(Abode::jail_of(!is_alliance));
+            assert_eq!(open(&world, member), None);
+
+            let unit = world.special_forces.insert(SpecialForceUnit {
+                is_alliance,
+                ..SpecialForceUnit::default()
+            });
+            world.systems[target].special_forces.push(unit);
+            let unit = MissionMember::SpecialForce(unit);
+            assert_eq!(open(&world, unit), Some((target, FinderTarget::Defenses)));
+            if let MissionMember::SpecialForce(key) = unit {
+                world.special_forces[key].on_mission = true;
+            }
+            assert_eq!(
+                open(&world, unit),
+                Some((target, FinderTarget::Missions(unit)))
+            );
+        }
+    }
+
+    #[test]
+    fn a_special_force_lead_shows_its_own_picture_unless_the_mission_is_foiled() {
+        // FUN_00491500.c:285-313: a lead outside 0x30-0x3b puts
+        // FUN_004c5000's id in the background +0x2e, (SPECFCSD TEXTSTRA id
+        // & 0xfff) + 0x1000 (FUN_004f63d0): STRATEGY 0x1540 for record 1,
+        // 0x1584 for record 9; codes 3-5 replace it with 0x416/0x417 (no
+        // Reconnaissance kind). No overlay and no advice code.
+        use rebellion_core::world::{BuildableClass, SpecialForceUnit};
+        for (is_alliance, record, picture) in [(true, 1, 0x1540), (false, 9, 0x1584)] {
+            let (mut world, target, _) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let class = DatId::new(0x3c00_0000 | record);
+            world.buildable_classes.insert(
+                class,
+                BuildableClass {
+                    name: "Commandos".into(),
+                    ..BuildableClass::default()
+                },
+            );
+            let unit = world.special_forces.insert(SpecialForceUnit {
+                class_dat_id: class,
+                is_alliance,
+                ..SpecialForceUnit::default()
+            });
+            world.systems[target].special_forces.push(unit);
+            let lead = MissionMember::SpecialForce(unit);
+            let shown = |code| {
+                let messages = mission_end_messages(
+                    &world,
+                    &templates(),
+                    &ended(MissionKind::Espionage, is_alliance, code, target, lead),
+                    Some("Yavin"),
+                    0,
+                );
+                let display = messages[0].display.clone().unwrap();
+                (
+                    display.title,
+                    display.background,
+                    display.overlay,
+                    messages[0].advice,
+                )
+            };
+
+            assert_eq!(
+                shown(6),
+                ("Espionage Mission Failed".to_owned(), picture, 0, None),
+                "{is_alliance}"
+            );
+            assert_eq!(
+                shown(4),
+                (
+                    "Espionage Mission Foiled".to_owned(),
+                    0x416 + u16::from(!is_alliance),
+                    0,
+                    None
+                ),
+                "{is_alliance}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_picture_strategy_lacks_reads_its_encybmap_edata_file() {
+        // FUN_0046a280 -> FUN_0045f970: ENCYBMAP's string for the id names
+        // the EDATA file (the W4 fixture maps 5952 to EDATA.014).
+        let session = crate::encyclopedia_surface::fixture::fixture_session().unwrap();
+        let expected = session.artwork_bytes("EDATA.014").map(<[u8]>::to_vec);
+        assert!(expected.is_some());
+        assert_eq!(encyclopedia_picture(Some(&session), 5952), expected);
+        assert_eq!(encyclopedia_picture(Some(&session), 5440), None);
+        assert_eq!(encyclopedia_picture(None, 5952), None);
+    }
+
+    #[test]
+    fn a_major_lead_s_voice_list_is_its_own_and_a_trained_luke_s_differs() {
+        // FUN_00491500.c:214-256 draws +0x32 through FUN_004c4990 from
+        // 0xf3 (0x240), 0xdf (0x241), 0xcb or 0xd5 by +0xb0 bit 3 (0x242),
+        // 0xe9 (0x243), 0x107 (0x280), 0xfd (0x281); minors have none.
+        for (record, untrained, trained) in [
+            (0x240, 0xf3, 0xf3),
+            (0x241, 0xdf, 0xdf),
+            (0x242, 0xcb, 0xd5),
+            (0x243, 0xe9, 0xe9),
+            (0x280, 0x107, 0x107),
+            (0x281, 0xfd, 0xfd),
+        ] {
+            let is_alliance = record < 0x280;
+            let (mut world, target, agent) =
+                world_with(is_alliance, true, ControlKind::Controlled(Faction::Empire));
+            world.characters[agent].dat_id = DatId::new(0x3000_0000 | record);
+            let ended = ended(
+                MissionKind::Sabotage,
+                is_alliance,
+                4,
+                target,
+                MissionMember::Character(agent),
+            );
+            assert_eq!(
+                [false, true].map(|luke| mission_end_voice_list(&world, &ended, luke)),
+                [Some(untrained), Some(trained)],
+                "{record:#x}"
+            );
+        }
+        for is_alliance in [true, false] {
+            let (world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let ended = ended(
+                MissionKind::Sabotage,
+                is_alliance,
+                4,
+                target,
+                MissionMember::Character(agent),
+            );
+            assert_eq!(mission_end_voice_list(&world, &ended, true), None);
+        }
+    }
+
+    #[test]
+    fn the_voice_line_goes_with_the_mission_s_own_message_only() {
+        // FUN_00491500 sets +0x32 on the lead's side; the defender's
+        // "Enemy Mission Foiled" (:87-105) has none.
+        for is_alliance in [true, false] {
+            let (world, target, agent) =
+                world_with(is_alliance, true, ControlKind::Controlled(Faction::Empire));
+            let ended = ended(
+                MissionKind::Sabotage,
+                is_alliance,
+                4,
+                target,
+                MissionMember::Character(agent),
+            );
+            let voices: Vec<u16> =
+                mission_end_messages(&world, &templates(), &ended, Some("Yavin"), 1358)
+                    .iter()
+                    .map(|message| message.display.as_ref().unwrap().voice)
+                    .collect();
+            assert_eq!(voices, [1358, 0], "{is_alliance}");
+        }
+    }
+
+    #[test]
+    fn a_message_starts_each_non_zero_wave_and_its_voice_from_the_player_s_sprite_dll() {
+        // FUN_00469de0: +0x30 from module 7 and +0x32 from module 9 (the
+        // player's ALSPRITE or EMSPRITE), each only when non-zero.
+        for (faction, dll) in [
+            (AdvisorFaction::Alliance, "alsprite-dll"),
+            (AdvisorFaction::Empire, "emsprite-dll"),
+        ] {
+            let advisor = AdvisorState::new(faction);
+            let waves = |sound, voice| message_waves(MessageSounds { sound, voice }, &advisor);
+            assert_eq!(
+                waves(0x480, 1358),
+                (Some(0x480), Some(format!("{dll}/1358")))
+            );
+            assert_eq!(waves(0, 0), (None, None));
+            assert_eq!(waves(0x47c, 0), (Some(0x47c), None));
+            assert_eq!(waves(0, 1387), (None, Some(format!("{dll}/1387"))));
+        }
+    }
+
+    #[test]
+    fn showing_a_message_stops_the_last_waves_and_plays_its_sound_and_voice() {
+        // FUN_00469de0: FUN_0046a6e0 stops both waves, then +0x30 plays
+        // from module 7 and +0x32 from module 9 when non-zero.
+        let mut log = MessageLog::default();
+        let voiced = log.push(
+            GameMessage::new(1, "Foiled", MessageCategory::Mission).with_display(MessageDisplay {
+                sound: 0x480,
+                voice: 1358,
+                ..MessageDisplay::default()
+            }),
+        );
+        let plain = log.push(GameMessage::new(1, "Plain", MessageCategory::Mission));
+        let mut clock = GameClock::new();
+        let shown = |log: &mut MessageLog, clock: &mut GameClock, id| {
+            let mut sounds = None;
+            apply_message_index_actions(
+                vec![MessageIndexAction::MessageDisplayed(id)],
+                log,
+                clock,
+                &mut None,
+                &mut sounds,
+            );
+            sounds
+        };
+
+        assert_eq!(
+            shown(&mut log, &mut clock, voiced),
+            Some(MessageSounds {
+                sound: 0x480,
+                voice: 1358
+            })
+        );
+        assert_eq!(
+            shown(&mut log, &mut clock, plain),
+            Some(MessageSounds::default())
+        );
+    }
+
+    #[test]
+    fn a_mission_with_no_lead_or_no_text_files_nothing_for_its_side() {
+        // FUN_00491500.c:109-124 files the mission's side only with its
+        // lead's copy; the text is TEXTSTRA's alone.
+        for is_alliance in [true, false] {
+            let (mut world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let mut gone = ended(
+                MissionKind::Sabotage,
+                is_alliance,
+                5,
+                target,
+                MissionMember::Character(agent),
+            );
+            let empty = rebellion_data::text_templates::TextTemplates::default();
+            assert!(mission_end_messages(&world, &empty, &gone, None, 0).is_empty());
+            world.characters[agent].mark_killed();
+            assert!(mission_end_messages(&world, &templates(), &gone, None, 0).is_empty());
+            gone.lead = None;
+            assert!(mission_end_messages(&world, &templates(), &gone, None, 0).is_empty());
+        }
+    }
+
+    #[test]
+    fn personnel_return_to_their_return_s_system_else_where_they_stand() {
+        // FUN_00491500.c:141-195: the first finished member still alive
+        // and free names the system or fleet it is a child of; the port's
+        // queued Return names its destination.
+        for is_alliance in [true, false] {
+            let (mut world, target, agent) =
+                world_with(is_alliance, false, ControlKind::Controlled(Faction::Empire));
+            let home = world.systems.insert(System {
+                name: "Yavin".into(),
+                ..System::default()
+            });
+            let prisoner = world.characters.insert(Character {
+                name: "Prisoner".into(),
+                is_alliance,
+                is_empire: !is_alliance,
+                is_captive: true,
+                current_system: Some(target),
+                ..Character::default()
+            });
+            let team = vec![
+                MissionMember::Character(prisoner),
+                MissionMember::Character(agent),
+            ];
+            let mut ended = ended(MissionKind::Sabotage, is_alliance, 4, target, team[1]);
+            ended.team = team;
+            let mut missions = MissionState::new();
+
+            assert_eq!(
+                mission_returning_place(&world, &missions, &ended, &[]),
+                Some("Coruscant".to_owned())
+            );
+
+            let id = missions.dispatch(rebellion_core::missions::MissionRequest::single(
+                MissionKind::Move,
+                ended.faction,
+                agent,
+                home,
+                None,
+                467,
+            ));
+            assert_eq!(
+                mission_returning_place(&world, &missions, &ended, &[id]),
+                Some("Yavin".to_owned())
+            );
+            assert_eq!(
+                mission_returning_place(&world, &missions, &ended, &[]),
+                Some("Coruscant".to_owned())
+            );
+
+            world.characters[agent].is_captive = true;
+            assert_eq!(
+                mission_returning_place(&world, &missions, &ended, &[id]),
+                None
+            );
+        }
+    }
+}
+
+// The former tests below asserted ordering and focus through renderer-local
+// serials. Manager/RoutingSnapshot coverage replaces those duplicate rules.
+#[cfg(all(test, any()))]
+mod interface_restore_tests {
+    use super::*;
+    use rebellion_core::ids::DatId;
+    use rebellion_data::save::{SavedInterface, SavedWindow, SavedWindowKind};
+
+    /// A sector of three systems. port: test fixture values, not rules.
+    fn world() -> (GameWorld, [SystemKey; 4]) {
+        let mut world = GameWorld::default();
+        let sector = world.sectors.insert(rebellion_core::world::Sector {
+            dat_id: DatId::new(0x9200_0001),
+            ..rebellion_core::world::Sector::default()
+        });
+        let systems = [1, 2, 3, 4].map(|index| {
+            world.systems.insert(rebellion_core::world::System {
+                dat_id: DatId::new(0x9000_0000 + index),
+                sector,
+                ..rebellion_core::world::System::default()
+            })
+        });
+        world.sectors[sector].systems = systems.to_vec();
+        (world, systems)
+    }
+
+    struct Windows {
+        sectors: SectorWindowState,
+        systems: SystemWindowState,
+        fleets: FleetWindowState,
+        defenses: DefensesWindowState,
+        missions: MissionsWindowState,
+    }
+
+    impl Windows {
+        fn new() -> Self {
+            Self {
+                sectors: SectorWindowState::default(),
+                systems: SystemWindowState::default(),
+                fleets: FleetWindowState::default(),
+                defenses: DefensesWindowState::default(),
+                missions: MissionsWindowState::default(),
+            }
+        }
+
+        fn children(&self) -> Vec<(u64, GalaxyChild)> {
+            self.children_in(&strategic_windowing::StrategicWindowing::new().begin_frame())
+        }
+
+        fn children_in(
+            &self,
+            snapshot: &rebellion_windowing::RoutingSnapshot,
+        ) -> Vec<(u64, GalaxyChild)> {
+            galaxy_children(
+                &self.sectors,
+                &self.systems,
+                &self.defenses,
+                &self.missions,
+                &self.fleets,
+                snapshot,
+            )
+        }
+
+        fn saved(
+            &self,
+            world: &GameWorld,
+            cockpit: &rebellion_render::CockpitState,
+        ) -> SavedInterface {
+            saved_interface(
+                world,
+                cockpit,
+                &self.sectors,
+                &self.systems,
+                &self.fleets,
+                &self.defenses,
+                &self.missions,
+            )
+        }
+    }
+
+    fn fog(faction: CockpitFaction) -> FogState {
+        FogState::new(Faction::of_alliance(faction == CockpitFaction::Alliance))
+    }
+
+    /// In kind, the galaxy of Empire day-2 start played on to day 6 under
+    /// Wine: a sector window; from the bottom up a minimized System window,
+    /// a Defenses window, a minimized Defenses window, a Missions window and
+    /// a System window over them.
+    fn opened(world: &GameWorld, systems: [SystemKey; 4], faction: CockpitFaction) -> Windows {
+        let layout = rebellion_render::CockpitState::new(faction).layout_for(1280.0, 960.0);
+        let mut windows = Windows::new();
+        assert!(windows.sectors.open_for_system(world, systems[0], faction));
+        assert!(windows.systems.restore_saved(
+            world,
+            faction,
+            &SavedWindow {
+                kind: SavedWindowKind::System {
+                    system: DatId::new(0x9000_0002),
+                },
+                position: (90, 50),
+                shown: false,
+            },
+        ));
+        assert!(windows
+            .defenses
+            .open(world, systems[1], (100, 60), faction, layout));
+        // A minimized window keeps its place in the z-order.
+        assert!(windows
+            .defenses
+            .open(world, systems[2], (130, 75), faction, layout));
+        let serial = windows.defenses.focus_serial();
+        assert!(windows.defenses.close_window(systems[2]));
+        windows
+            .systems
+            .minimize_defenses_window_at(systems[2], (130, 75), serial);
+        assert!(windows.missions.open(
+            world,
+            &fog(faction),
+            &MissionState::new(),
+            systems[2],
+            (110, 70),
+            faction,
+            layout,
+        ));
+        assert!(windows
+            .systems
+            .open(world, systems[0], (120, 80), faction, layout));
+        windows
+    }
+
+    fn kinds(interface: &SavedInterface) -> Vec<(SavedWindowKind, bool)> {
+        interface
+            .windows
+            .iter()
+            .map(|window| (window.kind, window.shown))
+            .collect()
+    }
+
+    #[test]
+    fn a_save_keeps_every_window_from_the_bottom_of_the_z_order_up() {
+        // FUN_00440ea0 writes every child of the view from the bottom of
+        // the z-order up, a hidden one (+0x110 = 0) at its own place
+        // (FUN_00440ea0.c:19-24).
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = world();
+            let windows = opened(&world, systems, faction);
+            let cockpit = rebellion_render::CockpitState::new(faction);
+            let interface = windows.saved(&world, &cockpit);
+            assert_eq!(interface.gid_mode, Some(cockpit.gid_mode.command_id()));
+            let system = |id| SavedWindowKind::System {
+                system: DatId::new(id),
+            };
+            assert_eq!(
+                kinds(&interface),
+                [
+                    (
+                        SavedWindowKind::Sector {
+                            sector: DatId::new(0x9200_0001)
+                        },
+                        true
+                    ),
+                    (system(0x9000_0002), false),
+                    (
+                        SavedWindowKind::Defenses {
+                            system: DatId::new(0x9000_0002)
+                        },
+                        true
+                    ),
+                    (
+                        SavedWindowKind::Defenses {
+                            system: DatId::new(0x9000_0003)
+                        },
+                        false
+                    ),
+                    (
+                        SavedWindowKind::Missions {
+                            system: DatId::new(0x9000_0003)
+                        },
+                        true
+                    ),
+                    (system(0x9000_0001), true),
+                ],
+                "{faction:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_window_the_gid_menu_hides_saves_hidden_but_a_sector_stays_shown() {
+        // GID's slot +0x08 clears +0x110 on each child it hides. Under Wine
+        // a System window the menu hid came back on the rail, and the
+        // sector window it hid came back shown (Empire day-2 start, played
+        // on to day 8).
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = world();
+            let windows = opened(&world, systems, faction);
+            let mut cockpit = rebellion_render::CockpitState::new(faction);
+            cockpit.gid_ui.open_menu();
+            let shown: Vec<bool> = kinds(&windows.saved(&world, &cockpit))
+                .into_iter()
+                .map(|(_, shown)| shown)
+                .collect();
+            assert_eq!(
+                shown,
+                [true, false, false, false, false, false],
+                "{faction:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_load_rebuilds_the_saved_order_and_focuses_the_top_window() {
+        // FUN_00440f80 → FUN_00441190 rebuilds the windows bottom first,
+        // the rail's back on the rail and sectors at the bottom; the focus
+        // is the top shown window that is not a sector (Wine runs r, t1,
+        // t3, u and w1, empire-fleet-to-yaga-minor at day 38).
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = world();
+            let windows = opened(&world, systems, faction);
+            let cockpit = rebellion_render::CockpitState::new(faction);
+            let interface = windows.saved(&world, &cockpit);
+
+            let mut restored = Windows::new();
+            let mut strategic = strategic_windowing::StrategicWindowing::new();
+            restore_interface(
+                &interface.windows,
+                &world,
+                &fog(faction),
+                &MissionState::new(),
+                faction,
+                cockpit.layout_for(1280.0, 960.0),
+                RestoredWindows {
+                    sectors: &mut restored.sectors,
+                    systems: &mut restored.systems,
+                    fleets: &restored.fleets,
+                    defenses: &mut restored.defenses,
+                    missions: &mut restored.missions,
+                },
+                &mut strategic,
+            );
+            let hidden = finish_interface_restore(
+                &interface.windows,
+                &world,
+                &mut restored.systems,
+                &mut restored.defenses,
+                &mut restored.missions,
+                &mut restored.fleets,
+                &mut strategic,
+                &mut 0,
+            );
+            assert!(hidden.is_empty());
+
+            let order = |windows: &Windows| {
+                let mut children = windows.children();
+                children.sort_by_key(|(serial, _)| *serial);
+                children
+                    .into_iter()
+                    .map(|(_, child)| child)
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(order(&restored), order(&windows), "{faction:?}");
+            assert_eq!(restored.systems.rail_count(), 2);
+            assert_eq!(kinds(&restored.saved(&world, &cockpit)), kinds(&interface));
+            let focus = GalaxyFocusState::after_load(restored.children());
+            assert_eq!(
+                focus.focus,
+                GalaxyFocus::Child(GalaxyChild::System(systems[0]))
+            );
+        }
+    }
+
+    /// Commit the manager's pending opens as the frame's end does: publish
+    /// each Fleet window and note its activation.
+    fn commit_fleets(
+        strategic: &mut strategic_windowing::StrategicWindowing,
+        fleets: &mut FleetWindowState,
+    ) {
+        for mut applied in strategic.apply_pending() {
+            let (Some(prepared), Some(id), Ok(commit)) = (
+                applied.prepared_fleet.take(),
+                applied.fleet_content_id,
+                applied.result.as_ref(),
+            ) else {
+                continue;
+            };
+            assert_eq!(fleets.commit_open(prepared, &commit.transition), Some(id));
+            assert!(strategic.acknowledge_fleet_publication(id));
+            fleets.note_activation(id);
+        }
+    }
+
+    #[test]
+    fn a_fleet_window_saved_on_top_comes_back_in_front_with_the_keyboard() {
+        // FUN_00441190 makes the saved windows bottom first, each above the
+        // last, and the top shown one takes the focus (Wine runs r, t1, t3,
+        // u and w1, empire-fleet-to-yaga-minor at day 38). A Fleet window
+        // saved over a System window paints over it again, and holds the
+        // keyboard; saved under it, the System window stays in front.
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            for fleet_on_top in [true, false] {
+                let (world, systems) = world();
+                let fleet = SavedWindow {
+                    kind: SavedWindowKind::Fleet {
+                        system: DatId::new(0x9000_0001),
+                        tab: 0x66,
+                    },
+                    position: (130, 60),
+                    shown: true,
+                };
+                let system = SavedWindow {
+                    kind: SavedWindowKind::System {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    position: (120, 80),
+                    shown: true,
+                };
+                let order = if fleet_on_top {
+                    [system, fleet]
+                } else {
+                    [fleet, system]
+                };
+                let cockpit = rebellion_render::CockpitState::new(faction);
+                let mut restored = Windows::new();
+                let mut strategic = strategic_windowing::StrategicWindowing::new();
+                restore_interface(
+                    &order,
+                    &world,
+                    &fog(faction),
+                    &MissionState::new(),
+                    faction,
+                    cockpit.layout_for(1280.0, 960.0),
+                    RestoredWindows {
+                        sectors: &mut restored.sectors,
+                        systems: &mut restored.systems,
+                        fleets: &restored.fleets,
+                        defenses: &mut restored.defenses,
+                        missions: &mut restored.missions,
+                    },
+                    &mut strategic,
+                );
+                commit_fleets(&mut strategic, &mut restored.fleets);
+                // The commit brings the Fleet window forward, as the frame's
+                // end does.
+                let mut fleet_front = FleetWindowState::next_legacy_bridge_serial();
+                let hidden = finish_interface_restore(
+                    &order,
+                    &world,
+                    &mut restored.systems,
+                    &mut restored.defenses,
+                    &mut restored.missions,
+                    &mut restored.fleets,
+                    &mut strategic,
+                    &mut fleet_front,
+                );
+                assert!(hidden.is_empty());
+                let front = galaxy_front(
+                    &restored.systems,
+                    fleet_front,
+                    &restored.defenses,
+                    &restored.missions,
+                );
+                let id = restored.fleets.window_id(systems[0]).unwrap();
+                let focus = focus_after_load(
+                    restored.children_in(&strategic.begin_frame()),
+                    &mut strategic,
+                );
+                let commands: Vec<_> = strategic
+                    .apply_pending()
+                    .into_iter()
+                    .map(|applied| applied.command)
+                    .collect();
+                // The keyboard goes where the focus is: the Fleet window, or
+                // the galaxy view's own windows through the root.
+                let keyboard = strategic.begin_frame().keyboard_route().target;
+                if fleet_on_top {
+                    assert_eq!(front, GalaxyFront::Fleet, "{faction:?}");
+                    assert_eq!(focus.focus, GalaxyFocus::Child(GalaxyChild::Fleet(id)));
+                    assert_eq!(commands, [rebellion_windowing::WindowCommand::Activate(id)]);
+                    assert!(
+                        matches!(keyboard, rebellion_windowing::RouteTarget::Window(target) if target.window == id),
+                        "{faction:?}"
+                    );
+                } else {
+                    assert_eq!(front, GalaxyFront::System, "{faction:?}");
+                    assert_eq!(
+                        focus.focus,
+                        GalaxyFocus::Child(GalaxyChild::System(systems[1]))
+                    );
+                    assert_eq!(commands, [rebellion_windowing::WindowCommand::FocusRoot]);
+                    assert_eq!(
+                        keyboard,
+                        rebellion_windowing::RouteTarget::StrategicRoot,
+                        "{faction:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_save_from_game_options_keeps_a_shown_fleet_window_shown_and_a_minimized_one_hidden() {
+        // FUN_00440ea0 walks the galaxy view's child windows from the
+        // bottom up and writes each one's shown flag (+0x110): the Game
+        // Options window hides none of them, so a Fleet window open under it
+        // saves shown and one on the rail saves hidden. Game Options
+        // suspends the strategic scene, so its frame paints no Fleet window.
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = world();
+            let fleet = |system, shown| SavedWindow {
+                kind: SavedWindowKind::Fleet {
+                    system: DatId::new(system),
+                    tab: 0x67,
+                },
+                position: (130, 60),
+                shown,
+            };
+            let order = [fleet(0x9000_0001, true), fleet(0x9000_0002, false)];
+            let cockpit = rebellion_render::CockpitState::new(faction);
+            let mut windows = Windows::new();
+            let mut strategic = strategic_windowing::StrategicWindowing::new();
+            restore_interface(
+                &order,
+                &world,
+                &fog(faction),
+                &MissionState::new(),
+                faction,
+                cockpit.layout_for(1280.0, 960.0),
+                RestoredWindows {
+                    sectors: &mut windows.sectors,
+                    systems: &mut windows.systems,
+                    fleets: &windows.fleets,
+                    defenses: &mut windows.defenses,
+                    missions: &mut windows.missions,
+                },
+                &mut strategic,
+            );
+            commit_fleets(&mut strategic, &mut windows.fleets);
+            finish_interface_restore(
+                &order,
+                &world,
+                &mut windows.systems,
+                &mut windows.defenses,
+                &mut windows.missions,
+                &mut windows.fleets,
+                &mut strategic,
+                &mut 0,
+            );
+            for applied in strategic.apply_pending() {
+                if let Some((window, system, position)) = applied.minimized_fleet {
+                    windows
+                        .systems
+                        .minimize_fleet_window(window, system, position);
+                }
+            }
+            assert!(
+                windows.fleets.window_id(systems[0]).is_some(),
+                "{faction:?}"
+            );
+
+            strategic.enter_scene(strategic_windowing::WindowScene::Suspended);
+            let saved = saved_interface(
+                &world,
+                &cockpit,
+                &windows.sectors,
+                &windows.systems,
+                &windows.fleets,
+                &windows.defenses,
+                &windows.missions,
+            );
+            assert_eq!(
+                kinds(&saved),
+                order.map(|window| (window.kind, window.shown)),
+                "{faction:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_load_keeps_fleet_windows_at_their_saved_places_and_rail_slots() {
+        // FUN_00441190 creates each window above the last and appends each
+        // hidden one to the rail as it meets it (slot +0x08, FUN_00428b40),
+        // so a hidden Fleet window takes its rail slot among the hidden
+        // windows and a shown one its place in the z-order. The port's
+        // Fleet windows commit at the frame's end, after the others, so the
+        // others are raised again in saved order and the hidden Fleet window
+        // takes its slot before the manager's minimize.
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = world();
+            let fleet = |system, shown| SavedWindow {
+                kind: SavedWindowKind::Fleet {
+                    system: DatId::new(system),
+                    tab: 0x67,
+                },
+                position: (130, 60),
+                shown,
+            };
+            let window = |kind, shown| SavedWindow {
+                kind,
+                position: (120, 80),
+                shown,
+            };
+            let order = [
+                fleet(0x9000_0001, true),
+                window(
+                    SavedWindowKind::System {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    true,
+                ),
+                // A hidden window before the hidden Fleet window takes the
+                // rail slot ahead of it.
+                window(
+                    SavedWindowKind::Defenses {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    false,
+                ),
+                fleet(0x9000_0004, false),
+                fleet(0x9000_0003, true),
+                window(
+                    SavedWindowKind::Defenses {
+                        system: DatId::new(0x9000_0001),
+                    },
+                    true,
+                ),
+                window(
+                    SavedWindowKind::System {
+                        system: DatId::new(0x9000_0003),
+                    },
+                    false,
+                ),
+                window(
+                    SavedWindowKind::Missions {
+                        system: DatId::new(0x9000_0001),
+                    },
+                    false,
+                ),
+            ];
+            let cockpit = rebellion_render::CockpitState::new(faction);
+            let mut restored = Windows::new();
+            let mut strategic = strategic_windowing::StrategicWindowing::new();
+            restore_interface(
+                &order,
+                &world,
+                &fog(faction),
+                &MissionState::new(),
+                faction,
+                cockpit.layout_for(1280.0, 960.0),
+                RestoredWindows {
+                    sectors: &mut restored.sectors,
+                    systems: &mut restored.systems,
+                    fleets: &restored.fleets,
+                    defenses: &mut restored.defenses,
+                    missions: &mut restored.missions,
+                },
+                &mut strategic,
+            );
+            commit_fleets(&mut strategic, &mut restored.fleets);
+            let hidden = finish_interface_restore(
+                &order,
+                &world,
+                &mut restored.systems,
+                &mut restored.defenses,
+                &mut restored.missions,
+                &mut restored.fleets,
+                &mut strategic,
+                &mut 0,
+            );
+            let id = |system| restored.fleets.window_id(system).unwrap();
+            let (first, third, hidden_fleet) = (id(systems[0]), id(systems[2]), id(systems[3]));
+            assert_eq!(hidden, [GalaxyChild::Fleet(hidden_fleet)], "{faction:?}");
+            assert_eq!(
+                restored.fleets.selection(systems[0]).map(|(_, tab)| tab),
+                Some(rebellion_render::fleet_window::FleetWindowTab::Fighters)
+            );
+
+            let mut children: Vec<_> = restored
+                .children_in(&strategic.begin_frame())
+                .into_iter()
+                .filter(|(_, child)| !hidden.contains(child))
+                .collect();
+            children.sort_by_key(|(serial, _)| *serial);
+            assert_eq!(
+                children.iter().map(|(_, child)| *child).collect::<Vec<_>>(),
+                [
+                    GalaxyChild::Fleet(first),
+                    GalaxyChild::System(systems[1]),
+                    GalaxyChild::Fleet(third),
+                    GalaxyChild::Defenses(systems[0]),
+                ],
+                "{faction:?}"
+            );
+            assert_eq!(
+                GalaxyFocusState::after_load(children).focus,
+                GalaxyFocus::Child(GalaxyChild::Defenses(systems[0]))
+            );
+
+            // The manager's minimize commits next frame; the rail keeps the
+            // slot the load gave it.
+            for applied in strategic.apply_pending() {
+                if let Some((window, system, position)) = applied.minimized_fleet {
+                    restored
+                        .systems
+                        .minimize_fleet_window(window, system, position);
+                }
+            }
+            let rail: Vec<_> = restored
+                .systems
+                .saved_rail(&world, |_| Some((0x67, 0)))
+                .into_iter()
+                .map(|(_, window)| window.kind)
+                .collect();
+            assert_eq!(
+                rail,
+                [
+                    SavedWindowKind::Defenses {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    SavedWindowKind::Fleet {
+                        system: DatId::new(0x9000_0004),
+                        tab: 0x67,
+                    },
+                    SavedWindowKind::System {
+                        system: DatId::new(0x9000_0003),
+                    },
+                    SavedWindowKind::Missions {
+                        system: DatId::new(0x9000_0001),
+                    },
+                ],
+                "{faction:?}"
+            );
+            // Saved again, every window comes back in the same order.
+            let again = saved_interface(
+                &world,
+                &cockpit,
+                &restored.sectors,
+                &restored.systems,
+                &restored.fleets,
+                &restored.defenses,
+                &restored.missions,
+            );
+            assert_eq!(again.windows, order, "{faction:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod managed_interface_save_tests {
+    use super::*;
+    use rebellion_core::ids::DatId;
+    use rebellion_data::save::SavedWindowKind;
+    use rebellion_render::windowing_policy::system_subject;
+    use rebellion_windowing::{
+        WindowCommand, WindowKey, WindowKind, WindowOwner, WindowSpec, WindowTransition,
+    };
+
+    #[test]
+    fn save_order_and_visibility_follow_the_manager_snapshot_not_renderer_serials() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut world = GameWorld::default();
+            let first = world.systems.insert(rebellion_core::world::System {
+                dat_id: DatId::new(0x9000_0001),
+                ..rebellion_core::world::System::default()
+            });
+            let second = world.systems.insert(rebellion_core::world::System {
+                dat_id: DatId::new(0x9000_0002),
+                ..rebellion_core::world::System::default()
+            });
+            let mut systems = SystemWindowState::default();
+            let layout = rebellion_render::CockpitState::new(faction).layout_for(1280.0, 960.0);
+            assert!(systems.open(&world, first, (20, 30), faction, layout));
+            assert!(systems.open(&world, second, (40, 50), faction, layout));
+
+            let mut manager = rebellion_windowing::WindowManager::new();
+            let manager_id =
+                |system: SystemKey, manager: &mut rebellion_windowing::WindowManager| {
+                    let subject = system_subject(&world, system).unwrap();
+                    let key = WindowKey::contextual(WindowKind::System, subject);
+                    match manager
+                        .apply(WindowCommand::Open(WindowSpec {
+                            key,
+                            owner: WindowOwner::StrategicRoot,
+                            policy: rebellion_render::windowing_policy::policy_for(
+                                WindowKind::System,
+                            ),
+                        }))
+                        .unwrap()
+                        .transition
+                    {
+                        WindowTransition::Opened { id } => id,
+                        transition => panic!("expected manager open, got {transition:?}"),
+                    }
+                };
+            // Renderer insertion order is first/second; manager order is second/first.
+            let second_id = manager_id(second, &mut manager);
+            let first_id = manager_id(first, &mut manager);
+            let snapshot = manager.begin_frame();
+            let mut order: Vec<_> = manager
+                .visible_order()
+                .iter()
+                .copied()
+                .map(|id| (id, true))
+                .chain(
+                    manager
+                        .presentation_history()
+                        .iter()
+                        .copied()
+                        .map(|id| (id, false)),
+                )
+                .collect();
+
+            let cockpit = rebellion_render::CockpitState::new(faction);
+            let mut saved = saved_interface(
+                &world,
+                &cockpit,
+                &SectorWindowState::default(),
+                &systems,
+                &FleetWindowState::default(),
+                &DefensesWindowState::default(),
+                &MissionsWindowState::default(),
+                &snapshot,
+                &order,
+            );
+            assert_eq!(
+                saved
+                    .windows
+                    .iter()
+                    .map(|window| window.kind)
+                    .collect::<Vec<_>>(),
+                [
+                    SavedWindowKind::System {
+                        system: DatId::new(0x9000_0002)
+                    },
+                    SavedWindowKind::System {
+                        system: DatId::new(0x9000_0001)
+                    },
+                ],
+                "{faction:?}"
+            );
+
+            manager.apply(WindowCommand::Minimize(first_id)).unwrap();
+            order = manager
+                .visible_order()
+                .iter()
+                .copied()
+                .map(|id| (id, true))
+                .chain(
+                    manager
+                        .presentation_history()
+                        .iter()
+                        .copied()
+                        .map(|id| (id, false)),
+                )
+                .collect();
+            saved = saved_interface(
+                &world,
+                &cockpit,
+                &SectorWindowState::default(),
+                &systems,
+                &FleetWindowState::default(),
+                &DefensesWindowState::default(),
+                &MissionsWindowState::default(),
+                &manager.begin_frame(),
+                &order,
+            );
+            assert_eq!(
+                saved
+                    .windows
+                    .iter()
+                    .map(|window| (window.kind, window.shown))
+                    .collect::<Vec<_>>(),
+                [
+                    (
+                        SavedWindowKind::System {
+                            system: DatId::new(0x9000_0002)
+                        },
+                        true
+                    ),
+                    (
+                        SavedWindowKind::System {
+                            system: DatId::new(0x9000_0001)
+                        },
+                        false
+                    ),
+                ],
+                "{faction:?}; IDs were {second_id:?} and {first_id:?}"
+            );
+        }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod saved_ending_tests {
+    use super::*;
+    use rebellion_core::victory::{AD, AW, CA, EW, GO};
+    use rebellion_render::advisor::CockpitStep;
+
+    /// A campaign whose win word is `word`, saved to a file and loaded back
+    /// through `LiveCampaign`, as the Load Game path does. port: fixture
+    /// state, not rules.
+    fn saved_and_loaded(word: u32, player_is_alliance: bool) -> VictoryState {
+        let mut world = GameWorld::default();
+        let mut clock = GameClock::new();
+        let mut manufacturing = ManufacturingState::new();
+        let mut missions = MissionState::new();
+        let mut events = EventState::new();
+        let mut ai = AIState::new(AiFaction::Empire);
+        let mut movement = MovementState::new();
+        let mut fog_alliance = FogState::new(Faction::Alliance);
+        let mut fog_empire = FogState::new(Faction::Empire);
+        let mut player_faction = if player_is_alliance {
+            MissionFaction::Alliance
+        } else {
+            MissionFaction::Empire
+        };
+        let mut blockade = BlockadeState::new();
+        let mut uprising = UprisingState::new();
+        let mut research = ResearchState::new();
+        let mut jedi = JediState::new();
+        let mut victory = VictoryState::new(SystemKey::default(), SystemKey::default());
+        victory.word = word;
+        victory.resolved = true;
+        let mut betrayal = BetrayalState::new();
+        let mut economy = EconomyState::default();
+        let mut sim_rng = Xoshiro256PlusPlus::seed_from_u64(7);
+        let mut ai2 = None;
+        let mut repair = RepairState::default();
+        let mut troop_transport = TroopTransportState::default();
+        let mut deliveries = DeliveryState::new();
+        let mut player_agent = PlayerAgent::default();
+        let mut stockpiles = StockpileState::new();
+        let mut game_config = rebellion_core::tuning::GameConfig::default();
+        let mut campaign_config = CampaignConfig::default();
+        let mut campaign = LiveCampaign {
+            world: &mut world,
+            clock: &mut clock,
+            manufacturing: &mut manufacturing,
+            missions: &mut missions,
+            events: &mut events,
+            ai: &mut ai,
+            movement: &mut movement,
+            fog_alliance: &mut fog_alliance,
+            fog_empire: &mut fog_empire,
+            player_faction: &mut player_faction,
+            blockade: &mut blockade,
+            uprising: &mut uprising,
+            research: &mut research,
+            jedi: &mut jedi,
+            victory: &mut victory,
+            betrayal: &mut betrayal,
+            economy: &mut economy,
+            sim_rng: &mut sim_rng,
+            ai2: &mut ai2,
+            repair: &mut repair,
+            troop_transport: &mut troop_transport,
+            deliveries: &mut deliveries,
+            player_agent: &mut player_agent,
+            stockpiles: &mut stockpiles,
+            game_config: &mut game_config,
+            campaign_config: &mut campaign_config,
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ending.sav");
+        rebellion_data::save::save_file(&path, "Ending", &campaign.snapshot(), &[]).unwrap();
+        *campaign.victory = VictoryState::new(SystemKey::default(), SystemKey::default());
+        let (_, state) = rebellion_data::save::load_file(&path, 0).unwrap();
+        campaign.restore(state);
+        victory
+    }
+
+    #[test]
+    fn a_loaded_game_shows_the_gid_mode_it_was_saved_with() {
+        // FUN_00440ea0 saves the view's GID mode (+0xc8) and FUN_00440f80
+        // replays it as the row choice (WM_COMMAND 0x140); a save without
+        // one shows the new game's Popular Support.
+        for mode in [
+            rebellion_render::GidMode::IdleFleets,
+            rebellion_render::GidMode::DisplayOff,
+            rebellion_render::GidMode::PopularSupport,
+        ] {
+            let interface = rebellion_data::save::SavedInterface {
+                gid_mode: Some(mode.command_id()),
+                windows: Vec::new(),
+            };
+            assert_eq!(saved_gid_mode(&interface), mode);
+        }
+        assert_eq!(
+            saved_gid_mode(&rebellion_data::save::SavedInterface::default()),
+            rebellion_render::GidMode::PopularSupport
+        );
+    }
+
+    #[test]
+    fn a_game_saved_after_the_win_plays_its_ending_once_loaded_on_either_side() {
+        // FUN_004397a0 / FUN_00439550 save and load the advisor's slot table
+        // (+0x164 count, +0x168 stamps), so the ending slot FUN_004c3010 /
+        // FUN_004c0f10 stamped comes back with the game and the ending still
+        // plays (FUN_004c3060 / FUN_004c0f60 → FUN_00425c90 → FUN_00414830).
+        for (alliance, word, movie) in [
+            (true, EW | GO | AD, 0x6a),
+            (true, AW | GO | CA, 0x6b),
+            (false, EW | GO | AD, 0x6d),
+            (false, AW | GO | CA, 0x6c),
+        ] {
+            let loaded = saved_and_loaded(word, alliance);
+            assert_eq!(loaded.word, word);
+            let faction = if alliance {
+                AdvisorFaction::Alliance
+            } else {
+                AdvisorFaction::Empire
+            };
+            let mut advisor = AdvisorState::new(faction);
+            resume_saved_advisor(&mut advisor, faction, loaded.word);
+            assert_eq!(
+                advisor.take_cockpit_steps(),
+                [CockpitStep { kind: 3, step: 1 }],
+                "{alliance} {word:#x}"
+            );
+            let mut queue = movies::MovieQueue::default();
+            queue.end(loaded.word, Faction::of_alliance(alliance));
+            assert_eq!(queue.next(true), Some(movies::Showing::Ending(movie)));
+        }
+    }
+
+    #[test]
+    fn a_game_saved_before_any_win_loads_without_an_ending() {
+        // FUN_00486890 hands the advisor only a word with GO.
+        for alliance in [true, false] {
+            let loaded = saved_and_loaded(AD, alliance);
+            let faction = if alliance {
+                AdvisorFaction::Alliance
+            } else {
+                AdvisorFaction::Empire
+            };
+            let mut advisor = AdvisorState::new(faction);
+            resume_saved_advisor(&mut advisor, faction, loaded.word);
+            assert!(advisor.take_cockpit_steps().is_empty());
+        }
+    }
+}
+
+#[cfg(test)]
+mod headquarters_tests {
+    use super::*;
+
+    /// A galaxy whose headquarters are `hqs`: one held system per side,
+    /// marked or not. port: fixture values.
+    fn galaxy(alliance_hq: bool, empire_hq: bool) -> (GameWorld, SystemKey, SystemKey) {
+        let mut world = GameWorld::default();
+        let mut system = |side, hq| {
+            world.systems.insert(rebellion_core::world::System {
+                is_headquarters: hq,
+                control: rebellion_core::world::ControlKind::Controlled(side),
+                ..rebellion_core::world::System::default()
+            })
+        };
+        let alliance = system(Faction::Alliance, alliance_hq);
+        let empire = system(Faction::Empire, empire_hq);
+        (world, alliance, empire)
+    }
+
+    #[test]
+    fn data_without_a_headquarters_for_either_side_starts_without_panicking() {
+        for (alliance_hq, empire_hq) in [(false, true), (true, false), (false, false)] {
+            let (world, _, _) = galaxy(alliance_hq, empire_hq);
+            let state = std::panic::catch_unwind(|| startup_victory_state(&world));
+            assert!(state.is_ok(), "{alliance_hq} {empire_hq}");
+        }
+    }
+
+    #[test]
+    fn a_campaign_on_data_without_an_alliance_headquarters_starts_with_ad() {
+        // FUN_005180e0 sets AD when FUN_00506110 finds no HQ object, and it
+        // finds Coruscant by its id, reading no Empire HQ: data without
+        // either headquarters still starts a campaign.
+        use rebellion_core::victory::{
+            VictorySystem, AD, CORUSCANT, LUKE, MON_MOTHMA, PALPATINE, VADER,
+        };
+        for (alliance_hq, empire_hq) in [(false, true), (true, false), (false, false)] {
+            let (mut world, _, empire) = galaxy(alliance_hq, empire_hq);
+            world.systems[empire].dat_id = rebellion_core::ids::DatId::new(CORUSCANT);
+            for id in [LUKE, MON_MOTHMA, VADER, PALPATINE] {
+                world.characters.insert(rebellion_core::world::Character {
+                    dat_id: rebellion_core::ids::DatId::new(id),
+                    ..rebellion_core::world::Character::default()
+                });
+            }
+
+            let (alliance_key, empire_key) = headquarters(&world);
+            let state = VictoryState::new(alliance_key, empire_key);
+
+            let word = VictorySystem::word(&state, &world, VictoryConditions::Standard)
+                .expect("every object the word reads exists");
+            assert_eq!(word & AD != 0, !alliance_hq, "{alliance_hq} {empire_hq}");
+        }
+    }
+
+    #[test]
+    fn each_side_keeps_the_headquarters_the_seeding_marked() {
+        let (world, alliance, empire) = galaxy(true, true);
+        let state = startup_victory_state(&world);
+        assert_eq!((state.alliance_hq, state.empire_hq), (alliance, empire));
+    }
+}
+
+#[cfg(test)]
+mod evacuation_losses_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    /// The shipped TEXTSTRA entries `0x70a8`-`0x70aa`.
+    fn templates() -> rebellion_data::text_templates::TextTemplates {
+        let entries: HashMap<u16, &str> = [
+            (0x70a8, "Evacuation Losses\u{1}"),
+            (
+                0x70a9,
+                "The following units were lost running an enemy blockade of |\u{2}\u{1}\0\0\0.\n\u{1}",
+            ),
+            (0x70aa, "\n|\u{1}\u{1}\0\0\0\u{1}"),
+        ]
+        .into_iter()
+        .collect();
+        rebellion_data::text_templates::TextTemplates::from_json(
+            &serde_json::to_vec(&entries).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn regiments_lost_running_a_blockade_file_one_evacuation_losses_message_per_side() {
+        // FUN_00495e90 on event 0x340 (FUN_00504a00): "Evacuation Losses"
+        // (0x70a8), the system as 0x70a9's argument 2, a 0x70aa line per
+        // regiment (argument 1), code 0x10; picture 0x407 and sound 0x460
+        // for side 1, 0x406 and 0x45f for side 2.
+        let mut world = GameWorld::default();
+        let system = world.systems.insert(rebellion_core::world::System {
+            name: "Selonia".into(),
+            ..rebellion_core::world::System::default()
+        });
+        let units = [
+            "Alliance Army Regiment".to_owned(),
+            "Mon Calamari Regiment".to_owned(),
+        ];
+        let messages = evacuation_losses_messages(&world, &templates(), system, 9, &units);
+        assert_eq!(messages.len(), 2);
+        for (message, (alliance, picture, sound)) in messages
+            .iter()
+            .zip([(true, 0x407, 0x460), (false, 0x406, 0x45f)])
+        {
+            let display = message.display.as_ref().unwrap();
+            assert_eq!(display.title, "Evacuation Losses");
+            assert_eq!(message.text, "Evacuation Losses");
+            assert_eq!(
+                display.body,
+                "The following units were lost running an enemy blockade of Selonia.\n\
+                 \nAlliance Army Regiment\nMon Calamari Regiment"
+            );
+            assert_eq!((display.background, display.sound), (picture, sound));
+            assert_eq!(message.advice, Some(0x10));
+            assert_eq!(message.audience, RailAudience::side(alliance));
+            assert_eq!(message.rail, Some(MessageRail::Conflict));
+            assert_eq!(message.target, Some(MessageTarget::System(system)));
+        }
+    }
+
+    #[test]
+    fn a_systems_regiments_lost_on_one_tick_share_a_notice_for_either_side() {
+        // FUN_00495e90 adds each later regiment to its message (+0x68);
+        // another system or tick starts a notice of its own.
+        use rebellion_core::blockade::BlockadeEvent;
+        use rebellion_core::ids::DatId;
+        use rebellion_core::world::{
+            BuildableClass, CapitalShipClass, Fleet, ShipInstance, TroopUnit,
+        };
+        for alliance in [true, false] {
+            let mut world = GameWorld::default();
+            let mut transport = TroopTransportState::new();
+            let mut system = |name: &str| {
+                world.systems.insert(rebellion_core::world::System {
+                    name: name.into(),
+                    ..rebellion_core::world::System::default()
+                })
+            };
+            let (selonia, drall) = (system("Selonia"), system("Drall"));
+            let class = world.capital_ship_classes.insert(CapitalShipClass {
+                troop_capacity: 4,
+                ..CapitalShipClass::default()
+            });
+            let fleet = world.fleets.insert(Fleet {
+                location: selonia,
+                capital_ships: vec![ShipInstance::new(class, 100, alliance)],
+                is_alliance: alliance,
+                ..Fleet::default()
+            });
+            let mut regiment = |raw: u32, name: &str| {
+                world.buildable_classes.insert(
+                    DatId::new(raw),
+                    BuildableClass {
+                        name: name.into(),
+                        ..BuildableClass::default()
+                    },
+                );
+                let troop = world.troops.insert(TroopUnit {
+                    class_dat_id: DatId::new(raw),
+                    is_alliance: alliance,
+                });
+                world.systems[selonia].ground_units.push(troop);
+                troop
+            };
+            let troops = [
+                regiment(0x1000_0001, "Army Regiment"),
+                regiment(0x1000_0002, "Fleet Regiment"),
+                regiment(0x1000_0003, "Guard Regiment"),
+                regiment(0x1000_0004, "Garrison Regiment"),
+            ];
+            transport
+                .embark(&mut world, &ProductRoom::default(), fleet, &troops)
+                .unwrap();
+            let destroyed = |system, troop, tick| BlockadeEvent::TroopDestroyed {
+                system,
+                troop,
+                tick,
+            };
+            let events = [
+                destroyed(selonia, troops[0], 9),
+                destroyed(drall, troops[1], 9),
+                destroyed(selonia, troops[2], 9),
+                destroyed(selonia, troops[3], 10),
+            ];
+            let mut log = MessageLog::default();
+            show_blockade_events(
+                10,
+                &events,
+                &mut world,
+                &mut ManufacturingState::new(),
+                &mut transport,
+                &MovementState::new(),
+                &mut DeliveryState::new(),
+                &BlockadeState::new(),
+                &templates(),
+                &mut log,
+            );
+            let bodies: Vec<&str> = log
+                .messages()
+                .iter()
+                .map(|message| message.display.as_ref().unwrap().body.as_str())
+                .collect();
+            let lost = |at: &str, units: &str| {
+                format!("The following units were lost running an enemy blockade of {at}.\n{units}")
+            };
+            let (first, second, third) = (
+                lost("Selonia", "\nArmy Regiment\nGuard Regiment"),
+                lost("Drall", "\nFleet Regiment"),
+                lost("Selonia", "\nGarrison Regiment"),
+            );
+            assert_eq!(
+                bodies,
+                [&first, &first, &second, &second, &third, &third].map(String::as_str),
+                "{alliance}"
+            );
+            assert!(world.troops.is_empty());
+        }
+    }
+
+    #[test]
+    fn no_lost_regiment_or_no_original_text_files_nothing() {
+        // FUN_00495e90 sets its text only for a regiment and a system.
+        let mut world = GameWorld::default();
+        let system = world
+            .systems
+            .insert(rebellion_core::world::System::default());
+        assert!(evacuation_losses_messages(&world, &templates(), system, 9, &[]).is_empty());
+        let empty = rebellion_data::text_templates::TextTemplates::default();
+        assert!(
+            evacuation_losses_messages(&world, &empty, system, 9, &["Regiment".to_owned()])
+                .is_empty()
+        );
+    }
+}
+
+#[cfg(test)]
+mod transport_refusal_tests {
+    use super::*;
+    use rebellion_core::troop_transport::TroopTransportError as E;
+
+    #[test]
+    fn a_refused_regiment_or_squadron_move_hands_the_advisor_the_originals_status() {
+        // regiment-unload.md, "Refusals" and "Choosing the container":
+        // FUN_004f9860 en route 1/1; FUN_0053d430 another side's
+        // destination 1/0x28; FUN_005073d0 destroyed 1/0x22 and blockaded
+        // 0x90/4; FUN_00553410 a fleet in hyperspace 1/0x21; a room node
+        // with no room 1/0x27 (FUN_00552300, FUN_00500b40).
+        for (error, status) in [
+            (E::RegimentEnRoute, (1, 1)),
+            (E::SquadronEnRoute, (1, 1)),
+            (E::OtherSideDestination, (1, 0x28)),
+            (E::WrongFaction, (1, 0x28)),
+            (E::DestinationDestroyed, (1, 0x22)),
+            (E::DestinationBlockaded, (0x90, 4)),
+            (E::DestinationInTransit, (1, 0x21)),
+            (
+                E::CapacityExceeded {
+                    capacity: 0,
+                    requested: 1,
+                },
+                (1, 0x27),
+            ),
+            (E::NoSquadronRoom, (1, 0x27)),
+        ] {
+            assert_eq!(transport_refusal_status(error), Some(status), "{error:?}");
+        }
+    }
+
+    #[test]
+    fn a_refused_fleet_move_hands_the_advisor_the_originals_status() {
+        // move-order.md: FUN_00578d00 an object or destination that does
+        // not resolve 1/0x12, 1/0x22; FUN_004fdc70 → FUN_004f9860 another
+        // side's or an en-route fleet 1/1; FUN_00555920 → FUN_004fd900 no
+        // hyperdrive 1/0x18; FUN_00552210 → FUN_005287f0 a blockaded drag
+        // 1/1; FUN_00507ab0 the Death Star room 0x90/3.
+        use rebellion_core::movement::FleetDispatchError as D;
+        for (error, status) in [
+            (D::MissingFleet, (1, 0x12)),
+            (D::MissingDestination, (1, 0x22)),
+            (D::WrongFaction, (1, 1)),
+            (D::AlreadyInTransit, (1, 1)),
+            (D::NoHyperdrive, (1, 0x18)),
+            (D::Blockaded, (1, 1)),
+            (D::DeathStarRoom, (0x90, 3)),
+        ] {
+            assert_eq!(
+                fleet_dispatch_refusal_status(error),
+                Some(status),
+                "{error:?}"
+            );
+        }
+        // port: the origin and same-system checks are the port's own.
+        for error in [D::MissingOrigin, D::AlreadyAtDestination] {
+            assert_eq!(fleet_dispatch_refusal_status(error), None, "{error:?}");
+        }
+    }
+
+    #[test]
+    fn a_refused_join_split_or_ship_move_hands_the_advisor_the_originals_status() {
+        // fleet-join-split.md: FUN_00578c00 an object that does not resolve
+        // 1/0x12; FUN_004f9860 another side's or an en-route mover 1/1;
+        // FUN_004f9860.c:45-50 an unfinished ship of a Create Fleet 1/2;
+        // FUN_00553aa0 into itself 1/0x26; FUN_00553410 another side's
+        // fleet 1/0x24 (its first test), one en route 1/0x21; a departure
+        // as a fleet move's.
+        use rebellion_core::fleet_join::FleetOrderError as O;
+        use rebellion_core::movement::FleetDispatchError as D;
+        for (error, status) in [
+            (O::MissingFleet, (1, 0x12)),
+            (O::MissingShip, (1, 0x12)),
+            (O::WrongFaction, (1, 1)),
+            (O::InTransit, (1, 1)),
+            (O::Unfinished, (1, 2)),
+            (O::IntoItself, (1, 0x26)),
+            (O::OtherSideDestination, (1, 0x24)),
+            (O::DestinationInTransit, (1, 0x21)),
+            (O::Dispatch(D::NoHyperdrive), (1, 0x18)),
+            (O::Dispatch(D::DeathStarRoom), (0x90, 3)),
+        ] {
+            assert_eq!(fleet_order_refusal_status(error), Some(status), "{error:?}");
+        }
+        // port: the roster check of fleet_join::roster is the port's own.
+        assert_eq!(fleet_order_refusal_status(O::ShipsChanged), None);
+        assert_eq!(
+            fleet_order_refusal_status(O::Dispatch(D::MissingOrigin)),
+            None
+        );
+    }
+
+    #[test]
+    fn a_stale_selection_the_menu_cannot_offer_gets_no_reaction() {
+        // port: the port's own checks of keys gone since the menu opened.
+        for error in [
+            E::MissingFleet,
+            E::MissingSystem,
+            E::NoTroops,
+            E::MissingTroop,
+            E::TroopNotAtFleetSystem,
+            E::AlreadyEmbarked,
+            E::FleetNotAtDestination,
+            E::MissingSquadron,
+        ] {
+            assert_eq!(transport_refusal_status(error), None, "{error:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod battle_alert_text_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    /// Templates `0x7020`-`0x7025` that print their own id and their three
+    /// slots by name, so a test reads which template and argument order the
+    /// alert chose. port: fixture text, not the shipped entries.
+    fn templates() -> rebellion_data::text_templates::TextTemplates {
+        let slots = "|\u{1}\u{1}\0\0\0,|\u{2}\u{1}\0\0\0,|\u{3}\u{1}\0\0\0\u{1}";
+        let mut entries: HashMap<u16, String> =
+            [(0x7020, "Battle at |\u{1}\u{1}\0\0\0\u{1}".to_owned())]
+                .into_iter()
+                .collect();
+        for id in 0x7021..=0x7025 {
+            entries.insert(id, format!("{id:x}:{slots}"));
+        }
+        rebellion_data::text_templates::TextTemplates::from_json(
+            &serde_json::to_vec(&entries).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn alert(
+        holder: Option<Faction>,
+        blockaded: bool,
+        player_is_alliance: bool,
+    ) -> Option<(String, String)> {
+        let mut world = GameWorld::default();
+        let system = world.systems.insert(rebellion_core::world::System {
+            name: "Corellia".into(),
+            control: holder.map_or(
+                rebellion_core::world::ControlKind::Uncontrolled,
+                rebellion_core::world::ControlKind::Controlled,
+            ),
+            ..rebellion_core::world::System::default()
+        });
+        battle_alert_text(&world, &templates(), blockaded, system, player_is_alliance)
+    }
+
+    #[test]
+    fn the_battle_alert_picks_its_summary_from_the_holder_and_the_blockade_for_either_side() {
+        // FUN_0049c0d0: title 0x7020; the player's system threatened 0x7021
+        // (enemy, system, player) or blockaded 0x7022 (player, system,
+        // enemy); a neutral one 0x7025 (player, enemy, system); the enemy's
+        // blockaded 0x7024 (enemy, player, system) or entered 0x7023
+        // (player, system, enemy).
+        for player_is_alliance in [true, false] {
+            let (player, enemy) = if player_is_alliance {
+                (Faction::Alliance, Faction::Empire)
+            } else {
+                (Faction::Empire, Faction::Alliance)
+            };
+            let (p, e) = if player_is_alliance {
+                ("Alliance", "Empire")
+            } else {
+                ("Empire", "Alliance")
+            };
+            for (holder, blockaded, summary) in [
+                (Some(player), false, format!("7021:{e},Corellia,{p}")),
+                (Some(player), true, format!("7022:{p},Corellia,{e}")),
+                (None, false, format!("7025:{p},{e},Corellia")),
+                (None, true, format!("7025:{p},{e},Corellia")),
+                (Some(enemy), true, format!("7024:{e},{p},Corellia")),
+                (Some(enemy), false, format!("7023:{p},Corellia,{e}")),
+            ] {
+                assert_eq!(
+                    alert(holder, blockaded, player_is_alliance),
+                    Some(("Battle at Corellia".to_owned(), summary)),
+                    "{player_is_alliance} {holder:?} {blockaded}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_unknown_system_or_missing_text_shows_no_alert() {
+        let world = GameWorld::default();
+        let missing = rebellion_core::ids::SystemKey::default();
+        assert_eq!(
+            battle_alert_text(&world, &templates(), false, missing, true),
+            None
+        );
+        let mut world = GameWorld::default();
+        let system = world
+            .systems
+            .insert(rebellion_core::world::System::default());
+        let empty = rebellion_data::text_templates::TextTemplates::default();
+        assert_eq!(battle_alert_text(&world, &empty, false, system, true), None);
     }
 }

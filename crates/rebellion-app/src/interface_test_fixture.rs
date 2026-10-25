@@ -20,6 +20,7 @@ pub use input_scenes::{InputScenesFixture, InputScenesWindows};
 pub use modal_boundaries::{ModalBoundaryWatch, ModalBoundaryWindows};
 
 use rebellion_core::blockade::{BlockadeState, BlockadeSystem};
+use rebellion_core::carriage::ProductRoom;
 use rebellion_core::dat::{ExplorationStatus, Faction};
 use rebellion_core::economy::EconomyState;
 use rebellion_core::fog::FogState;
@@ -60,7 +61,7 @@ const FIXTURE_ABSENT: u32 = 0;
 /// How far right of the galaxy view's centre the targeting scenario puts its
 /// target system, clear of the system window it opens on the left.
 #[cfg(test)]
-const SCENARIO_COUNT: u8 = 66;
+const SCENARIO_COUNT: u8 = 75;
 
 extern "C" {
     fn open_rebellion_interface_fixture_code() -> u32;
@@ -143,6 +144,15 @@ pub enum Scenario {
     EncyclopediaCanonicalUnavailable = 63,
     EncyclopediaCanonicalContextual = 64,
     WindowingContract = 65,
+    OperationReport = 66,
+    StrikeDeathStar = 67,
+    UnfinishedShip = 68,
+    ShipBesideUnfinished = 69,
+    StrikeShielded = 70,
+    AssaultCaptures = 71,
+    AssaultRepelled = 72,
+    StrikeDamagedSurvivor = 73,
+    StrikeDamagedLoss = 74,
 }
 
 impl Scenario {
@@ -214,6 +224,15 @@ impl Scenario {
             63 => Self::EncyclopediaCanonicalUnavailable,
             64 => Self::EncyclopediaCanonicalContextual,
             65 => Self::WindowingContract,
+            66 => Self::OperationReport,
+            67 => Self::StrikeDeathStar,
+            68 => Self::UnfinishedShip,
+            69 => Self::ShipBesideUnfinished,
+            70 => Self::StrikeShielded,
+            71 => Self::AssaultCaptures,
+            72 => Self::AssaultRepelled,
+            73 => Self::StrikeDamagedSurvivor,
+            74 => Self::StrikeDamagedLoss,
             _ => return None,
         })
     }
@@ -257,7 +276,24 @@ impl Scenario {
     }
 
     fn moves_a_fleet(self) -> bool {
-        matches!(self, Self::FleetMove | Self::FleetMoveBlockade)
+        matches!(
+            self,
+            Self::FleetMove | Self::FleetMoveBlockade | Self::StrikeDeathStar
+        ) || self.stages_a_strike()
+    }
+
+    /// The Operation Report scenarios (EVT-03): the blockade variant with
+    /// the fleet, the holder's garrison and its defences staged for one
+    /// report ([`stage_strike`]).
+    fn stages_a_strike(self) -> bool {
+        matches!(
+            self,
+            Self::StrikeShielded
+                | Self::AssaultCaptures
+                | Self::AssaultRepelled
+                | Self::StrikeDamagedSurvivor
+                | Self::StrikeDamagedLoss
+        )
     }
 
     /// The scenarios whose gate works the primary system's Fleet window.
@@ -269,6 +305,8 @@ impl Scenario {
                 | Self::RegimentUnloadRefused
                 | Self::FleetJoin
                 | Self::ProductionDestination
+                | Self::UnfinishedShip
+                | Self::ShipBesideUnfinished
         )
     }
 
@@ -360,8 +398,7 @@ pub fn apply(
     };
     cockpit.faction = request.faction;
     cockpit.gid_mode = request.scenario.mode();
-    cockpit.gid_ui.menu_open = false;
-    cockpit.gid_ui.category = None;
+    cockpit.gid_ui.close_menu();
 
     let system_keys: Vec<_> = world.systems.keys().take(10).collect();
     let Some(&primary) = system_keys.first() else {
@@ -456,10 +493,24 @@ pub fn apply(
     }
 
     let mut transit_fleet = None;
+    // A fleet has the Death Star when it holds the family-0x18 ship
+    // (`FUN_005003d0`), so the Death Star scenario gives the first fleet one.
+    let death_star = (request.scenario == Scenario::DeathStarIntel).then(|| {
+        world
+            .capital_ship_classes
+            .iter()
+            .find(|(_, class)| class.is_death_star())
+            .map(|(key, class)| (key, class.hull.cast_signed()))
+            .expect("the Death Star scenario needs a family-0x18 capital ship class")
+    });
     if let Some((fleet_key, fleet)) = world.fleets.iter_mut().next() {
         fleet.location = primary;
         fleet.is_alliance = player_is_alliance;
-        fleet.has_death_star = request.scenario == Scenario::DeathStarIntel;
+        if let Some((class, hull)) = death_star {
+            fleet
+                .capital_ships
+                .push(ShipInstance::new(class, hull, player_is_alliance));
+        }
         transit_fleet = Some(fleet_key);
     }
     if matches!(request.scenario, Scenario::FleetsEnroute) {
@@ -524,6 +575,7 @@ pub fn apply(
             blockade,
             sectors,
             fleets,
+            troop_transport,
             (
                 primary,
                 secondary,
@@ -586,7 +638,6 @@ fn place_finder_fleets(
     let mut enemy = world.fleets[first].clone();
     enemy.location = primary;
     enemy.is_alliance = !player_is_alliance;
-    enemy.has_death_star = false;
     world.fleets.insert(second);
     world.fleets.insert(enemy);
     reconcile_fleet_orbits(movement, world);
@@ -597,7 +648,9 @@ fn place_finder_fleets(
 /// view's right edge, with the second system's sector window open as the
 /// target. In the blockade variant the enemy holds the primary system, so the
 /// player's fleet is alone there and blockades it
-/// (`BlockadeSystem::system_is_blockaded`).
+/// (`BlockadeSystem::system_is_blockaded`). The strike variant is the
+/// blockade one with the Death Star aboard, for the Planetary Bombardment
+/// rows.
 #[allow(clippy::too_many_arguments)]
 fn place_moving_fleet(
     request: FixtureRequest,
@@ -607,6 +660,7 @@ fn place_moving_fleet(
     blockade: &mut BlockadeState,
     sectors: &mut SectorWindowState,
     fleets: &mut FleetWindowState,
+    troop_transport: &mut TroopTransportState,
     (primary, secondary, elsewhere): (
         rebellion_core::ids::SystemKey,
         rebellion_core::ids::SystemKey,
@@ -631,10 +685,36 @@ fn place_moving_fleet(
             ));
         }
     }
+    // The strike scenario's fleet holds the Death Star, the family-0x18
+    // ship (`FUN_005003d0`), so Destroy System is listed enabled.
+    if request.scenario == Scenario::StrikeDeathStar {
+        let (class, hull) = world
+            .capital_ship_classes
+            .iter()
+            .find(|(_, class)| class.is_death_star())
+            .map(|(key, class)| (key, class.hull.cast_signed()))
+            .expect("the strike scenario needs a family-0x18 capital ship class");
+        world.fleets[player]
+            .capital_ships
+            .push(ShipInstance::new(class, hull, player_is_alliance));
+    }
     world.fleets[player].location = primary;
     world.fleets[player].is_alliance = player_is_alliance;
+    if request.scenario.stages_a_strike() {
+        stage_strike(
+            request,
+            world,
+            troop_transport,
+            player,
+            (primary, elsewhere),
+        );
+    }
     reconcile_fleet_orbits(movement, world);
-    if request.scenario == Scenario::FleetMoveBlockade {
+    if matches!(
+        request.scenario,
+        Scenario::FleetMoveBlockade | Scenario::StrikeDeathStar
+    ) || request.scenario.stages_a_strike()
+    {
         world.systems[primary].control = ControlKind::Controlled(if player_is_alliance {
             Faction::Empire
         } else {
@@ -655,6 +735,233 @@ fn place_moving_fleet(
         layout,
     );
     sectors.open_for_system(world, secondary, request.faction);
+}
+
+/// The Operation Report scenarios (EVT-03), staged on the blockade variant.
+/// The holder's regiments and defences at the system move elsewhere and the
+/// fleet is emptied, so each report lists only what its scenario puts there:
+///
+/// - shielded: a bombarding ship under shield generators (family `0x24`)
+///   whose shields reach the fleet's strength, so no hit lands
+///   (`FUN_0058df60`; `ghidra/notes/bombardment.md`, "Effect phase");
+/// - assault captures: a carrier with the player's regiments aboard against
+///   an empty garrison (`FUN_00563390`);
+/// - assault repelled: one regiment aboard against six of the holder's;
+/// - damaged survivor: a bombarding ship at half its hull and no battery, so
+///   it stays damaged (`+0x50` bit 9, `FUN_00501c00`);
+/// - damaged loss: one ship at 1 hull carrying a bombing squadron (the
+///   fleet's strength, `FUN_004fd6b0`) under one LNR battery, whose fire
+///   has no other target and destroys it (`FUN_0058d540`).
+///
+/// port: test fixture values, not rules.
+fn stage_strike(
+    request: FixtureRequest,
+    world: &mut GameWorld,
+    troop_transport: &mut TroopTransportState,
+    fleet: FleetKey,
+    (primary, elsewhere): (SystemKey, SystemKey),
+) {
+    use rebellion_core::world::{CapitalShipClass, DefenseFacilityInstance, FighterEntry};
+    let player_is_alliance = request.faction == CockpitFaction::Alliance;
+    let holder = Faction::of_alliance(!player_is_alliance);
+    let displaced = std::mem::take(&mut world.systems[primary].ground_units);
+    world.systems[elsewhere].ground_units.extend(displaced);
+    let defences = std::mem::take(&mut world.systems[primary].defense_facilities);
+    world.systems[elsewhere].defense_facilities.extend(defences);
+    let value = &mut world.fleets[fleet];
+    value.characters.clear();
+    value.fighters.clear();
+    value.capital_ships.clear();
+
+    let bomber = fixture_ship_class(
+        world,
+        player_is_alliance,
+        |class| class.bombardment_modifier > 0,
+        CapitalShipClass {
+            name: "Bomber".into(),
+            hull: 1000,
+            hyperdrive: 80,
+            bombardment_modifier: 2,
+            ..CapitalShipClass::default()
+        },
+    );
+    let carrier = fixture_ship_class(
+        world,
+        player_is_alliance,
+        |class| class.troop_capacity >= 2,
+        CapitalShipClass {
+            name: "Transport".into(),
+            hull: 100,
+            hyperdrive: 80,
+            troop_capacity: 2,
+            ..CapitalShipClass::default()
+        },
+    );
+    let board = |world: &mut GameWorld, class, hull| {
+        world.fleets[fleet]
+            .capital_ships
+            .push(ShipInstance::new(class, hull, player_is_alliance));
+        let index = world.fleets[fleet].capital_ships.len() - 1;
+        rebellion_core::carriage::tag_ship(world, fleet, index).unwrap_or(0)
+    };
+    let hull = |world: &GameWorld, class| world.capital_ship_classes[class].hull.cast_signed();
+    let regiments = |world: &mut GameWorld, alliance: bool, count: usize| {
+        let class_dat_id = fixture_regiment_class(world, alliance);
+        (0..count)
+            .map(|_| {
+                let key = world.troops.insert(TroopUnit {
+                    class_dat_id,
+                    is_alliance: alliance,
+                });
+                world.systems[primary].ground_units.push(key);
+                key
+            })
+            .collect::<Vec<_>>()
+    };
+    let defence = |world: &mut GameWorld, class_dat_id| {
+        let key = world.defense_facilities.insert(DefenseFacilityInstance {
+            class_dat_id,
+            side: holder,
+        });
+        world.systems[primary].defense_facilities.push(key);
+    };
+    match request.scenario {
+        Scenario::StrikeShielded => {
+            let full = hull(world, bomber);
+            board(world, bomber, full);
+            regiments(world, !player_is_alliance, 1);
+            let strength = rebellion_core::bombardment::fleet_strength(world, fleet);
+            let (shield, value) = fixture_defence_class(world, 0x24, |stats| stats.shield_strength);
+            for _ in 0..strength.unsigned_abs().div_ceil(value).max(1) {
+                defence(world, shield);
+            }
+        }
+        Scenario::AssaultCaptures | Scenario::AssaultRepelled => {
+            let full = hull(world, carrier);
+            board(world, carrier, full);
+            let aboard = if request.scenario == Scenario::AssaultCaptures {
+                world.capital_ship_classes[carrier].troop_capacity as usize
+            } else {
+                regiments(world, !player_is_alliance, 6);
+                1
+            };
+            let troops = regiments(world, player_is_alliance, aboard);
+            let _ = troop_transport.load(world, &ProductRoom::default(), fleet, &troops);
+        }
+        Scenario::StrikeDamagedSurvivor => {
+            let half = hull(world, bomber) / 2;
+            board(world, bomber, half);
+        }
+        Scenario::StrikeDamagedLoss => {
+            let tag = board(world, bomber, 1);
+            let class = fixture_bombing_squadron(world, player_is_alliance);
+            world.fleets[fleet].fighters.push(FighterEntry {
+                class,
+                count: 1,
+                carrier: tag,
+            });
+            let (battery, _) = fixture_defence_class(world, 0x23, |stats| stats.attack_strength);
+            defence(world, battery);
+        }
+        _ => {}
+    }
+}
+
+/// The player's capital ship class `wanted` picks, or `template` added for
+/// the player's side when the data has none.
+fn fixture_ship_class(
+    world: &mut GameWorld,
+    player_is_alliance: bool,
+    wanted: impl Fn(&rebellion_core::world::CapitalShipClass) -> bool,
+    template: rebellion_core::world::CapitalShipClass,
+) -> rebellion_core::ids::CapitalShipKey {
+    world
+        .capital_ship_classes
+        .iter()
+        .find(|(_, class)| {
+            class.is_alliance == player_is_alliance
+                && class.hyperdrive > 0
+                && !class.is_death_star()
+                && wanted(class)
+        })
+        .map(|(key, _)| key)
+        .unwrap_or_else(|| {
+            world
+                .capital_ship_classes
+                .insert(rebellion_core::world::CapitalShipClass {
+                    is_alliance: player_is_alliance,
+                    ..template
+                })
+        })
+}
+
+/// A regiment class of the side: the class of one of its regiments, else
+/// the Army (Alliance) or Stormtrooper (Empire) regiment.
+fn fixture_regiment_class(world: &GameWorld, alliance: bool) -> rebellion_core::ids::DatId {
+    world
+        .troops
+        .values()
+        .find(|troop| troop.is_alliance == alliance)
+        .map_or_else(
+            || rebellion_core::ids::DatId::new(if alliance { 0x1000_0001 } else { 0x1000_0006 }),
+            |troop| troop.class_dat_id,
+        )
+}
+
+/// The defence class of `family` with the largest `figure` (DEFFACSD), and
+/// that figure; a class of that family with the figure 40 when the data has
+/// none.
+fn fixture_defence_class(
+    world: &mut GameWorld,
+    family: u8,
+    figure: impl Fn(&rebellion_core::world::ClassStats) -> u32,
+) -> (rebellion_core::ids::DatId, u32) {
+    let found = world
+        .buildable_classes
+        .iter()
+        .filter(|(id, class)| id.family() == family && figure(&class.stats) > 0)
+        .max_by_key(|(id, class)| (figure(&class.stats), std::cmp::Reverse(id.raw())))
+        .map(|(id, class)| (*id, figure(&class.stats)));
+    found.unwrap_or_else(|| {
+        let id = rebellion_core::ids::DatId::new(u32::from(family) << 24 | 1);
+        let stats = rebellion_core::world::ClassStats {
+            attack_strength: 40,
+            shield_strength: 40,
+            ..rebellion_core::world::ClassStats::default()
+        };
+        world.buildable_classes.insert(
+            id,
+            rebellion_core::world::BuildableClass {
+                stats,
+                ..rebellion_core::world::BuildableClass::default()
+            },
+        );
+        (id, figure(&stats))
+    })
+}
+
+/// A squadron class of the player's side with a bombard value (FIGHTSD
+/// `bombardment_defense`), or one added when the data has none.
+fn fixture_bombing_squadron(
+    world: &mut GameWorld,
+    player_is_alliance: bool,
+) -> rebellion_core::ids::FighterKey {
+    world
+        .fighter_classes
+        .iter()
+        .find(|(_, class)| class.is_alliance == player_is_alliance && class.bombardment_defense > 0)
+        .map(|(key, _)| key)
+        .unwrap_or_else(|| {
+            world
+                .fighter_classes
+                .insert(rebellion_core::world::FighterClass {
+                    name: "Bomber Squadron".into(),
+                    is_alliance: player_is_alliance,
+                    is_empire: !player_is_alliance,
+                    bombardment_defense: 2,
+                    ..rebellion_core::world::FighterClass::default()
+                })
+        })
 }
 
 /// The regiment-loading target: another system in the primary system's
@@ -752,7 +1059,7 @@ fn loading_regiment(world: &GameWorld, primary: SystemKey) -> Option<TroopKey> {
 /// regiment lands there unopposed. In the full variant the fleet's room is
 /// taken by regiments loaded beforehand (`FUN_00500b40`); in the refused
 /// variant the target is the other side's and populated, the regiment
-/// starts aboard and held, and the Defenses window shows the target, so a
+/// starts aboard, and the Defenses window shows the target, so a
 /// drop on it is the refused move (the Fleet window covers the target's
 /// planet in the sector window).
 #[allow(clippy::too_many_arguments)]
@@ -819,7 +1126,6 @@ fn place_loading_fleet(
     let value = &mut world.fleets[fleet];
     value.location = primary;
     value.is_alliance = player_is_alliance;
-    value.has_death_star = false;
     value.characters.clear();
     value.fighters.clear();
     value.capital_ships = vec![ShipInstance::new(carrier, 100, player_is_alliance)];
@@ -832,7 +1138,6 @@ fn place_loading_fleet(
         let other = &mut world.fleets[second];
         other.location = primary;
         other.is_alliance = player_is_alliance;
-        other.has_death_star = false;
         other.characters.clear();
         other.fighters.clear();
         other.capital_ships = vec![ShipInstance::new(carrier, 100, player_is_alliance)];
@@ -856,7 +1161,6 @@ fn place_loading_fleet(
     let regiment = || TroopUnit {
         class_dat_id,
         is_alliance: player_is_alliance,
-        regiment_strength: 100,
     };
     for system in [primary, target] {
         let displaced = std::mem::take(&mut world.systems[system].ground_units);
@@ -875,7 +1179,25 @@ fn place_loading_fleet(
         };
         world.systems[target].control = ControlKind::Controlled(enemy);
         world.systems[target].is_populated = true;
-        let _ = troop_transport.load(world, fleet, &[troop]);
+        let _ = troop_transport.load(world, &ProductRoom::default(), fleet, &[troop]);
+    }
+    // The unfinished variant: the fleet's ships are not yet completed
+    // (+0x50 bit 2 clear), as a Build order leaves its ship
+    // (FUN_004f7d50(.., 1, 0)), for the under-construction mark
+    // (FUN_0042c3b0.c:412-431) and the ship's menu (FUN_004f9860.c:45-50).
+    if request.scenario == Scenario::UnfinishedShip {
+        for ship in &mut world.fleets[fleet].capital_ships {
+            ship.completed = false;
+        }
+    }
+    // The mixed variant: a completed ship, then an unfinished one beside
+    // it, as the route-1 Empire save's Fleet 1 held a Galleon and the
+    // unfinished Death Star; the fleet's Scrap passes at the completed ship
+    // (FUN_004ffa70.c:27-62).
+    if request.scenario == Scenario::ShipBesideUnfinished {
+        let mut unfinished = ShipInstance::new(carrier, 100, player_is_alliance);
+        unfinished.completed = false;
+        world.fleets[fleet].capital_ships.push(unfinished);
     }
     // The destination variant: a shipyard of the player's, so the facility
     // icon's menu offers Destination (0x214, FUN_00512700 kind 4).
@@ -900,7 +1222,7 @@ fn place_loading_fleet(
                 key
             })
             .collect();
-        let _ = troop_transport.load(world, fleet, &aboard);
+        let _ = troop_transport.load(world, &ProductRoom::default(), fleet, &aboard);
     }
 
     sectors.open_for_system(world, elsewhere, request.faction);
@@ -1002,7 +1324,6 @@ fn place_quadrant_contents(
         let troop = world.troops.insert(TroopUnit {
             class_dat_id,
             is_alliance: player_is_alliance,
-            regiment_strength: 100,
         });
         world.systems[system].ground_units.push(troop);
     }
@@ -1157,6 +1478,8 @@ struct FixtureObjectMenu<'a> {
     build_row: Option<usize>,
     stop_row: Option<usize>,
     scrap_row: Option<usize>,
+    bombardment_row: Option<usize>,
+    assault_row: Option<usize>,
     target_dat_id: u32,
     target_name: &'a str,
     target_screen_x: f32,
@@ -1230,6 +1553,8 @@ fn object_menu_report<'a>(
         build_row: menu.row_of(ObjectMenuCommand::Build),
         stop_row: menu.row_of(ObjectMenuCommand::Stop),
         scrap_row: menu.row_of(ObjectMenuCommand::Scrap),
+        bombardment_row: menu.row_of(ObjectMenuCommand::Bombardment),
+        assault_row: menu.row_of(ObjectMenuCommand::Assault),
         target_dat_id: target.dat_id.raw(),
         target_name: &target.name,
         target_screen_x,
@@ -1681,13 +2006,10 @@ impl QuadrantWatch {
             .systems
             .iter()
             .filter_map(|(system, value)| {
-                let report = windows.defenses.report(
-                    world,
-                    windows.fog,
-                    windows.missions,
-                    windows.economy,
-                    system,
-                )?;
+                let report =
+                    windows
+                        .defenses
+                        .report(world, windows.fog, windows.missions, system)?;
                 Some(FixtureDefensesWindow {
                     system_dat_id: value.dat_id.raw(),
                     origin: report.origin,
@@ -1898,7 +2220,6 @@ struct FleetLoadObservation {
     troops_tab: Option<(f32, f32)>,
     first_item: Option<(f32, f32)>,
     aboard: bool,
-    held: bool,
     cargo: usize,
     troop_system_dat_id: Option<u32>,
     in_transit: bool,
@@ -1986,7 +2307,6 @@ fn fleet_load_observation(
                 .map(screen_center)
         }),
         aboard: transport.cargo(fleet).contains(&regiment),
-        held: transport.is_held(fleet),
         cargo: transport.carried_count(fleet),
         troop_system_dat_id: regiment_system(world, regiment)
             .and_then(|system| world.systems.get(system))
@@ -2368,6 +2688,282 @@ impl FleetFinderWatch {
     }
 }
 
+/// The Operation Report scenario's report: the player's fleet bombarded
+/// the galaxy's first system, held by the other side, losing one ship, and
+/// killed a regiment and a shipyard there, so every list and both pictures'
+/// families show. Its message is the player's own copy, as a live alert
+/// opens it ([`crate::strike_orders::report_messages`]).
+///
+/// port: test fixture values, not rules.
+#[must_use]
+pub fn operation_report(
+    world: &GameWorld,
+    templates: &rebellion_data::text_templates::TextTemplates,
+    faction: CockpitFaction,
+) -> rebellion_render::OperationReportState {
+    use rebellion_core::ids::DatId;
+    use rebellion_core::operation_report::{OperationReport, ReportUnit};
+    let unit = |raw: u32, name: &str, major: bool| ReportUnit {
+        dat_id: DatId::new(raw),
+        name: name.to_owned(),
+        major,
+        object: None,
+    };
+    let alliance = faction == CockpitFaction::Alliance;
+    let (owner, holder) = if alliance {
+        (Faction::Alliance, Faction::Empire)
+    } else {
+        (Faction::Empire, Faction::Alliance)
+    };
+    let mut state = rebellion_render::OperationReportState::default();
+    let Some(system) = world.systems.keys().next() else {
+        return state;
+    };
+    let mut report = OperationReport::new(system, false, holder, owner);
+    if alliance {
+        report.fleet_operational = vec![
+            unit(0x1400_0040, "Mon Calamari Cruiser", false),
+            unit(0x1c00_0001, "X-wing", false),
+            unit(0x3000_0240, "Luke Skywalker", true),
+        ];
+        report.fleet_destroyed = vec![unit(0x1400_0045, "Corellian Corvette", false)];
+        report.system_operational = vec![
+            unit(0x1000_0006, "Stormtrooper Regiment", false),
+            unit(0x2200_0001, "KDY-150", false),
+        ];
+        report.system_destroyed = vec![
+            unit(0x1000_0008, "Imperial Army Regiment", false),
+            unit(0x2800_0001, "Orbital Shipyard", false),
+        ];
+    } else {
+        report.fleet_operational = vec![
+            unit(0x1400_0080, "Strike Cruiser", false),
+            unit(0x1c00_0005, "TIE Fighter", false),
+            unit(0x3000_0280, "Darth Vader", true),
+        ];
+        report.fleet_destroyed = vec![unit(0x1400_0081, "Lancer Frigate", false)];
+        report.system_operational = vec![
+            unit(0x1000_0005, "Mon Calamari Regiment", false),
+            unit(0x2200_0001, "KDY-150", false),
+        ];
+        report.system_destroyed = vec![
+            unit(0x1000_0002, "Alliance Army Regiment", false),
+            unit(0x2800_0001, "Orbital Shipyard", false),
+        ];
+    }
+    let report = std::sync::Arc::new(report);
+    let messages = crate::strike_orders::report_messages(world, templates, 0, &report);
+    if let Some(message) = messages.iter().find(|message| message.alerts()) {
+        state.open(world, message, faction, None);
+    }
+    state
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct FixtureOperationReport {
+    status: &'static str,
+    code: u32,
+    open: bool,
+    view: u16,
+    tab: u16,
+}
+
+/// A cell of the live report: its name, DAT family and the bitmaps
+/// [`rebellion_render::operation_report::cell_layers`] stacks for it, bottom
+/// first, on the tab that lists its family.
+#[derive(Debug, Serialize, PartialEq)]
+struct FixtureReportCell {
+    name: String,
+    family: u8,
+    layers: Vec<(String, u32)>,
+}
+
+/// The shown live report: what it says, its lists and, for its Display
+/// buttons, the last one taken and the windows open on its system.
+#[derive(Debug, Serialize, PartialEq)]
+struct FixtureLiveReport {
+    status: &'static str,
+    code: u32,
+    live: bool,
+    open: bool,
+    view: u16,
+    tab: u16,
+    title: String,
+    body: String,
+    picture: u16,
+    assault: bool,
+    fleet_operational: Vec<FixtureReportCell>,
+    fleet_destroyed: Vec<FixtureReportCell>,
+    system_operational: Vec<FixtureReportCell>,
+    system_destroyed: Vec<FixtureReportCell>,
+    destination: Option<String>,
+    sector_open: bool,
+    fleet_window_open: bool,
+}
+
+/// The windows a live report's Display buttons open, and the button taken
+/// this frame: its system and whether it was the Fleet button.
+pub struct ReportDestinations<'a> {
+    pub sectors: &'a SectorWindowState,
+    pub fleets: &'a FleetWindowState,
+    pub chosen: Option<(SystemKey, bool)>,
+}
+
+/// Emits the report window's view and tab each time they change, so the
+/// browser probe can follow its clicks.
+#[derive(Debug, Default)]
+pub struct OperationReportWatch {
+    last: Option<(bool, u16, u16)>,
+    live_last: Option<Vec<u8>>,
+    live_system: Option<SystemKey>,
+    destination: Option<String>,
+}
+
+impl OperationReportWatch {
+    fn next(
+        &mut self,
+        request: FixtureRequest,
+        state: &rebellion_render::OperationReportState,
+    ) -> Option<FixtureOperationReport> {
+        let (view, tab) = state
+            .view()
+            .map_or((0, 0), |(view, tab)| (view.command(), tab.command()));
+        let now = (state.is_open(), view, tab);
+        if request.scenario != Scenario::OperationReport || self.last == Some(now) {
+            return None;
+        }
+        self.last = Some(now);
+        Some(FixtureOperationReport {
+            status: "operation-report",
+            code: request.code,
+            open: now.0,
+            view,
+            tab,
+        })
+    }
+
+    pub fn observe(
+        &mut self,
+        request: FixtureRequest,
+        state: &rebellion_render::OperationReportState,
+    ) {
+        let Some(report) = self.next(request, state) else {
+            return;
+        };
+        let bytes = serde_json::to_vec(&report).expect("serialize the operation report state");
+        unsafe { open_rebellion_interface_fixture_emit(bytes.as_ptr(), bytes.len()) };
+    }
+
+    fn next_live(
+        &mut self,
+        request: FixtureRequest,
+        state: &rebellion_render::OperationReportState,
+        world: &GameWorld,
+        movement: &MovementState,
+        windows: &ReportDestinations<'_>,
+    ) -> Option<Vec<u8>> {
+        if !request.scenario.moves_a_fleet() {
+            return None;
+        }
+        let shown = state.shown();
+        if let Some((report, _, _)) = shown {
+            self.live_system = Some(report.system);
+        }
+        let (view, tab) = state
+            .view()
+            .map_or((0, 0), |(view, tab)| (view.command(), tab.command()));
+        let cells = |units: &[rebellion_core::operation_report::ReportUnit]| {
+            units
+                .iter()
+                .map(|unit| report_cell(world, movement, unit))
+                .collect::<Vec<_>>()
+        };
+        if let Some((system, fleet)) = windows.chosen {
+            let name = world
+                .systems
+                .get(system)
+                .map_or("", |value| value.name.as_str());
+            self.destination = Some(format!("{}:{name}", if fleet { "fleet" } else { "sector" }));
+        }
+        let system = self.live_system;
+        let observation = FixtureLiveReport {
+            status: "operation-report",
+            code: request.code,
+            live: true,
+            open: state.is_open(),
+            view,
+            tab,
+            title: shown.map_or_else(String::new, |(_, title, _)| title.to_owned()),
+            body: shown.map_or_else(String::new, |(_, _, body)| body.to_owned()),
+            picture: shown.map_or(0, |(report, _, _)| report.picture()),
+            assault: shown.is_some_and(|(report, _, _)| report.assault),
+            fleet_operational: shown
+                .map_or_else(Vec::new, |(report, _, _)| cells(&report.fleet_operational)),
+            fleet_destroyed: shown
+                .map_or_else(Vec::new, |(report, _, _)| cells(&report.fleet_destroyed)),
+            system_operational: shown
+                .map_or_else(Vec::new, |(report, _, _)| cells(&report.system_operational)),
+            system_destroyed: shown
+                .map_or_else(Vec::new, |(report, _, _)| cells(&report.system_destroyed)),
+            destination: self.destination.clone(),
+            sector_open: system
+                .and_then(|system| world.systems.get(system))
+                .is_some_and(|value| {
+                    windows.sectors.children().any(|(_, child)| {
+                        child == rebellion_render::GalaxyChild::Sector(value.sector)
+                    })
+                }),
+            fleet_window_open: system.is_some_and(|system| windows.fleets.is_open(system)),
+        };
+        let bytes = serde_json::to_vec(&observation).expect("serialize the live report");
+        if self.live_last.as_ref() == Some(&bytes) {
+            return None;
+        }
+        self.live_last = Some(bytes.clone());
+        Some(bytes)
+    }
+
+    /// Emits the live report window (the strike and assault scenarios) each
+    /// time it or its Display destinations change.
+    pub fn observe_live(
+        &mut self,
+        request: FixtureRequest,
+        state: &rebellion_render::OperationReportState,
+        world: &GameWorld,
+        movement: &MovementState,
+        windows: &ReportDestinations<'_>,
+    ) {
+        let Some(bytes) = self.next_live(request, state, world, movement, windows) else {
+            return;
+        };
+        unsafe { open_rebellion_interface_fixture_emit(bytes.as_ptr(), bytes.len()) };
+    }
+}
+
+/// `unit`'s cell on the tab that lists its family.
+fn report_cell(
+    world: &GameWorld,
+    movement: &MovementState,
+    unit: &rebellion_core::operation_report::ReportUnit,
+) -> FixtureReportCell {
+    use rebellion_render::operation_report::{cell_layers, cell_status, ReportTab};
+    let family = unit.family();
+    let layers = ReportTab::ALL
+        .into_iter()
+        .find(|tab| tab.families().contains(&family))
+        .map_or_else(Vec::new, |tab| {
+            cell_layers(unit, tab, cell_status(world, movement, unit))
+                .into_iter()
+                .map(|(source, id)| (format!("{source:?}"), id))
+                .collect()
+        });
+    FixtureReportCell {
+        name: unit.name.clone(),
+        family,
+        layers,
+    }
+}
+
 /// Where the open Game Speed menu lies, so the fleet-load gate can unpause
 /// the clock: the browser has no keypad `+` (`gl.js`).
 #[derive(Debug, Serialize, PartialEq)]
@@ -2493,8 +3089,8 @@ pub fn open_mission_dialog(
         CockpitFaction::Empire => MissionFaction::Empire,
     };
     let team = vec![MissionMember::Character(character)];
-    let kinds = available_kinds(world, uprisings, faction, &team, &[], target);
-    if !dialog.open(faction, target, team, kinds) {
+    let kinds = available_kinds(world, uprisings, faction, &team, &[], target, None);
+    if !dialog.open(faction, target, None, team, kinds) {
         return false;
     }
     if let Some(open) = dialog.dialog_mut() {
@@ -2587,7 +3183,13 @@ mod tests {
     #[test]
     fn windowing_fixture_codes_round_trip_without_changing_existing_requests() {
         assert_eq!(Scenario::WindowingContract as u8, 65);
-        assert_eq!(SCENARIO_COUNT, 66);
+        assert_eq!(Scenario::OperationReport as u8, 66);
+        assert_eq!(Scenario::StrikeDeathStar as u8, 67);
+        assert_eq!(Scenario::UnfinishedShip as u8, 68);
+        assert_eq!(Scenario::ShipBesideUnfinished as u8, 69);
+        assert_eq!(Scenario::StrikeShielded as u8, 70);
+        assert_eq!(Scenario::StrikeDamagedLoss as u8, 74);
+        assert_eq!(SCENARIO_COUNT, 75);
 
         for scenario_value in 0..SCENARIO_COUNT {
             let scenario = Scenario::decode(scenario_value).expect("known fixture scenario");
@@ -2608,6 +3210,43 @@ mod tests {
         );
         assert!(decode_request(66 | (3 << 8)).is_none());
         assert!(decode_request(66 | (1 << 8) | (1 << 16)).is_none());
+    }
+
+    #[test]
+    fn the_operation_report_scenario_opens_the_players_own_report_on_its_summary() {
+        // The fixture's report is the fleet owner's copy, a class-7 alert
+        // (FUN_0048a060), opened on Summary and tab 0x97 (FUN_0044c630).
+        use rebellion_render::operation_report::{ReportTab, ReportView};
+        let mut world = GameWorld::default();
+        world
+            .systems
+            .insert(rebellion_core::world::System::default());
+        // The report's text is TEXTSTRA 0x7098/0x7099 (FUN_00496770);
+        // these are the shipped entries.
+        let entries: std::collections::HashMap<u16, &str> = [
+            (0x7098, "Orbital bombardment of |\u{1}\u{4}\0\0\0\u{1}"),
+            (
+                0x7099,
+                "|\u{1}\u{4}\0\0\0 ships have conducted an orbital strike on the \
+                 |\u{2}\u{4}\0\0\0 system of |\u{3}\u{1}\0\0\0\u{1}",
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let templates = rebellion_data::text_templates::TextTemplates::from_json(
+            &serde_json::to_vec(&entries).unwrap(),
+        )
+        .unwrap();
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let state = operation_report(&world, &templates, faction);
+            assert_eq!(
+                state.view(),
+                Some((ReportView::Summary, ReportTab::CapitalShips)),
+                "{faction:?}"
+            );
+        }
+        let empty = operation_report(&GameWorld::default(), &templates, CockpitFaction::Empire);
+        assert!(!empty.is_open());
     }
 
     /// One system held by `side` with one recruited character of that side
@@ -2661,6 +3300,7 @@ mod tests {
             hidden: false,
             detection_phases: true,
             can_resign: true,
+            return_policy: 1,
             rules: MissionTargetRules {
                 container_loss_ends: true,
                 needs_populated_container: true,
@@ -2947,7 +3587,7 @@ mod tests {
                 fighters: Vec::new(),
                 characters: Vec::new(),
                 is_alliance: false,
-                has_death_star: false,
+                bombarding: false,
             });
         }
         world
@@ -2967,8 +3607,17 @@ mod tests {
     }
 
     fn apply_to_fleet_world(request: FixtureRequest) -> Applied {
+        apply_to_fleet_world_with(request, |_| {})
+    }
+
+    fn apply_to_fleet_world_with(
+        request: FixtureRequest,
+        prepare: impl FnOnce(&mut GameWorld),
+    ) -> Applied {
+        let mut world = fleet_world();
+        prepare(&mut world);
         let mut applied = Applied {
-            world: fleet_world(),
+            world,
             movement: MovementState::default(),
             blockade: BlockadeState::default(),
             map: GalaxyMapState::default(),
@@ -3054,6 +3703,37 @@ mod tests {
         applied
     }
 
+    #[test]
+    fn a_fixture_closes_an_open_gid_menu_and_shows_the_windows_it_hid() {
+        for (faction, side) in [(CockpitFaction::Alliance, 1), (CockpitFaction::Empire, 2)] {
+            let request = decode_request(1 | (side << 8)).expect("the first scenario");
+            let mut cockpit = CockpitState::new(faction);
+            cockpit.gid_ui.open_menu();
+            cockpit.gid_ui.category = Some(rebellion_render::cockpit::GidCategory::Fleets);
+            apply(
+                request,
+                &mut fleet_world(),
+                &mut GameMode::MainMenu,
+                &mut MissionFaction::Alliance,
+                &mut cockpit,
+                &mut GalaxyMapState::default(),
+                &mut MovementState::default(),
+                &mut ManufacturingState::default(),
+                &mut EconomyState::default(),
+                &mut MissionState::default(),
+                &mut BlockadeState::default(),
+                &mut SectorWindowState::default(),
+                &mut SystemWindowState::default(),
+                &mut FleetWindowState::default(),
+                &mut DefensesWindowState::default(),
+                &mut TroopTransportState::default(),
+            );
+            assert!(!cockpit.gid_ui.menu_open, "{faction:?}");
+            assert!(!cockpit.gid_ui.windows_hidden, "{faction:?}");
+            assert_eq!(cockpit.gid_ui.category, None);
+        }
+    }
+
     // port: the fixture's own layout; the load itself follows FUN_00500b40.
     #[test]
     fn the_fleet_load_scenario_leaves_one_carrier_and_one_movable_regiment_at_the_players_system() {
@@ -3114,9 +3794,13 @@ mod tests {
 
             applied
                 .transport
-                .load(&mut applied.world, fleet, &[regiment])
+                .load(
+                    &mut applied.world,
+                    &ProductRoom::default(),
+                    fleet,
+                    &[regiment],
+                )
                 .unwrap();
-            assert!(applied.transport.is_held(fleet));
         }
     }
 
@@ -3183,7 +3867,10 @@ mod tests {
                 assert_eq!(value.capital_ships.len(), ships, "{faction:?}");
                 assert!(value.capital_ships.iter().all(|ship| ship.alive));
                 assert_eq!(value.is_alliance, is_alliance);
-                assert!(!value.has_death_star && value.characters.is_empty());
+                assert!(
+                    !value.has_death_star(&world.capital_ship_classes)
+                        && value.characters.is_empty()
+                );
                 assert!(!applied.movement.is_in_transit(fleet));
             }
         }
@@ -3383,7 +4070,7 @@ mod tests {
     }
 
     #[test]
-    fn the_refused_unload_scenario_starts_with_the_regiment_held_aboard_and_the_target_in_the_system_window(
+    fn the_refused_unload_scenario_starts_with_the_regiment_aboard_and_the_target_in_the_system_window(
     ) {
         // port: the fixture's own layout; FUN_0053d430 refuses the drop
         // (other side, populated).
@@ -3412,7 +4099,6 @@ mod tests {
                 panic!("{faction:?}: one regiment starts aboard");
             };
             assert_eq!(world.troops[*regiment].is_alliance, is_alliance);
-            assert!(applied.transport.is_held(fleet));
             assert_eq!(applied.defenses.window_count(), 1);
             assert!(applied.defenses.is_open(target));
 
@@ -3438,7 +4124,7 @@ mod tests {
                     &[],
                 )
                 .unwrap();
-            assert!(start.aboard && start.held, "{faction:?}");
+            assert!(start.aboard, "{faction:?}");
             assert_eq!((start.cargo, start.troop_system_dat_id), (1, None));
         }
     }
@@ -3474,7 +4160,6 @@ mod tests {
                         world.troops.insert(TroopUnit {
                             class_dat_id: rebellion_core::ids::DatId::new(raw),
                             is_alliance: side,
-                            regiment_strength: 100,
                         });
                     }
                 });
@@ -3541,6 +4226,7 @@ mod tests {
                 &mut applied.world,
                 &applied.movement,
                 &blockaded,
+                &ProductRoom::default(),
                 other,
                 RegimentTarget::System(target),
                 0,
@@ -3554,6 +4240,7 @@ mod tests {
                 &mut applied.world,
                 &applied.movement,
                 &blockaded,
+                &ProductRoom::default(),
                 regiment,
                 RegimentTarget::System(target),
                 0,
@@ -3618,7 +4305,7 @@ mod tests {
 
         let start = next(&applied, &fleets).unwrap();
         assert_eq!(start.status, "fleet-load");
-        assert!(!start.window_open && !start.aboard && !start.held);
+        assert!(!start.window_open && !start.aboard);
         assert_eq!(
             start.troop_system_dat_id,
             Some(applied.world.systems[here].dat_id.raw())
@@ -3646,10 +4333,15 @@ mod tests {
 
         applied
             .transport
-            .load(&mut applied.world, fleet, &[regiment])
+            .load(
+                &mut applied.world,
+                &ProductRoom::default(),
+                fleet,
+                &[regiment],
+            )
             .unwrap();
         let loaded = next(&applied, &fleets).unwrap();
-        assert!(loaded.aboard && loaded.held);
+        assert!(loaded.aboard);
         assert_eq!((loaded.cargo, loaded.troop_system_dat_id), (1, None));
 
         let moving = FixtureRequest {
@@ -3743,13 +4435,15 @@ mod tests {
             let fleet = applied.world.fleets.keys().next().unwrap();
             let capacity = TroopTransportState::fleet_capacity(&applied.world, fleet).unwrap();
             assert_eq!(applied.transport.carried_count(fleet), capacity as usize);
-            assert!(applied.transport.is_held(fleet), "{faction:?}");
             let regiment = loading_regiment(&applied.world, here).unwrap();
             assert_eq!(applied.world.systems[here].ground_units, [regiment]);
             assert_eq!(
-                applied
-                    .transport
-                    .load(&mut applied.world, fleet, &[regiment]),
+                applied.transport.load(
+                    &mut applied.world,
+                    &ProductRoom::default(),
+                    fleet,
+                    &[regiment]
+                ),
                 Err(
                     rebellion_core::troop_transport::TroopTransportError::CapacityExceeded {
                         capacity,
@@ -3960,7 +4654,7 @@ mod tests {
                     fighters: Vec::new(),
                     characters: Vec::new(),
                     is_alliance,
-                    has_death_star: false,
+                    bombarding: false,
                 });
             }
             for (name, location) in [("Bystander", fourth), ("Waiting", second)] {
@@ -3978,7 +4672,7 @@ mod tests {
                 fighters: Vec::new(),
                 characters: vec![carried],
                 is_alliance: true,
-                has_death_star: false,
+                bombarding: false,
             });
             for (index, is_alliance) in [true, true, true, false, false, false]
                 .into_iter()
@@ -4336,9 +5030,508 @@ mod tests {
                 Scenario::FleetJoin,
                 Scenario::ProductionDestination,
                 Scenario::BuildSelection,
-                Scenario::WindowingContract
+                Scenario::WindowingContract,
+                Scenario::StrikeDeathStar,
+                Scenario::UnfinishedShip,
+                Scenario::ShipBesideUnfinished,
+                Scenario::StrikeShielded,
+                Scenario::AssaultCaptures,
+                Scenario::AssaultRepelled,
+                Scenario::StrikeDamagedSurvivor,
+                Scenario::StrikeDamagedLoss,
             ]
         );
+    }
+
+    /// The player's fleet's strike in `applied`, through the integrator the
+    /// menu row reaches (`strike_orders::issue`).
+    fn strike(
+        applied: &mut Applied,
+        kind: rebellion_core::bombardment::BombardKind,
+    ) -> rebellion_data::integrator::StrikeEffects {
+        let fleet = applied.world.fleets.keys().next().unwrap();
+        let mut manufacturing = ManufacturingState::default();
+        let mut deliveries = rebellion_core::delivery::DeliveryState::new();
+        let uprisings = UprisingState::new();
+        rebellion_data::integrator::order_strike(
+            &mut applied.world,
+            &[fleet],
+            kind,
+            &mut rebellion_data::integrator::StrikeStates {
+                movement: &mut applied.movement,
+                manufacturing: &mut manufacturing,
+                transport: &mut applied.transport,
+                deliveries: &mut deliveries,
+                missions: &mut applied.missions,
+                uprisings: &uprisings,
+                blockade: &mut applied.blockade,
+                tick: 2,
+                step: 0,
+            },
+            &mut || 0.5,
+        )
+        .expect("the fixture's strike runs")
+        .into_iter()
+        .next()
+        .expect("one run")
+    }
+
+    /// The player's fleet's assault in `applied` (`assault_orders::issue`).
+    fn assault(
+        applied: &mut Applied,
+        faction: CockpitFaction,
+    ) -> rebellion_data::integrator::AssaultEffects {
+        let fleet = applied.world.fleets.keys().next().unwrap();
+        let mut manufacturing = ManufacturingState::default();
+        let mut deliveries = rebellion_core::delivery::DeliveryState::new();
+        let uprisings = UprisingState::new();
+        rebellion_data::integrator::order_assault(
+            &mut applied.world,
+            &[fleet],
+            Faction::of_alliance(faction == CockpitFaction::Alliance),
+            &mut rebellion_data::integrator::StrikeStates {
+                movement: &mut applied.movement,
+                manufacturing: &mut manufacturing,
+                transport: &mut applied.transport,
+                deliveries: &mut deliveries,
+                missions: &mut applied.missions,
+                uprisings: &uprisings,
+                blockade: &mut applied.blockade,
+                tick: 2,
+                step: 0,
+            },
+            &mut || 0.5,
+        )
+        .expect("the fixture's assault runs")
+        .into_iter()
+        .next()
+        .expect("one run")
+    }
+
+    #[test]
+    fn the_live_report_observation_reports_the_shown_report_and_where_it_sent_the_player() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let request = request(Scenario::StrikeDamagedSurvivor, faction);
+            let mut applied = apply_to_fleet_world(request);
+            let run = strike(
+                &mut applied,
+                rebellion_core::bombardment::BombardKind::General,
+            );
+            let operation = std::sync::Arc::new(run.operation.expect("the report"));
+            let primary = operation.system;
+            let message = rebellion_render::GameMessage::at_system(
+                2,
+                "Orbital bombardment",
+                rebellion_render::MessageCategory::Combat,
+                primary,
+            )
+            .with_report(std::sync::Arc::clone(&operation));
+            let mut state = rebellion_render::OperationReportState::default();
+            let mut watch = OperationReportWatch::default();
+            let observe = |watch: &mut OperationReportWatch,
+                           state: &rebellion_render::OperationReportState,
+                           applied: &Applied,
+                           chosen| {
+                watch
+                    .next_live(
+                        request,
+                        state,
+                        &applied.world,
+                        &applied.movement,
+                        &ReportDestinations {
+                            sectors: &applied.sectors,
+                            fleets: &applied.fleets,
+                            chosen,
+                        },
+                    )
+                    .map(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).unwrap())
+            };
+
+            let closed = observe(&mut watch, &state, &applied, None).expect("the first frame");
+            assert_eq!(closed["open"], false, "{faction:?}");
+            assert!(
+                observe(&mut watch, &state, &applied, None).is_none(),
+                "{faction:?}"
+            );
+
+            assert!(state.open(&applied.world, &message, faction, None));
+            let shown = observe(&mut watch, &state, &applied, None).expect("the report opens");
+            assert_eq!(shown["live"], true, "{faction:?}");
+            assert_eq!(shown["open"], true, "{faction:?}");
+            assert_eq!(shown["title"], "Orbital bombardment", "{faction:?}");
+            assert_eq!(shown["picture"], operation.picture(), "{faction:?}");
+            assert_eq!(shown["assault"], false, "{faction:?}");
+            assert_eq!(
+                shown["fleet_operational"].as_array().map(Vec::len),
+                Some(operation.fleet_operational.len()),
+                "{faction:?}"
+            );
+            assert_eq!(shown["destination"], serde_json::Value::Null, "{faction:?}");
+
+            state.close();
+            let sent = observe(&mut watch, &state, &applied, Some((primary, true)))
+                .expect("the Fleet button closed it");
+            let name = &applied.world.systems[primary].name;
+            assert_eq!(sent["open"], false, "{faction:?}");
+            assert_eq!(sent["destination"], format!("fleet:{name}"), "{faction:?}");
+            assert_eq!(sent["fleet_window_open"], true, "{faction:?}");
+            assert_eq!(sent["sector_open"], true, "{faction:?}");
+            let sent = observe(&mut watch, &state, &applied, Some((primary, false)))
+                .expect("the System button");
+            assert_eq!(sent["destination"], format!("sector:{name}"), "{faction:?}");
+        }
+    }
+
+    // FUN_0042c3b0.c:350-410: a damaged object's cell stacks its GOKRES
+    // damage art, portrait + 0x2000, under the portrait.
+    #[test]
+    fn a_report_cell_names_its_damage_art_under_its_portrait() {
+        use rebellion_core::operation_report::{ReportObject, ReportUnit};
+        let applied = apply_to_fleet_world(request(
+            Scenario::StrikeDamagedLoss,
+            CockpitFaction::Alliance,
+        ));
+        let corvette = |damaged| ReportUnit {
+            dat_id: rebellion_core::ids::DatId::new(0x1400_0045),
+            name: "Corellian Corvette 1".into(),
+            major: false,
+            object: Some(ReportObject::Destroyed { damaged }),
+        };
+        let cell = report_cell(&applied.world, &applied.movement, &corvette(true));
+        assert_eq!(cell.name, "Corellian Corvette 1");
+        assert_eq!(cell.family, 0x14);
+        assert_eq!(
+            cell.layers,
+            [
+                ("Gokres".to_owned(), 1861 + 0x2000),
+                ("Gokres".to_owned(), 1861)
+            ]
+        );
+        let cell = report_cell(&applied.world, &applied.movement, &corvette(false));
+        assert_eq!(cell.layers, [("Gokres".to_owned(), 1861)]);
+    }
+
+    #[test]
+    fn the_fixture_picks_a_ship_class_of_the_players_side_that_suits_or_adds_one() {
+        use rebellion_core::world::CapitalShipClass;
+        let mut world = GameWorld::default();
+        let class = |is_alliance, family, hyperdrive, bombardment_modifier| CapitalShipClass {
+            is_alliance,
+            family,
+            hyperdrive,
+            bombardment_modifier,
+            ..CapitalShipClass::default()
+        };
+        // A Death Star, a ship that cannot bomb and one with no hyperdrive
+        // come first and are passed over.
+        world
+            .capital_ship_classes
+            .insert(class(false, 0x18, 80, 15));
+        let empire = world.capital_ship_classes.insert(class(false, 0x14, 80, 2));
+        world.capital_ship_classes.insert(class(true, 0x14, 80, 0));
+        world.capital_ship_classes.insert(class(true, 0x14, 0, 2));
+        let alliance = world.capital_ship_classes.insert(class(true, 0x14, 80, 2));
+        let bombs = |class: &CapitalShipClass| class.bombardment_modifier > 0;
+        let template = || class(false, 0x14, 80, 9);
+        assert_eq!(
+            fixture_ship_class(&mut world, false, bombs, template()),
+            empire
+        );
+        assert_eq!(
+            fixture_ship_class(&mut world, true, bombs, template()),
+            alliance
+        );
+
+        let added = fixture_ship_class(
+            &mut world,
+            true,
+            |class| class.troop_capacity > 0,
+            template(),
+        );
+        assert_eq!(world.capital_ship_classes.len(), 6);
+        assert!(world.capital_ship_classes[added].is_alliance);
+        assert_eq!(world.capital_ship_classes[added].bombardment_modifier, 9);
+    }
+
+    #[test]
+    fn the_fixture_regiment_class_is_one_of_the_sides_or_its_first_regiment() {
+        let mut world = GameWorld::default();
+        let army = rebellion_core::ids::DatId::new(0x1000_0001);
+        let stormtroopers = rebellion_core::ids::DatId::new(0x1000_0006);
+        assert_eq!(fixture_regiment_class(&world, true), army);
+        assert_eq!(fixture_regiment_class(&world, false), stormtroopers);
+        let fleet_regiment = rebellion_core::ids::DatId::new(0x1000_0003);
+        world.troops.insert(TroopUnit {
+            class_dat_id: fleet_regiment,
+            is_alliance: true,
+        });
+        assert_eq!(fixture_regiment_class(&world, true), fleet_regiment);
+        assert_eq!(fixture_regiment_class(&world, false), stormtroopers);
+    }
+
+    #[test]
+    fn the_fixture_defence_class_is_the_familys_strongest_or_one_added() {
+        use rebellion_core::ids::DatId;
+        use rebellion_core::world::{BuildableClass, ClassStats};
+        let mut world = GameWorld::default();
+        for (raw, shield, attack) in [
+            (0x2400_0003, 40, 0),
+            (0x2400_0006, 80, 0),
+            (0x2400_0007, 0, 900),
+            (0x2300_0002, 0, 800),
+            (0x2200_0001, 90, 2000),
+            (0x2600_0004, 0, 0),
+        ] {
+            world.buildable_classes.insert(
+                DatId::new(raw),
+                BuildableClass {
+                    stats: ClassStats {
+                        shield_strength: shield,
+                        attack_strength: attack,
+                        ..ClassStats::default()
+                    },
+                    ..BuildableClass::default()
+                },
+            );
+        }
+        assert_eq!(
+            fixture_defence_class(&mut world, 0x24, |stats| stats.shield_strength),
+            (DatId::new(0x2400_0006), 80)
+        );
+        assert_eq!(
+            fixture_defence_class(&mut world, 0x23, |stats| stats.attack_strength),
+            (DatId::new(0x2300_0002), 800)
+        );
+        assert_eq!(
+            fixture_defence_class(&mut world, 0x25, |stats| stats.shield_strength),
+            (DatId::new(0x2500_0001), 40)
+        );
+        assert_eq!(
+            fixture_defence_class(&mut world, 0x26, |stats| stats.shield_strength),
+            (DatId::new(0x2600_0001), 40)
+        );
+        assert_eq!(world.buildable_classes.len(), 8);
+    }
+
+    #[test]
+    fn the_fixture_bombing_squadron_is_one_of_the_sides_that_bombs_or_one_added() {
+        use rebellion_core::world::FighterClass;
+        let mut world = GameWorld::default();
+        let class = |is_alliance, bombardment_defense| FighterClass {
+            is_alliance,
+            bombardment_defense,
+            ..FighterClass::default()
+        };
+        let tie_bomber = world.fighter_classes.insert(class(false, 2));
+        world.fighter_classes.insert(class(true, 0));
+        let y_wing = world.fighter_classes.insert(class(true, 2));
+        assert_eq!(fixture_bombing_squadron(&mut world, false), tie_bomber);
+        assert_eq!(fixture_bombing_squadron(&mut world, true), y_wing);
+
+        for alliance in [true, false] {
+            let mut world = GameWorld::default();
+            world.fighter_classes.insert(class(alliance, 0));
+            let added = fixture_bombing_squadron(&mut world, alliance);
+            assert_eq!(world.fighter_classes.len(), 2);
+            let added = &world.fighter_classes[added];
+            assert_eq!(added.name, "Bomber Squadron");
+            assert_eq!((added.is_alliance, added.is_empire), (alliance, !alliance));
+            assert_eq!(added.bombardment_defense, 2);
+        }
+    }
+
+    // FUN_0058df60: the holder's family-0x24 generators' shields come off the
+    // hits, so the fixture's generators leave none (bombardment.md, "Effect
+    // phase").
+    #[test]
+    fn the_shielded_strike_fixture_lands_no_hit_for_either_side() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let alliance = faction == CockpitFaction::Alliance;
+            let mut bomber = None;
+            let mut applied =
+                apply_to_fleet_world_with(request(Scenario::StrikeShielded, faction), |world| {
+                    bomber = Some(world.capital_ship_classes.insert(
+                        rebellion_core::world::CapitalShipClass {
+                            is_alliance: alliance,
+                            hull: 600,
+                            hyperdrive: 80,
+                            bombardment_modifier: 3,
+                            ..rebellion_core::world::CapitalShipClass::default()
+                        },
+                    ));
+                });
+            let primary = applied.world.systems.keys().next().unwrap();
+            let fleet = applied.world.fleets.keys().next().unwrap();
+            let ships = &applied.world.fleets[fleet].capital_ships;
+            assert_eq!(ships.len(), 1, "{faction:?}");
+            assert_eq!(Some(ships[0].class), bomber, "{faction:?}");
+            let garrison = &applied.world.systems[primary].ground_units;
+            assert_eq!(garrison.len(), 1, "{faction:?}");
+            assert_eq!(
+                applied.world.troops[garrison[0]].is_alliance, !alliance,
+                "{faction:?}"
+            );
+            let generators = &applied.world.systems[primary].defense_facilities;
+            assert!(!generators.is_empty(), "{faction:?}");
+            assert!(
+                generators
+                    .iter()
+                    .all(
+                        |&key| applied.world.defense_facilities[key].class_dat_id.family() == 0x24
+                    ),
+                "{faction:?}"
+            );
+            let run = strike(
+                &mut applied,
+                rebellion_core::bombardment::BombardKind::Military,
+            );
+            let report = run.report.expect("a run");
+            assert!(
+                rebellion_core::bombardment::fleet_strength(
+                    &applied.world,
+                    applied.world.fleets.keys().next().unwrap()
+                ) > 0,
+                "{faction:?}"
+            );
+            assert_eq!(report.hits, 0, "{faction:?}");
+            assert!(report.system_destroyed.is_empty(), "{faction:?}");
+        }
+    }
+
+    /// The shipped GNPRTB the assault reads: `0x200`-`0x205` (5, 30, 10, 4,
+    /// 6, 8), the shield limit `0x1e03` (2) and the landing's garrison
+    /// figures 7761 (60) and 7762 (-10).
+    fn assault_gnprtb(world: &mut GameWorld) {
+        let entry = |id: u32, value: i32| rebellion_core::world::GnprtbEntry {
+            parameter_id: id,
+            development: value,
+            alliance_sp_easy: value,
+            alliance_sp_medium: value,
+            alliance_sp_hard: value,
+            empire_sp_easy: value,
+            empire_sp_medium: value,
+            empire_sp_hard: value,
+            multiplayer: value,
+        };
+        world.gnprtb = rebellion_core::world::GnprtbParams::new(
+            [
+                (0x200, 5),
+                (0x201, 30),
+                (0x202, 10),
+                (0x203, 4),
+                (0x204, 6),
+                (0x205, 8),
+                (0x1e03, 2),
+                (7761, 60),
+                (7762, -10),
+            ]
+            .into_iter()
+            .map(|(id, value)| entry(id, value))
+            .collect(),
+        );
+    }
+
+    // FUN_00563390: with no defender left standing the assault takes the
+    // system; against six defenders one regiment cannot (ground-assault.md).
+    #[test]
+    fn the_assault_fixtures_capture_the_empty_garrison_and_lose_to_the_full_one() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let player = Faction::of_alliance(faction == CockpitFaction::Alliance);
+            let holder = Faction::of_alliance(faction != CockpitFaction::Alliance);
+            let mut applied = apply_to_fleet_world_with(
+                request(Scenario::AssaultCaptures, faction),
+                assault_gnprtb,
+            );
+            let fleet = applied.world.fleets.keys().next().unwrap();
+            let class = &applied.world.capital_ship_classes
+                [applied.world.fleets[fleet].capital_ships[0].class];
+            assert_eq!(
+                (
+                    class.name.as_str(),
+                    class.hull,
+                    class.hyperdrive,
+                    class.troop_capacity
+                ),
+                ("Transport", 100, 80, 2),
+                "{faction:?}"
+            );
+            let report = assault(&mut applied, faction).report.expect("a run");
+            assert!(report.attackers >= 2, "{faction:?}");
+            assert_eq!(report.defenders, 0, "{faction:?}");
+            assert_eq!(report.landed.len(), 2, "{faction:?}");
+            assert_eq!(report.holder_after, Some(player), "{faction:?}");
+
+            let mut applied = apply_to_fleet_world_with(
+                request(Scenario::AssaultRepelled, faction),
+                assault_gnprtb,
+            );
+            let report = assault(&mut applied, faction).report.expect("a run");
+            assert_eq!((report.attackers, report.defenders), (1, 6), "{faction:?}");
+            assert_eq!(report.holder_after, Some(holder), "{faction:?}");
+        }
+    }
+
+    // FUN_00501c00 sets +0x50 bit 9 on a hull below its maximum, and
+    // FUN_0042c3b0.c:350-410 draws the damage art for it in either column;
+    // the batteries' only target dies with the bit (FUN_0058d540).
+    #[test]
+    fn the_damaged_strike_fixtures_list_a_damaged_survivor_and_a_damaged_loss() {
+        use rebellion_core::operation_report::ReportObject;
+        use rebellion_render::operation_report::cell_status;
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut applied =
+                apply_to_fleet_world(request(Scenario::StrikeDamagedSurvivor, faction));
+            let fleet = applied.world.fleets.keys().next().unwrap();
+            let ship = &applied.world.fleets[fleet].capital_ships[0];
+            let class = &applied.world.capital_ship_classes[ship.class];
+            assert_eq!(
+                (
+                    class.name.as_str(),
+                    class.hull,
+                    class.hyperdrive,
+                    ship.hull_current
+                ),
+                ("Bomber", 1000, 80, 500),
+                "{faction:?}"
+            );
+            let run = strike(
+                &mut applied,
+                rebellion_core::bombardment::BombardKind::General,
+            );
+            let operation = run.operation.expect("the report");
+            assert_eq!(run.report.expect("a run").ships_destroyed, 0, "{faction:?}");
+            let ship = operation
+                .fleet_operational
+                .iter()
+                .find(
+                    |unit| matches!(unit.object, Some(ReportObject::Ship { tag, .. }) if tag != 0),
+                )
+                .expect("the ship is listed operational");
+            assert!(
+                cell_status(&applied.world, &applied.movement, ship).damaged,
+                "{faction:?}"
+            );
+
+            let mut applied = apply_to_fleet_world(request(Scenario::StrikeDamagedLoss, faction));
+            let run = strike(
+                &mut applied,
+                rebellion_core::bombardment::BombardKind::Military,
+            );
+            assert_eq!(run.report.expect("a run").ships_destroyed, 1, "{faction:?}");
+            let operation = run.operation.expect("the report");
+            // The ship's squadron dies with it and is listed beside it with
+            // no object state.
+            assert_eq!(
+                operation
+                    .fleet_destroyed
+                    .iter()
+                    .filter(|unit| matches!(unit.object, Some(ReportObject::Destroyed { .. })))
+                    .map(|unit| unit.object.clone())
+                    .collect::<Vec<_>>(),
+                [Some(ReportObject::Destroyed { damaged: true })],
+                "{faction:?}"
+            );
+        }
     }
 
     fn finder_observation(

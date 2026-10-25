@@ -135,7 +135,6 @@ pub(super) fn prepare(
             let fleet = &mut world.fleets[fleet_key];
             fleet.location = system;
             fleet.is_alliance = player_is_alliance;
-            fleet.has_death_star = false;
             if fleet.capital_ships.is_empty() {
                 if let Some(class) = world.capital_ship_classes.keys().next() {
                     fleet
@@ -203,7 +202,6 @@ pub(super) fn prepare(
                 let troop = world.troops.insert(TroopUnit {
                     class_dat_id: class_dat_ids[unit_index % class_dat_ids.len()],
                     is_alliance: player_is_alliance,
-                    regiment_strength: 100,
                 });
                 world.systems[system].ground_units.push(troop);
             }
@@ -329,10 +327,9 @@ fn system_state(world: &GameWorld, windows: &IdentityHistoryWindows<'_>, key: Sy
         windows
             .fleets
             .report(world, windows.movement, windows.fog, windows.transport, key);
-    let defenses_report =
-        windows
-            .defenses
-            .report(world, windows.fog, windows.missions, windows.economy, key);
+    let defenses_report = windows
+        .defenses
+        .report(world, windows.fog, windows.missions, key);
     let missions_report =
         windows
             .missions_windows

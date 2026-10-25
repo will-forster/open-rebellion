@@ -20,7 +20,8 @@ use rebellion_core::fog::FogState;
 use rebellion_core::ids::{
     CharacterKey, DefenseFacilityKey, FighterKey, SpecialForceKey, SystemKey, TroopKey,
 };
-use rebellion_core::missions::{MissionMember, MissionState};
+use rebellion_core::missions::{MissionMember, MissionState, MissionTarget};
+use rebellion_core::saved_interface::{SavedWindow, SavedWindowKind};
 use rebellion_core::world::GameWorld;
 use rebellion_windowing::{
     ContentReport, ContentStatus, RoutingSnapshot, SubjectId, WindowId, WindowKind, WindowOwner,
@@ -40,8 +41,9 @@ use crate::scroll_bar::{egui_pointer, ScrollBar, ScrollDrag, ScrollRange, LIST_B
 use crate::system_window::{
     canvas_point, character_mini_resource_id, clamp_window_to_galaxy, defense_facility_mini,
     exact_clicked, logical_rect, opposing_contents_visible, rect_contains, special_force_mini,
-    troop_mini,
+    surface_drag_grab, system_by_dat_id, title_drag_step, troop_mini, TitleDrag,
 };
+use crate::windowing::GalaxyChild;
 use crate::windowing_input::{
     FrameInputRouter, InputEventId, InputRecipient, PointerButtonId, PointerPhase,
 };
@@ -209,6 +211,8 @@ struct OpenDefensesWindow {
     id: Option<WindowId>,
     subject: Option<SubjectId>,
     system: SystemKey,
+    /// When this window last took focus (`window_focus`).
+    focus_serial: u64,
     logical_position: (i16, i16),
     page: DefensesPage,
     /// port: one selected row; the list's own selection rules
@@ -221,6 +225,9 @@ struct OpenDefensesWindow {
     /// Whether this exact content identity was admitted for release targeting
     /// by the current frozen presentation snapshot.
     release_target_visible: bool,
+    /// The cells as last painted from the list's top, for the release hit
+    /// test.
+    painted: Vec<DefensesItem>,
 }
 
 /// Validated Defenses content held aside until the manager accepts its stable
@@ -265,6 +272,8 @@ pub struct DefensesWindowState {
     windows: Vec<OpenDefensesWindow>,
     drag: Option<RowDrag>,
     drag_owner: Option<WindowId>,
+    /// A window drag in progress.
+    title_drag: Option<TitleDrag>,
 }
 
 impl Default for DefensesWindowState {
@@ -274,6 +283,7 @@ impl Default for DefensesWindowState {
             windows: Vec::new(),
             drag: None,
             drag_owner: None,
+            title_drag: None,
         }
     }
 }
@@ -378,12 +388,14 @@ impl DefensesWindowState {
                     id: Some(id),
                     subject: Some(subject),
                     system: prepared.system,
+                    focus_serial: 0,
                     logical_position: prepared.logical_position,
                     page: DefensesPage::Personnel,
                     selected: None,
                     first_row: 0,
                     scroll: ScrollDrag::default(),
                     release_target_visible: false,
+                    painted: Vec::new(),
                 });
                 Some(id)
             }
@@ -426,6 +438,7 @@ impl DefensesWindowState {
             id: None,
             subject: None,
             system,
+            focus_serial: 0,
             logical_position: clamp_window_to_galaxy(
                 logical_position,
                 layout,
@@ -437,6 +450,7 @@ impl DefensesWindowState {
             first_row: 0,
             scroll: ScrollDrag::default(),
             release_target_visible: true,
+            painted: Vec::new(),
         });
         true
     }
@@ -545,9 +559,22 @@ impl DefensesWindowState {
 
     #[must_use]
     pub fn contains_screen_point(&self, layout: CockpitLayout, point: (f32, f32)) -> bool {
+        self.contains_shown_screen_point(layout, point, &|_| true)
+    }
+
+    /// [`contains_screen_point`](Self::contains_screen_point) over the
+    /// windows `shown` passes.
+    #[must_use]
+    pub fn contains_shown_screen_point(
+        &self,
+        layout: CockpitLayout,
+        point: (f32, f32),
+        shown: &dyn Fn(GalaxyChild) -> bool,
+    ) -> bool {
         let point = egui::pos2(point.0, point.1);
         self.windows
             .iter()
+            .filter(|window| shown(GalaxyChild::Defenses(window.system)))
             .any(|window| rect_contains(window_screen_rect(window, layout), point))
     }
 
@@ -650,7 +677,6 @@ impl DefensesWindowState {
         world: &GameWorld,
         fog: &FogState,
         missions: &MissionState,
-        economy: &EconomyState,
         system: SystemKey,
     ) -> Option<DefensesWindowReport> {
         let window = self.windows.iter().find(|window| window.system == system)?;
@@ -668,7 +694,7 @@ impl DefensesWindowState {
                 .map(|page| page_rows(world, fog, missions, player, system, page).len()),
             rows: rows.into_iter().map(|row| row.label).collect(),
             selected,
-            garrison: garrison_line(world, economy, player, system, window.page),
+            garrison: garrison_line(world, player, system, window.page),
         })
     }
 
@@ -701,10 +727,41 @@ impl DefensesWindowState {
         }
     }
 
+    /// The object a Mission order released over the Defenses window egui
+    /// draws as `layer` names (`+0x68`, `FUN_004aa380`): the row in the cell
+    /// under `point` (list `+0x164` at (7, 81), on any page), or `None`
+    /// where the window gives its system. port: a character or squadron
+    /// row names no [`MissionTarget`], so it gives the system too.
+    #[must_use]
+    pub fn release_object(
+        &self,
+        layout: CockpitLayout,
+        layer: egui::LayerId,
+        point: egui::Pos2,
+    ) -> Option<MissionTarget> {
+        let window = self
+            .windows
+            .iter()
+            .find(|window| area_id(window) == layer.id)?;
+        let rect = window_screen_rect(window, layout);
+        let local = (
+            (point.x - rect.min.x) / layout.scale,
+            (point.y - rect.min.y) / layout.scale,
+        );
+        let index = crate::system_window::grid_cell(local, LIST, (CELL, CELL), COLUMNS)?;
+        match *window.painted.get(index)? {
+            DefensesItem::Defense(key) => Some(MissionTarget::DefenseFacility(key)),
+            DefensesItem::Troop(key) => Some(MissionTarget::Troop(key)),
+            DefensesItem::SpecialForce(key) => Some(MissionTarget::SpecialForce(key)),
+            DefensesItem::Character(_) | DefensesItem::Squadron { .. } => None,
+        }
+    }
+
     pub fn clear(&mut self) {
         self.windows.clear();
         self.drag = None;
         self.drag_owner = None;
+        self.title_drag = None;
     }
 
     /// Whether a left press on a squadron row is held: the list has
@@ -808,6 +865,7 @@ impl DefensesWindowState {
                 system: drag.system,
                 class,
                 is_alliance: drag.is_alliance,
+                confirmed: ctrl,
                 point,
             },
             DefensesItem::Character(key) => DefensesWindowAction::DragMember {
@@ -833,6 +891,94 @@ impl DefensesWindowState {
         }
     }
 
+    /// When the window in front took focus (`window_focus`); 0 with none
+    /// open. Each window keeps its own, so after a close the window behind
+    /// ranks where it took focus, as the original's z-order does.
+    #[must_use]
+    pub fn focus_serial(&self) -> u64 {
+        self.windows.last().map_or(0, |window| window.focus_serial)
+    }
+
+    /// The open windows as galaxy children, with their z serials; a
+    /// minimized window is on the rail, not among them.
+    pub fn children(&self) -> impl Iterator<Item = (u64, GalaxyChild)> + '_ {
+        self.windows
+            .iter()
+            .map(|window| (window.focus_serial, GalaxyChild::Defenses(window.system)))
+    }
+
+    /// The open windows as a save keeps them, each with its z serial: the
+    /// system by its DAT id (`FUN_004aa6d0`) and the window's top-left.
+    #[must_use]
+    pub fn saved_windows(&self, world: &GameWorld) -> Vec<(u64, SavedWindow)> {
+        self.windows
+            .iter()
+            .filter_map(|window| {
+                Some((
+                    window.focus_serial,
+                    SavedWindow {
+                        kind: SavedWindowKind::Defenses {
+                            system: world.systems.get(window.system)?.dat_id,
+                        },
+                        position: window.logical_position,
+                        shown: true,
+                    },
+                ))
+            })
+            .collect()
+    }
+
+    /// Rebuild a shown saved Defenses window (`FUN_00441190` type 10,
+    /// `FUN_004a7790`) at its saved place, above the windows rebuilt before
+    /// it, on the personnel page: the page is not saved (`FUN_004aa6d0`). A
+    /// hidden one is a rail entry only (`SystemWindowState::restore_saved`).
+    /// False for any other record, a hidden one, or a system not in the
+    /// world.
+    pub fn restore_saved(
+        &mut self,
+        world: &GameWorld,
+        faction: CockpitFaction,
+        saved: &SavedWindow,
+    ) -> bool {
+        let SavedWindowKind::Defenses { system } = saved.kind else {
+            return false;
+        };
+        let Some(system) = system_by_dat_id(world, system).filter(|_| saved.shown) else {
+            return false;
+        };
+        self.prepare_faction(faction);
+        self.close(system);
+        self.windows.push(OpenDefensesWindow {
+            id: None,
+            subject: None,
+            system,
+            focus_serial: 0,
+            logical_position: saved.position,
+            page: DefensesPage::Personnel,
+            selected: None,
+            first_row: 0,
+            scroll: ScrollDrag::default(),
+            release_target_visible: true,
+            painted: Vec::new(),
+        });
+        true
+    }
+
+    /// Bring `system`'s window to the top of the galaxy view's z-order, as
+    /// its activation does (`FUN_00422ce0` 0x467: `BringWindowToTop`).
+    /// False when it is not open.
+    pub fn raise(&mut self, system: SystemKey) -> bool {
+        self.focus(system)
+    }
+
+    /// Close `system`'s window, as its keyed close does (slot `+0x30`).
+    /// False when it is not open.
+    pub fn close_window(&mut self, system: SystemKey) -> bool {
+        let open = self.windows.iter().any(|window| window.system == system);
+        self.close(system);
+        open
+    }
+
     fn focus(&mut self, system: SystemKey) -> bool {
         let Some(index) = self
             .windows
@@ -841,7 +987,8 @@ impl DefensesWindowState {
         else {
             return false;
         };
-        let window = self.windows.remove(index);
+        let mut window = self.windows.remove(index);
+        window.focus_serial = 0;
         self.windows.push(window);
         true
     }
@@ -852,6 +999,25 @@ impl DefensesWindowState {
             .iter()
             .position(|window| window.system == system)?;
         Some(self.windows.remove(index))
+    }
+
+    /// Carry a window drag one frame ([`TitleDrag`]): the window follows
+    /// the pointer while the button is down, and the release lets go.
+    fn update_title_drag(&mut self, ctx: &egui::Context, layout: CockpitLayout) {
+        if let Some(drag) = self.title_drag {
+            let window = self
+                .windows
+                .iter_mut()
+                .find(|window| area_id(window) == drag.area);
+            match (window, title_drag_step(ctx, layout, drag)) {
+                (Some(window), Ok(place)) => {
+                    if let Some(place) = place {
+                        window.logical_position = place;
+                    }
+                }
+                _ => self.title_drag = None,
+            }
+        }
     }
 
     fn window_mut(&mut self, system: SystemKey) -> Option<&mut OpenDefensesWindow> {
@@ -896,6 +1062,8 @@ pub enum DefensesWindowAction {
     Minimize {
         system: SystemKey,
         logical_position: (i16, i16),
+        /// The window's place in the z-order, which it keeps while hidden.
+        serial: u64,
     },
     /// Production minimize intent for manager-owned Defenses content. The
     /// rail adapter observes it only after the manager accepts the command.
@@ -914,12 +1082,13 @@ pub enum DefensesWindowAction {
         point: (i16, i16),
     },
     /// A Squadrons page row dragged out of the list (`0x29a`): the galaxy
-    /// view hit-tests the screen point and issues `0x201`
-    /// (`TroopTransportState::move_squadron`).
+    /// view hit-tests the screen point and issues `0x201`, or `0x202` with
+    /// Ctrl (`TroopTransportState::move_squadron`).
     DragSquadron {
         system: SystemKey,
         class: FighterKey,
         is_alliance: bool,
+        confirmed: bool,
         point: egui::Pos2,
     },
     /// A Personnel page row dragged out of the list: the galaxy view
@@ -1101,7 +1270,6 @@ fn page_rows(
 /// Requirement: " and the system's stored requirement (`+0x80`).
 fn garrison_line(
     world: &GameWorld,
-    economy: &EconomyState,
     player: Faction,
     system: SystemKey,
     page: DefensesPage,
@@ -1109,10 +1277,8 @@ fn garrison_line(
     if page != DefensesPage::Regiments || shown_side(world, system) != faction_side(player) {
         return None;
     }
-    let requirement = economy
-        .per_system
-        .get(&system)
-        .map_or(0, |value| value.garrison_requirement);
+    let requirement =
+        rebellion_core::economy::stored_support_values(world, system).garrison_requirement;
     Some(format!("Garrison Requirement: {requirement}"))
 }
 
@@ -1169,6 +1335,8 @@ fn cell_rect(window: egui::Rect, scale: f32, index: usize) -> egui::Rect {
 
 #[derive(Default)]
 struct WindowDrawResult {
+    /// Where a press on the window's own surface took hold ([`TitleDrag`]).
+    drag_grab: Option<egui::Vec2>,
     focus: bool,
     close: bool,
     minimize: bool,
@@ -1186,6 +1354,8 @@ struct WindowDrawResult {
     /// Normalized physical phases that causally produced this frame's
     /// mutations, in backend order with duplicates removed.
     causal_pointer_phases: Vec<PointerPhase>,
+    /// The cells painted from the list's top.
+    painted: Vec<DefensesItem>,
 }
 
 impl WindowDrawResult {
@@ -1300,6 +1470,7 @@ fn draw_defenses_windows_with_snapshot(
     pointer_events: &[(InputEventId, PointerPhase)],
     mut router: Option<&mut FrameInputRouter>,
 ) -> Vec<DefensesWindowAction> {
+    state.update_title_drag(ctx, layout);
     if state.windows.iter().all(|window| window.id.is_none()) {
         state.prepare_faction(faction);
     }
@@ -1362,8 +1533,14 @@ fn draw_defenses_windows_with_snapshot(
             None => focused_fixture_system == Some(window.system),
         };
         let result = draw_defenses_window(
-            ctx, world, fog, missions, economy, window, focused, faction, layout, cache,
+            ctx, world, fog, missions, window, focused, faction, layout, cache,
         );
+        if let Some(grab) = result.drag_grab {
+            state.title_drag = Some(TitleDrag {
+                area: area_id(window),
+                grab,
+            });
+        }
         let system = window.system;
         let scroll_changed = result
             .scroll
@@ -1420,6 +1597,7 @@ fn draw_defenses_windows_with_snapshot(
                 actions.push(DefensesWindowAction::Minimize {
                     system,
                     logical_position: closed.logical_position,
+                    serial: closed.focus_serial,
                 });
             }
             continue;
@@ -1436,6 +1614,7 @@ fn draw_defenses_windows_with_snapshot(
                 open.first_row = first_row;
                 open.scroll = scroll;
             }
+            open.painted = result.painted;
             // hyp: a refill shows the new page from its top.
             if let Some(page) = result.page.filter(|&page| page != open.page) {
                 open.page = page;
@@ -1481,7 +1660,6 @@ fn draw_defenses_window(
     world: &GameWorld,
     fog: &FogState,
     missions: &MissionState,
-    economy: &EconomyState,
     window: &OpenDefensesWindow,
     focused: bool,
     faction: CockpitFaction,
@@ -1617,7 +1795,7 @@ fn draw_defenses_window(
                 label_font.clone(),
                 egui::Color32::WHITE,
             );
-            if let Some(line) = garrison_line(world, economy, player, window.system, window.page) {
+            if let Some(line) = garrison_line(world, player, window.system, window.page) {
                 painter.text(
                     logical_rect(
                         local,
@@ -1714,6 +1892,7 @@ fn draw_defenses_window(
                 .enumerate()
                 .skip(first_row * COLUMNS)
                 .take(COLUMNS * VISIBLE_ROWS);
+            result.painted = shown.clone().map(|(_, row)| row.item).collect();
             for (cell_index, (index, row)) in shown.enumerate() {
                 let cell = cell_rect(local, scale, cell_index);
                 if let (DefensesItem::Character(key), true) =
@@ -1751,7 +1930,7 @@ fn draw_defenses_window(
                         (MiniObject::Craft, false)
                     }
                 };
-                for (source, bitmap) in mini_layers(object, row.mini, en_route) {
+                for (source, bitmap) in mini_layers(object, row.mini, en_route, None) {
                     paint_native(
                         &list_painter,
                         ctx,
@@ -1863,6 +2042,7 @@ fn draw_defenses_window(
                 &bar.blits(range, &scroll, pointer),
             );
 
+            result.drag_grab = surface_drag_grab(ctx, &window_response, local, scale, &[]);
             if window_response.clicked() || clicked.iter().any(|&value| value) {
                 result.focus = true;
                 result.note_pointer_phase(PointerPhase::Release(PointerButtonId::Primary));
@@ -1889,7 +2069,7 @@ mod tests {
     use crate::cockpit::CockpitViewport;
     use crate::fleet_window::tests::PAINTED;
     use rebellion_core::dat::SectorGroup;
-    use rebellion_core::economy::SystemEconomy;
+    use rebellion_core::economy::SupportValues;
     use rebellion_core::ids::DatId;
     use rebellion_core::missions::{MissionFaction, MissionKind, MissionRequest};
     use rebellion_core::world::{
@@ -1954,7 +2134,6 @@ mod tests {
         let key = world.troops.insert(TroopUnit {
             class_dat_id: DatId::new(dat_id),
             is_alliance,
-            regiment_strength: 100,
         });
         world.systems[system].ground_units.push(key);
     }
@@ -2096,11 +2275,9 @@ mod tests {
         // Side bits 0 or 3 match neither side's objects.
         let (mut world, system, missions) = stocked();
         let fog = seen(system);
-        for control in [ControlKind::Uncontrolled, ControlKind::Contested] {
-            world.systems[system].control = control;
-            for page in DefensesPage::ALL {
-                assert!(labels(&world, &fog, &missions, system, page).is_empty());
-            }
+        world.systems[system].control = ControlKind::Uncontrolled;
+        for page in DefensesPage::ALL {
+            assert!(labels(&world, &fog, &missions, system, page).is_empty());
         }
         world.systems[system].control = ControlKind::Controlled(Faction::Alliance);
         world.systems[system].exploration_status = ExplorationStatus::Unexplored;
@@ -2154,16 +2331,15 @@ mod tests {
     fn the_garrison_line_shows_on_the_regiment_page_of_the_players_own_system() {
         // FUN_004a90d0's tail: TEXTSTRA 6471 and +0x80 on page 2 when the
         // side bits are the player's (FUN_0041cdb0).
-        let (world, system) = world(ControlKind::Controlled(Faction::Alliance));
-        let mut economy = EconomyState::default();
-        economy.per_system.insert(
+        let (mut world, system) = world(ControlKind::Controlled(Faction::Alliance));
+        world.support_values.insert(
             system,
-            SystemEconomy {
+            SupportValues {
                 garrison_requirement: 3,
-                ..SystemEconomy::default()
+                ..SupportValues::default()
             },
         );
-        let line = |player, page| garrison_line(&world, &economy, player, system, page);
+        let line = |player, page| garrison_line(&world, player, system, page);
 
         assert_eq!(
             line(Faction::Alliance, DefensesPage::Regiments).as_deref(),
@@ -2171,15 +2347,9 @@ mod tests {
         );
         assert_eq!(line(Faction::Alliance, DefensesPage::Personnel), None);
         assert_eq!(line(Faction::Empire, DefensesPage::Regiments), None);
+        world.support_values.clear();
         assert_eq!(
-            garrison_line(
-                &world,
-                &EconomyState::default(),
-                Faction::Alliance,
-                system,
-                DefensesPage::Regiments
-            )
-            .as_deref(),
+            garrison_line(&world, Faction::Alliance, system, DefensesPage::Regiments).as_deref(),
             Some("Garrison Requirement: 0")
         );
     }
@@ -2192,7 +2362,7 @@ mod tests {
         assert_eq!(rail_icon(&world, system), 11534);
         world.systems[system].control = ControlKind::Controlled(Faction::Alliance);
         assert_eq!(rail_icon(&world, system), 11533);
-        world.systems[system].control = ControlKind::Contested;
+        world.systems[system].control = ControlKind::Uncontrolled;
         assert_eq!(rail_icon(&world, system), 11535);
 
         assert_eq!(
@@ -2677,22 +2847,45 @@ mod tests {
         state: &mut DefensesWindowState,
         frames: Vec<Vec<egui::Event>>,
     ) -> Run {
+        run_as(
+            world,
+            missions,
+            state,
+            frames,
+            (CockpitFaction::Alliance, egui::Modifiers::default()),
+        )
+    }
+
+    /// [`run`] for `faction`, with `modifiers` held through every frame.
+    fn run_as(
+        world: &GameWorld,
+        missions: &MissionState,
+        state: &mut DefensesWindowState,
+        frames: Vec<Vec<egui::Event>>,
+        (faction, modifiers): (CockpitFaction, egui::Modifiers),
+    ) -> Run {
         let ctx = egui::Context::default();
         let mut cache = BmpCache::new();
+        let side = if faction == CockpitFaction::Alliance {
+            Faction::Alliance
+        } else {
+            Faction::Empire
+        };
         let fog = world
             .systems
             .keys()
-            .fold(FogState::new(Faction::Alliance), |mut fog, key| {
+            .fold(FogState::new(side), |mut fog, key| {
                 fog.reveal(key);
                 fog
             });
-        let mut economy = EconomyState::default();
-        for key in world.systems.keys() {
-            economy.per_system.insert(
+        let mut world = world.clone();
+        let keys: Vec<_> = world.systems.keys().collect();
+        for key in keys {
+            world.support_values.insert(
                 key,
-                SystemEconomy {
+                SupportValues {
                     garrison_requirement: 2,
-                    ..SystemEconomy::default()
+                    ..SupportValues::default()
                 },
             );
         }
@@ -2705,18 +2898,19 @@ mod tests {
                 )),
                 time: Some(index as f64 * 0.05),
                 events,
+                modifiers,
                 ..Default::default()
             };
             PAINTED.with(|painted| painted.borrow_mut().clear());
             let output = ctx.run(input, |ctx| {
                 result.actions.extend(draw_defenses_windows(
                     ctx,
-                    world,
+                    &world,
                     &fog,
                     missions,
-                    &economy,
+                    &EconomyState::default(),
                     state,
-                    CockpitFaction::Alliance,
+                    faction,
                     scaled(),
                     &mut cache,
                 ));
@@ -2758,16 +2952,7 @@ mod tests {
                 fog.reveal(key);
                 fog
             });
-        let mut economy = EconomyState::default();
-        for key in world.systems.keys() {
-            economy.per_system.insert(
-                key,
-                SystemEconomy {
-                    garrison_requirement: 2,
-                    ..SystemEconomy::default()
-                },
-            );
-        }
+        let economy = EconomyState::default();
         let window = state
             .windows
             .iter()
@@ -2939,13 +3124,7 @@ mod tests {
             [DefensesWindowAction::SelectSystem(system)]
         );
         let report = state
-            .report(
-                &world,
-                &seen(system),
-                &missions,
-                &EconomyState::default(),
-                system,
-            )
+            .report(&world, &seen(system), &missions, system)
             .unwrap();
         assert_eq!(report.selected, Some(1));
         assert_eq!(report.counts, [3, 1, 0, 2, 2]);
@@ -2989,12 +3168,14 @@ mod tests {
             ]
         );
 
+        let serial = state.focus_serial();
         let minimized = run(&world, &missions, &mut state, click(at(210.0, 9.0)));
         assert_eq!(
             minimized.actions,
             [DefensesWindowAction::Minimize {
                 system,
-                logical_position: ORIGIN
+                logical_position: ORIGIN,
+                serial,
             }]
         );
         assert_eq!(state.window_count(), 0);
@@ -3020,6 +3201,138 @@ mod tests {
         assert!(held.painted.contains(&(CLOSE_PRESSED, at(218.0, 3.0))));
         assert!(held.painted.contains(&(MINIMIZE_NORMAL, at(204.0, 3.0))));
         assert_eq!(state.window_count(), 1);
+    }
+
+    // FUN_00422ce0 issues a type 10 (Defenses window) list drop as 0x202
+    // when GetAsyncKeyState(0x11) finds Ctrl down, else 0x201
+    // (move-order.md, "A drag is a move").
+    #[test]
+    fn a_squadron_dropped_with_ctrl_held_is_a_confirmed_move_for_either_side() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let is_alliance = faction == CockpitFaction::Alliance;
+            let (mut world, system) = world(ControlKind::Controlled(if is_alliance {
+                Faction::Alliance
+            } else {
+                Faction::Empire
+            }));
+            let class = world
+                .fighter_classes
+                .insert(rebellion_core::world::FighterClass {
+                    dat_id: DatId::new(if is_alliance {
+                        0x1c00_0001
+                    } else {
+                        0x1c00_0005
+                    }),
+                    name: "Fighter".into(),
+                    ..Default::default()
+                });
+            world.systems[system].add_squadrons(class, 1, is_alliance);
+            let missions = MissionState::new();
+            for (modifiers, confirmed) in [
+                (egui::Modifiers::default(), false),
+                (egui::Modifiers::CTRL, true),
+            ] {
+                let mut state = DefensesWindowState::default();
+                assert!(state.open(&world, system, ORIGIN, faction, scaled()));
+                let plain = (faction, egui::Modifiers::default());
+                let _ = run_as(&world, &missions, &mut state, click(at(118.0, 36.0)), plain);
+                let (start, end) = (at(30.0, 100.0), at(300.0, 100.0));
+                let mut frames = hover(start);
+                frames.extend([
+                    vec![press(start, true)],
+                    vec![egui::Event::PointerMoved(end)],
+                ]);
+                let _ = run_as(&world, &missions, &mut state, frames, plain);
+                let released = run_as(
+                    &world,
+                    &missions,
+                    &mut state,
+                    vec![vec![egui::Event::PointerMoved(end), press(end, false)]],
+                    (faction, modifiers),
+                );
+                let drops: Vec<_> = released
+                    .actions
+                    .iter()
+                    .filter_map(|action| match *action {
+                        DefensesWindowAction::DragSquadron {
+                            class: dropped,
+                            confirmed,
+                            ..
+                        } => Some((dropped, confirmed)),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(drops, [(class, confirmed)], "{faction:?}");
+            }
+        }
+    }
+
+    // CoolDragList (FUN_006083c0) posts 0x29a only on a release more than
+    // sqrt(24) pixels from the press (squared distance above 0x18) and
+    // outside the list's client rect (move-order.md, "Port notes").
+    #[test]
+    fn a_squadron_drop_needs_a_long_move_that_leaves_the_list_for_either_side() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let is_alliance = faction == CockpitFaction::Alliance;
+            let (mut world, system) = world(ControlKind::Controlled(if is_alliance {
+                Faction::Alliance
+            } else {
+                Faction::Empire
+            }));
+            let class = world
+                .fighter_classes
+                .insert(rebellion_core::world::FighterClass {
+                    dat_id: DatId::new(if is_alliance {
+                        0x1c00_0001
+                    } else {
+                        0x1c00_0005
+                    }),
+                    name: "Fighter".into(),
+                    ..Default::default()
+                });
+            world.systems[system].add_squadrons(class, 1, is_alliance);
+            let missions = MissionState::new();
+            let plain = (faction, egui::Modifiers::default());
+            let drops = |from: (f32, f32), to: (f32, f32)| {
+                let mut state = DefensesWindowState::default();
+                assert!(state.open(&world, system, ORIGIN, faction, scaled()));
+                let _ = run_as(&world, &missions, &mut state, click(at(118.0, 36.0)), plain);
+                let (start, end) = (at(from.0, from.1), at(to.0, to.1));
+                let mut frames = hover(start);
+                frames.extend([
+                    vec![press(start, true)],
+                    vec![egui::Event::PointerMoved(end)],
+                ]);
+                let _ = run_as(&world, &missions, &mut state, frames, plain);
+                run_as(
+                    &world,
+                    &missions,
+                    &mut state,
+                    vec![vec![egui::Event::PointerMoved(end), press(end, false)]],
+                    plain,
+                )
+                .actions
+                .iter()
+                .filter(|action| matches!(action, DefensesWindowAction::DragSquadron { .. }))
+                .count()
+            };
+
+            assert_eq!(
+                drops((8.0, 100.0), (4.0, 100.0)),
+                0,
+                "{faction:?}: 4 pixels, outside the list"
+            );
+            assert_eq!(
+                drops((30.0, 100.0), (100.0, 100.0)),
+                0,
+                "{faction:?}: inside the list"
+            );
+            assert_eq!(
+                drops((30.0, 100.0), (300.0, 100.0)),
+                1,
+                "{faction:?}: far and outside"
+            );
+        }
     }
 
     fn right_click(point: egui::Pos2) -> Vec<Vec<egui::Event>> {
@@ -3082,6 +3395,39 @@ mod tests {
             menus(&opened),
             [(Some(MenuObject::Troop(troop)), (50, 130))]
         );
+    }
+
+    #[test]
+    fn a_mission_released_on_a_row_names_its_regiment_or_facility() {
+        // FUN_004aa380: the list item under the point (list +0x164 at
+        // (7, 81)) on any page, else the subject (move-order.md, "Hit
+        // tests").
+        let (world, system, missions) = stocked();
+        let mut state = opened(&world, system);
+        let layer = egui::LayerId::new(egui::Order::Foreground, area_id(&state.windows[0]));
+        let _ = run(&world, &missions, &mut state, click(at(80.0, 30.0)));
+        let troop = world.systems[system].ground_units[0];
+        assert_eq!(
+            state.release_object(scaled(), layer, at(30.0, 100.0)),
+            Some(MissionTarget::Troop(troop))
+        );
+        assert_eq!(state.release_object(scaled(), layer, at(100.0, 60.0)), None);
+
+        let _ = run(&world, &missions, &mut state, click(at(150.0, 30.0)));
+        let shield = world.systems[system]
+            .defense_facilities
+            .iter()
+            .copied()
+            .find(|&key| {
+                state.windows[0]
+                    .painted
+                    .contains(&DefensesItem::Defense(key))
+            });
+        assert_eq!(
+            state.release_object(scaled(), layer, at(30.0, 100.0)),
+            shield.map(MissionTarget::DefenseFacility)
+        );
+        assert!(shield.is_some());
     }
 
     #[test]
@@ -3273,5 +3619,137 @@ mod tests {
             .collect();
         assert_eq!(minis.len(), 9);
         assert!(run.painted.contains(&(18_176 + 832, at(147.0, 221.0))));
+    }
+
+    #[test]
+    fn a_saved_defenses_window_comes_back_in_place_on_the_personnel_page() {
+        // FUN_004aa6d0 saves the system and no page; FUN_00441190 rebuilds
+        // type 10 at the saved x and y (FUN_004a7790), which opens on the
+        // personnel page.
+        let (mut world, first) = world(ControlKind::Uncontrolled);
+        let second = world.systems.insert(System {
+            dat_id: DatId::new(0x9000_0002),
+            ..world.systems[first].clone()
+        });
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut state = DefensesWindowState::default();
+            assert!(state.open(&world, first, (40, 50), faction, scaled()));
+            assert!(state.open(&world, second, ORIGIN, faction, scaled()));
+            state.windows[0].page = DefensesPage::Regiments;
+            let mut saved = state.saved_windows(&world);
+            saved.sort_by_key(|(z, _)| *z);
+            assert!(saved.iter().all(|(_, window)| window.shown));
+
+            let mut restored = DefensesWindowState::default();
+            for (_, window) in &saved {
+                assert!(
+                    restored.restore_saved(&world, faction, window),
+                    "{faction:?}"
+                );
+            }
+
+            let back: Vec<_> = restored
+                .windows
+                .iter()
+                .map(|window| (window.system, window.logical_position, window.page))
+                .collect();
+            assert_eq!(
+                back,
+                [
+                    (first, (40, 50), DefensesPage::Personnel),
+                    (second, ORIGIN, DefensesPage::Personnel),
+                ],
+                "{faction:?}"
+            );
+            let hidden = SavedWindow {
+                shown: false,
+                ..saved[0].1
+            };
+            let mut none = DefensesWindowState::default();
+            assert!(!none.restore_saved(&world, faction, &hidden));
+            assert_eq!(none.window_count(), 0);
+        }
+    }
+
+    #[test]
+    fn a_keyed_close_closes_that_window_and_leaves_the_rest_for_either_side() {
+        // FUN_004ac3a0: WM_KEYDOWN 0x1b calls slot +0x30 on the focused window.
+        let (mut world, first) = world(ControlKind::Uncontrolled);
+        let second = world.systems.insert(world.systems[first].clone());
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut state = DefensesWindowState::default();
+            for system in [first, second] {
+                assert!(state.open(&world, system, ORIGIN, faction, scaled()));
+            }
+            assert!(state.close_window(second));
+            assert!(
+                state.is_open(first) && !state.is_open(second),
+                "{faction:?}"
+            );
+            assert!(state.close_window(first));
+            assert_eq!(state.window_count(), 0);
+            assert!(!state.close_window(first));
+        }
+    }
+
+    #[test]
+    fn the_view_raises_one_window_of_the_kind_above_the_rest_for_either_side() {
+        // FUN_00422ce0 0x467: BringWindowToTop on the window it activates.
+        let (mut world, first) = world(ControlKind::Uncontrolled);
+        let second = world.systems.insert(world.systems[first].clone());
+        let missing = world.systems.insert(world.systems[first].clone());
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut state = DefensesWindowState::default();
+            assert!(state.open(&world, first, ORIGIN, faction, scaled()));
+            assert!(state.open(&world, second, ORIGIN, faction, scaled()));
+            assert_eq!(state.children().count(), 2, "{faction:?}");
+            assert!(state.raise(first), "{faction:?}");
+            assert_eq!(state.window_count(), 2, "{faction:?}");
+            assert!(!state.raise(missing), "{faction:?}");
+        }
+    }
+
+    /// Press at `from`, move to `to` with the button held, and release.
+    fn title_drag(from: egui::Pos2, to: egui::Pos2) -> Vec<Vec<egui::Event>> {
+        let mut frames = hover(from);
+        frames.extend([
+            vec![press(from, true)],
+            vec![egui::Event::PointerMoved(from.lerp(to, 0.5))],
+            vec![egui::Event::PointerMoved(to)],
+            vec![press(to, false)],
+            vec![egui::Event::PointerMoved(to + egui::vec2(30.0, 30.0))],
+        ]);
+        frames
+    }
+
+    #[test]
+    fn a_press_on_the_windows_bare_surface_drags_it_but_not_on_its_list_or_tabs() {
+        // FUN_004a7790 sets the movable bit (+0xb8 | 4) and FUN_004a86d0
+        // passes every press on the window to the base (FUN_00606ee0), which
+        // takes hold; FUN_006071e0 places it live and FUN_00607010 lets go.
+        // The list (with its bar) and the tabs are controls of their own.
+        let (world, system, missions) = stocked();
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let moves = |from: (f32, f32)| {
+                let mut state = DefensesWindowState::default();
+                assert!(state.open(&world, system, ORIGIN, faction, scaled()));
+                let start = at(from.0, from.1);
+                let _ = run_as(
+                    &world,
+                    &missions,
+                    &mut state,
+                    title_drag(start, start + egui::vec2(40.0, 40.0)),
+                    (faction, egui::Modifiers::default()),
+                );
+                let moved = state.windows[0].logical_position;
+                assert!(moved == ORIGIN || moved == (ORIGIN.0 + 20, ORIGIN.1 + 20));
+                moved != ORIGIN
+            };
+            assert!(moves((100.0, 9.0)), "{faction:?}: title");
+            assert!(moves((115.0, 297.0)), "{faction:?}: under the list");
+            assert!(!moves((100.0, 150.0)), "{faction:?}: list");
+            assert!(!moves((40.0, 35.0)), "{faction:?}: tab");
+            assert!(!moves((210.0, 9.0)), "{faction:?}: minimize");
+        }
     }
 }

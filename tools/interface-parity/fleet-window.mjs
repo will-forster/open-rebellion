@@ -29,6 +29,12 @@ const FLEET_LOAD_FULL = 49;
 const REGIMENT_UNLOAD_REFUSED = 51;
 const FLEET_JOIN = 52;
 const PRODUCTION_DESTINATION = 54;
+const UNFINISHED_SHIP = 69;
+// FUN_0042c3b0.c:412-431: an object not completed (+0x50 bit 2 clear) has
+// its side's under-construction mark under its mini, STRATEGY 11570 for
+// side bits 0x40 (the Alliance) or 11572, 61 by 25, whose marked pixels
+// are pure red or pure green; the mini is keyed over it.
+const markColor = { alliance: [255, 0, 0], empire: [0, 255, 0] };
 // FUN_004a2630: the Fleet window, 235 by 304 (background 10770).
 const windowSize = { width: 235, height: 304 };
 // Side art: the Alliance's resources, the Empire's 50 higher
@@ -614,6 +620,22 @@ async function shot(page, directory, label) {
   return { label, sha256: sha256(bytes), bytes };
 }
 
+// The side's under-construction mark pixels within a mini's 61 by 25 cell
+// around the window point `center` of the cropped window `image`.
+function markPixels(image, origin, center, faction) {
+  const [r, g, b] = markColor[faction.name];
+  const cx = Math.round(center[0] - origin.x);
+  const cy = Math.round(center[1] - origin.y);
+  let marked = 0;
+  for (let y = Math.max(0, cy - 13); y < Math.min(image.height, cy + 13); y++) {
+    for (let x = Math.max(0, cx - 31); x < Math.min(image.width, cx + 31); x++) {
+      const offset = (y * image.width + x) * 4;
+      if (image.data[offset] === r && image.data[offset + 1] === g && image.data[offset + 2] === b) marked++;
+    }
+  }
+  return marked;
+}
+
 async function stableWindow(page, origin, directory, label) {
   // The first draw requests each newly shown bitmap from the WASM texture
   // cache; let the upload reach a later paint before hashing two frames.
@@ -718,7 +740,7 @@ async function loadRegiment(page, setup, directory) {
   const opened = await openFleetWindow(page, setup);
   await selectFleet(page, opened);
   const menu = await moveRegimentOntoFleet(page, setup, opened, directory);
-  const loaded = await until(page, "the regiment boards the fleet", (o) => o.aboard && o.held);
+  const loaded = await until(page, "the regiment boards the fleet", (o) => o.aboard);
   assert.equal(loaded.cargo, 1);
   assert.deepEqual(loaded.enabled, [true, false, true, false], "the Troops tab lights with a regiment aboard");
   return { opened, menu, loaded };
@@ -782,7 +804,11 @@ const cases = [
       assert.equal(selected.tab, "CapitalShips");
       assert.deepEqual(selected.enabled, [true, false, false, false]);
       assert.equal(selected.items.length, 1, "the fleet's one capital ship is listed");
-      const selectedCheck = compare(await stableWindow(page, origin, directory, "selected"),
+      const selectedImage = await stableWindow(page, origin, directory, "selected");
+      // A completed ship carries no under-construction mark.
+      assert.equal(markPixels(selectedImage, origin, selected.first_item, faction), 0,
+        "a completed ship shows the under-construction mark");
+      const selectedCheck = compare(selectedImage,
         composeExpected(source, faction, { selected: true, enabled: selected.enabled, tab: 0 }),
         [...masks.open, ...masks.selected], "selected", directory);
       // 0x280d minimizes the window to the rail (FUN_004a76e0); the rail
@@ -800,6 +826,23 @@ const cases = [
     },
   },
   {
+    name: "unfinished",
+    code: UNFINISHED_SHIP,
+    async run(page, faction, setup, directory) {
+      // FUN_00502db0(fleet, 3) lists the unfinished ship in its fleet, and
+      // its mini carries the side's under-construction mark.
+      const opened = await openFleetWindow(page, setup);
+      const origin = { x: opened.origin[0], y: opened.origin[1] };
+      const selected = await selectFleet(page, opened);
+      assert.equal(selected.tab, "CapitalShips");
+      assert.equal(selected.items.length, 1, "the fleet's unfinished ship is listed");
+      const image = await stableWindow(page, origin, directory, "unfinished");
+      const marked = markPixels(image, origin, selected.first_item, faction);
+      assert.ok(marked >= 100, `the unfinished ship's mini shows ${marked} under-construction mark pixels`);
+      return { opened, selected, marked };
+    },
+  },
+  {
     name: "load",
     code: FLEET_LOAD,
     // The regiment stays aboard while the fleet orbits the system it loaded
@@ -814,16 +857,17 @@ const cases = [
       const speed = await runFast(page, setup);
       await page.waitForTimeout(3_000);
       const held = await settle(page);
-      assert.ok(held.aboard && held.held, `the regiment landed where it loaded: ${JSON.stringify(held)}`);
+      assert.ok(held.aboard, `the regiment landed where it loaded: ${JSON.stringify(held)}`);
       assert.equal(held.in_transit, false);
       return { menu, loaded, troops, speed, held };
     },
   },
   {
-    name: "move-and-land",
+    name: "move-and-stay-aboard",
     code: FLEET_LOAD,
-    // The fleet's Move to the target; on arrival the regiment lands on the
-    // player's empty planet (apply_fleet_arrival releases the hold).
+    // The fleet's Move to the target; on arrival the regiment stays aboard:
+    // only a Move of the regiment or the Planetary Assault lands one
+    // (ghidra/notes/ground-assault.md, "Landing without the order").
     async run(page, faction, setup, directory) {
       const { loaded } = await loadRegiment(page, setup, directory);
       const origin = { x: loaded.origin[0], y: loaded.origin[1] };
@@ -837,11 +881,10 @@ const cases = [
       const departed = await until(page, "the fleet departs", (o) => o.in_transit);
       assert.ok(departed.aboard, "the regiment left the fleet before it departed");
       const speed = await runFast(page, setup);
-      const landed = await until(page, "the regiment lands at the target",
-        (o, target) => !o.aboard && !o.held && !o.in_transit && o.troop_system_dat_id === target,
-        setup.target_dat_id, 90_000);
-      assert.equal(landed.cargo, 0);
-      return { loaded, menu, departed, speed, landed };
+      const arrived = await until(page, "the fleet arrives with the regiment aboard",
+        (o) => o.aboard && !o.in_transit, null, 90_000);
+      assert.equal(arrived.cargo, 1);
+      return { loaded, menu, departed, speed, arrived };
     },
   },
   {
@@ -855,7 +898,7 @@ const cases = [
       const troops = await openTroopsTab(page, loaded);
       await dragItem(page, point(troops.first_item), point(setup.defenses_window));
       const unloaded = await until(page, "the regiment lands on its planet",
-        (o, primary) => !o.aboard && !o.held && !o.regiment_travelling && o.troop_system_dat_id === primary,
+        (o, primary) => !o.aboard && !o.regiment_travelling && o.troop_system_dat_id === primary,
         setup.primary_dat_id);
       assert.equal(unloaded.cargo, 0);
       assert.equal(unloaded.in_transit, false);
@@ -891,7 +934,7 @@ const cases = [
         () => page.mouse.up());
       await frames(page, 3);
       const held = await settle(page);
-      assert.ok(held.aboard && held.held, JSON.stringify(held));
+      assert.ok(held.aboard, JSON.stringify(held));
       return { loaded, gap, held };
     },
   },
@@ -900,19 +943,19 @@ const cases = [
     code: REGIMENT_UNLOAD_REFUSED,
     // FUN_0053d430: a regiment group's destination of another side, other
     // than an existing unpopulated system, is refused 1/0x28. The regiment
-    // starts aboard and held, and the Defenses window shows the other side's
+    // starts aboard, and the Defenses window shows the other side's
     // populated target (the Fleet window covers its planet).
     async run(page, faction, setup, directory) {
       const opened = await openFleetWindow(page, setup);
       const selected = await selectFleet(page, opened);
-      assert.ok(selected.aboard && selected.held, JSON.stringify(selected));
+      assert.ok(selected.aboard, JSON.stringify(selected));
       assert.deepEqual(selected.enabled, [true, false, true, false], "the Troops tab lights with a regiment aboard");
       const troops = await openTroopsTab(page, selected);
       await dragItem(page, point(troops.first_item), point(setup.defenses_window));
       const refusal = "Regiment move rejected: the destination belongs to another side";
       const refused = await until(page, "the other side's planet refuses the regiment",
         (o, text) => o.last_message === text, refusal);
-      assert.ok(refused.aboard && refused.held, JSON.stringify(refused));
+      assert.ok(refused.aboard, JSON.stringify(refused));
       assert.equal(refused.regiment_travelling, false);
       return { opened, selected, troops, refused };
     },

@@ -23,7 +23,8 @@ The guest runs in UTM 4.7.5 on a Mac Mini (Apple M4, macOS
 | `exchange/` | the SPICE WebDAV shared folder (`saves-in/`, `saves-out/`, `captures/`); the guest sees it as `Z:` |
 | `vm-ctl.scpt`, `vmctl-run.sh` | [`vm/vm-ctl.applescript`](vm/vm-ctl.applescript) compiled, and [`vm/vmctl-run.sh`](vm/vmctl-run.sh), which runs one of its commands through the GUI launch agent |
 | `qemu-img` | a stub that runs UTM's bundled qemu-img, which ships as a library (`clang -o qemu-img stub.c -Wl,-rpath,/Applications/UTM.app/Contents/Frameworks`, the stub `dlopen`s the framework and calls its `main`) |
-| `backup-20261011/` | APFS clone of the whole VM bundle taken cold before the 2026-10-11 changes, with `SHA256SUMS` |
+
+The VM bundle has no backup copy; it is rebuilt from the files above.
 
 Two facts about Windows Setup shape this layout, both established on
 2026-09-14 by watching Setup fall through to its interactive pages:
@@ -35,7 +36,7 @@ Two facts about Windows Setup shape this layout, both established on
 - The UTM guest tools ISO ships its own `autounattend.xml`; when attached it
   is found first. Attach it only after the install. Its full installer also
   brings vdagent, the network driver and the GPU drivers; we install only
-  the pieces in `webdav-tools.iso` (2026-10-11, below).
+  the pieces in `webdav-tools.iso` ("VM configuration", below).
 - A FAT volume without a partition table (an `hdiutil` "superfloppy") is
   invisible to Windows on a fixed disk. `payload.img` therefore carries an
   MBR.
@@ -43,7 +44,8 @@ Two facts about Windows Setup shape this layout, both established on
 UTM needs a logged-in desktop session on the host, and its AppleScript
 bridge refuses callers from an SSH session (TCC error -1743, no prompt). The
 working pattern is a user launch agent bootstrapped into the GUI domain
-(`sudo launchctl bootstrap gui/$UID …`), whose `osascript` call raises the
+(`launchctl bootstrap gui/$(id -u) ~/VMs/rebellion/com.openrebellion.vmctl.plist`;
+no sudo is needed over SSH), whose `osascript` call raises the
 Automation prompt on the host display; approve it once over Screen Sharing.
 The host is set to log in automatically (`/etc/kcpassword` +
 `autoLoginUser`) so a reboot restores the session. The VM is created with:
@@ -64,12 +66,10 @@ raw FAT USB volume. UTM copies `payload.img` into the VM bundle
 (`~/Library/Containers/com.utmapp.UTM/Data/Documents/Rebellion A0 Capture.utm/Data/`);
 captures land in that copy, not in `~/VMs/rebellion/`.
 
-Changes on 2026-10-11, with the bundle cold-copied to `backup-20261011/`
-first (restore by copying it back with the VM stopped):
+VM configuration:
 
 - No network device (`Network` is `[]` in `config.plist`) and clipboard
-  sharing off. The guest had no network driver; removing the device keeps
-  it that way now that guest software is installed.
+  sharing off, so the guest has no network.
 - A loopback-only QMP socket for `vm-qmp.py`, which walks the pointer
   (`QEMU.AdditionalArguments`: `-qmp tcp:127.0.0.1:4446,server=on,wait=off`).
   Never bind it to the Tailscale address or `0.0.0.0`: QMP is an
@@ -77,9 +77,11 @@ first (restore by copying it back with the VM stopped):
 - The SPICE WebDAV shared folder: UTM's `update registry` AppleScript sets
   `~/VMs/rebellion/exchange` (`share PATH` in `vm-ctl.applescript`), and
   `spice-webdavd` in the guest maps it to `Z:`. UTM stops serving the
-  folder after the VM restarts although its registry still names it;
-  setting it again while the VM runs brings it back, and `vm-game.sh up`
-  does so. Its install needed the
+  folder after the VM starts although its registry still names it; setting
+  it again right after a start brings it back, and `vm-game.sh up` does so
+  when it started the VM. Never set it on a VM that was already running:
+  that leaves the guest agent's RPC timing out until the VM is powered off.
+  Its install needed the
   virtio-serial driver and the VC++ runtime; `webdav.cmd` runs all three.
   UTM's QEMU sandbox refuses to open a new image (`change` on a fresh path
   fails with "Operation not permitted"), so the tools ISO was written over
@@ -91,15 +93,9 @@ first (restore by copying it back with the VM stopped):
   stderr, 10 MiB and three 2 MiB round trips with matching SHA-256, and a
   reboot. It runs as a service in session 0, so it cannot see or drive the
   desktop. When it connects, UTM sets the guest clock to the host's.
-- For fast retries, save in the game a day or two before the event and
-  load that save (`saves/INDEX.md`).
 
-After these changes the menu renders the same (outside the animated
-monitors the frames differ only under the cursor), and the day-31 alert from
-the day-5 transit save arrives 360-362 s after the load against 336.5 s on
-2026-10-11 before them. Stopping `spice-webdavd` did not change that
-(362.0 s), and the Mini was busy with Spotlight and media analysis at the
-time; the cause is not settled.
+The day-31 alert from the day-5 transit save arrives 360-362 s after the
+load; stopping `spice-webdavd` does not change it.
 
 The VM must carry a sound card. `REBEXE.exe` calls `DirectSoundCreate` during
 startup (`FUN_00610d00`), and with no audio device the returned interface is
@@ -270,15 +266,15 @@ tools/original-capture/vm-game.sh a0-cell TAC-01-C003 original-save \
 - Game speed is the day readout's right-click menu (game coordinates on
   the 800×600 screen: readout 165,30; Pause 208,45, Very Slow 230,70,
   Medium 220,120, Fast 208,145). Playing the Empire, the readout is at
-  645,30 and its menu opens to the right: Pause 668,45, Fast 695,137.
+  645,30 and its menu opens to the right: Pause 668,45, Very Slow 710,70,
+  Fast 695,137.
   The game's own accelerators step the speed one notch (Alt+NumPad−
   slower, Alt+NumPad+ faster) and Alt+P pauses (manual p. 64;
   `docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-24-game-speed-recovery.md`,
-  "Speed keys"; verified 2026-10-16 in `.artifacts/vm/recheck-2026-10-16/README.md`).
-  VNC cannot send the keypad keys, so send them through QMP: copy the
-  helper once (`scp tools/original-capture/vm-qmp.py mac-mini-ts:/tmp/vm-qmp.py`),
-  then `ssh mac-mini-ts 'python3 /tmp/vm-qmp.py hmp "sendkey alt-kp_subtract"'`
-  (also `alt-kp_add`, `alt-p`). A battle result window holds the day, and a
+  "Speed keys"; verified on the VM on 2026-10-16).
+  VNC cannot send the keypad keys, so send them through the QEMU monitor:
+  `tools/original-capture/vm-game.sh mon 'sendkey alt-kp_subtract'` (also
+  `alt-kp_add`, `alt-p`). A battle result window holds the day, and a
   step sent while it is up took effect once in three presses, so send one step
   per call and check the day readout. Fast runs about 0.8 days a second, faster
   than `wait day` can sample: a 33-day wait ran 340 days. To cover a set
@@ -366,15 +362,16 @@ Strategic captures continue through their surface-specific host checks and
 `tools/interface-parity/baselines/accepted-original.json`. No original-game
 capture, executable, audio, or extracted asset may be committed. Saves are the
 one exception, by the owner's decision: the games we played and saved on this
-VM are kept in [`saves/`](saves/INDEX.md). Saves downloaded from elsewhere are
-not.
+VM are kept in [`saves/`](saves/INDEX.md), with the one David Adams gave us
+(credited there). Other saves from elsewhere are not.
 
 ## Saves
 
 [`saves/INDEX.md`](saves/INDEX.md) lists each save, its side, day and state,
 how to load one, how to copy files off the transfer disk, and the header
 format. To make a new one, play to the state in the VM, press F1, click an
-empty slot's name field, type a lowercase name and press Enter.
+empty slot's name field, type a lowercase name and press Enter. For fast
+retries, save in the game a day or two before the event and load that save.
 
 Driving the game over VNC:
 
@@ -384,7 +381,7 @@ Driving the game over VNC:
   restarts UTM. `up`, `up-a0` and `recover` mute the Mini's output first,
   since a reboot clears the mute (`a0-audio` records from QEMU, not the
   speakers). After a Mini reboot, load the control agent once:
-  `launchctl bootstrap gui/501 ~/VMs/rebellion/com.openrebellion.vmctl.plist`. `point`/`click`/`rclick`/`dclick X Y [FILE]` hit a point in
+  `launchctl bootstrap gui/$(id -u) ~/VMs/rebellion/com.openrebellion.vmctl.plist`. `point`/`click`/`rclick`/`dclick X Y [FILE]` hit a point in
   the captured 800x600 frame and optionally capture after; `desk X Y`
   clicks on the Windows desktop (the taskbar, a console), where the cursor
   is Windows' own; `save-out`, `save-in` and `gexec` use the guest agent;
@@ -397,7 +394,9 @@ Driving the game over VNC:
   `resolve` (auto-resolve a Battle Alert and close the result),
   `take-command` and `withdraw`. Saved Games shows six rows, so only slots
   1-6 can be picked in the game; slots 7-10 take `save-in` and `save-out`
-  only. The Battle Alert's buttons are Retreat, auto-resolve and Take
+  only. The list shows the filled slots and one empty row and does not
+  scroll, so a save in a slot after a gap (slot 8 with 6 and 7 empty) is not
+  listed. The Battle Alert's buttons are Retreat, auto-resolve and Take
   Command, left to right.
 - Start a tactical run from a fresh `up`. Take Command crashed the game
   (`rebexe.exe` access violation) after about ten saves had been loaded in
@@ -458,8 +457,7 @@ Driving the game over VNC:
   on where the cursor was. Walking the tablet to (0,0) in 4-pixel steps pins
   the cursor to the corner, and walking out to the target divided by 1.25
   lands on it. On a 5x5 grid the arrow's tip landed within 1 px walking over
-  QMP and within 2 px over VNC; the earlier 1.28 fell up to 20 px short at
-  the right and bottom (2026-10-11). `vm-game.sh` walks over QMP, about
+  QMP and within 2 px over VNC (2026-10-11). `vm-game.sh` walks over QMP, about
   three times faster than over VNC (3-4 s against 9-12 s for a long walk);
   `VM_INPUT=vnc` walks over VNC. Double-clicks press over VNC after the
   walk: two clicks sent over QMP never read as a double-click (0 of 30), two
@@ -474,11 +472,9 @@ Driving the game over VNC:
   for 4 s) while `vncdo` clicks. A key `vncdo` holds is released when its
   connection closes, before the next call's click.
 - If the guest agent answers "Timed out waiting for RPC", restarting the
-  guest does not help; `vm-game.sh recover` (it restarts UTM) does. It
-  started after the shared folder was set again on a running VM, so `up`
-  now sets it only after starting the VM (2026-10-11).
+  guest does not help; `vm-game.sh recover` (it restarts UTM) does.
 - If clicks and keys do nothing, the game may have lost focus to a guest
-  window (after Win+R, PowerShell): `vm-game.sh desk 510 577` clicks the
+  window (after Win+R, PowerShell): `vm-game.sh desk 510 576` clicks the
   game's taskbar icon. The guest agent works without the desktop and does
   not take focus.
 - The VNC link drops Shift on letters; type lowercase. `vnc-type.py` sends
@@ -493,3 +489,240 @@ Driving the game over VNC:
   is untested here, so compare a new game's starting state with and without
   the rename before relying on it. On the Game Options screen (F1) the left button returns to the
   main menu and the middle one to the game.
+
+## Wine on the Mini
+
+The original also runs under Wine on the Mini, beside the VM, and strategic
+checks start there: galaxy play, saves, messages, Battle Alerts and
+play-forward to a day, up to 16 times faster than the VM. The VM stays the
+reference. Wine frames are not A0 captures, and the tactical view renders
+black, so tactical, A0 and sound work (`take-command`, `withdraw`, `a0*`)
+stay on the VM, and the VM settles any result where the two disagree.
+Tactical draws through the Direct3D Ramp device into 8-bit 640x480 surfaces
+(`FUN_005d6e10`, `FUN_005d6c10`).
+cnc-ddraw has no Direct3D. Wine's builtin ddraw fails the 640x480x8 mode
+change (`ChangeDisplaySettings` returns -2, and the window stays 1920x1080
+with the game drawn at its origin), creates the tactical surfaces at the
+desktop's 32 bits, enumerates no Ramp device, and hangs at the game's first
+`Lock` of the render target. dgVoodoo 2.8.2's `ddraw.dll` gives the game a
+640x480 window and plays the strategic screens, but needs D3D11: Wine's
+wined3d offers no feature level it accepts (OpenGL, or Vulkan on MoltenVK),
+and the game then reads a null pointer at `0x005d89ed` on entering
+tactical; with DXMT installed in a copy of the engine, feature level 10_1
+works but the game faults at an unmapped address during its intros.
+
+`wine-setup.sh` builds everything under `~/or-wine`. It pins the Sikarugir
+engine `WS12WineSikarugir10.0_6` and its `Template-1.0.11`, whose
+`Frameworks` hold the engine's dylibs, cnc-ddraw 7.1.0.0 with the GDI
+renderer and `devmode=true`, the native `d3drm.dll`, a Windows 98 version
+for the executable and the six install registry values, all in the 64-bit
+WoW64 prefix `prefix-sik`. Upstream macOS Wine sets up 32-bit code through
+the LDT, which Rosetta refuses, and GPTK 1.1 aborts in `alloc_pages_vprot`.
+macOS strips `DYLD_*` from every SIP-protected program (`sh`, `bash`,
+`nohup`, `env`), so `bin/wine` and `bin/wineserver` are wrappers that set
+`DYLD_FALLBACK_LIBRARY_PATH` themselves; `env.sh` points `WINE_BIN` and
+`WINE_SERVER` at them. The prefix's profile folders (Desktop, Documents,
+Downloads …) are real directories, not Wine's default links to the home
+folders, so nothing in Wine reaches `~/Desktop` and macOS has no reason to
+ask for access. Sound plays through CoreAudio, so the Mini must be muted
+first (`agent_docs/agent-tooling.md`, "Keep every run silent"); `wine-game.sh
+up` does not mute.
+
+Wine needs the GUI session, which SSH lacks. Setup installs the launch agent
+`com.openrebellion.wine` (`~/or-wine/com.openrebellion.wine.plist`, with
+`AbandonProcessGroup` so a game outlives the command that started it) and
+its runner `bin/wine-run.sh`, which launchd starts whenever `run/q` changes.
+Each queued `run/q/ID.cmd` runs in the GUI session, oldest first, with its
+output in `run/done/ID.out` and its exit code in `run/done/ID.rc`;
+`bin/wine-queue.sh CMD` queues one command, waits (`WINE_QUEUE_LIMIT`
+seconds, default 3600, then exit 124), prints its output and exits with its
+code. Removing a queued `ID.cmd` before the runner takes it cancels the
+command (exit 130), and a waiter that times out or is signalled removes its
+own, so a command given up on never reaches the game later; results nobody
+collected are deleted after a day. With `WINE_QUEUE_EOF=cancel` the waiter
+also treats the end of its stdin as its caller gone and cancels, which
+covers a dropped SSH connection: a non-tty session sends the remote side
+no signal, only the end of its input. Run over SSH, setup queues itself.
+Setup reloads the agent with
+`launchctl bootout` and `bootstrap`, never from inside the agent, since a
+bootout there would end the setup run. After a reboot, load the agent with
+`launchctl bootstrap gui/$(id -u) ~/or-wine/com.openrebellion.wine.plist`.
+Setup leaves a running game alone and says to restart it; otherwise it
+stops the wineserver so the next launch reads the new settings.
+
+On this Mac, `wine-game.sh` has no `~/or-wine/env.sh` and runs each verb
+on `WINE_HOST` (default `mac-mini-ts`) through that queue. Input files go to
+a transfer folder there first, and output files come back with their
+SHA-256. Its `ssh` reads a pipe that only the client holds open and runs
+under `WINE_QUEUE_EOF=cancel`, so however the client ends (HUP, INT, QUIT,
+ALRM or TERM, trapped to remove the queued command and the transfer folder,
+or an untrappable kill, or a dropped connection) the Mini's waiter cancels
+a command still queued. A command already running finishes. It refuses (exit 125) while its copies of `wine-game.sh`,
+`wine-game-lib.py`, `wine-drive.c` or `wine-setup.sh` differ from the
+Mini's, so a verb never runs against helpers it does not match;
+`wine-game.sh sync` copies the four over and runs setup.
+
+`wine-game.sh` mirrors the `vm-game.sh` verbs in the same 800x600 reference
+frame; `drive.exe` (`wine-drive.c`) scales them to the 640x480 client.
+Every verb was checked on both sides, except `drag` and `dclick`, checked
+on the Empire side only. A
+double-click opens a window only from a sector window's quadrant icons
+(`FUN_004593e0` case `0x203` hit-tests their list, not the planets'), as in
+the original. The helpers treat the client's top-left 640x480 as the game,
+which under cnc-ddraw is the whole client. `up` checks that the game survives Escape past the intros;
+it does not check the main menu by image. `load` and `save` take the six
+slots the Saved Games list shows (1-6); `save-in` and `save-out` copy the
+slot files directly and take 1-10. `load` checks the clock afterwards and
+fails only when the clock is unchanged in scheduler address, day and step
+count; a load builds a new scheduler, but one that reuses the old one's
+address only draws a warning. With a game in play, treat that warning as a
+failed load: all six seen kept the old day, behind an open Battle Alert or
+a stuck F1. `save` checks that the slot file's hash
+changed. Mouse verbs refuse a point outside the 800x600 frame (X 0-799,
+Y 0-599), and `drive.exe` exits non-zero when Wine refuses any of a
+gesture's input. `speed pause` opens the game's
+"Resume Game Play?" dialog, which takes every click until it closes, so
+`speed resume` presses its check mark before the next speed change. The
+Empire's speed menu takes `pause`, `vslow` and `fast`, the Alliance's also
+`medium`. The Empire's Very Slow item sits at 568,56 in a 640×480 capture of
+the open menu, 710,70 in the 800×600 coordinates `drive` takes.
+
+Scripted play hits these hazards, all seen in October 2026 save loops:
+
+- An open Battle Alert takes F1, so `load` and `save` fail behind it: run
+  `resolve` first.
+- F1 can stop opening Game Options while clicks, typing and Escape still
+  work. `save` then reports that the slot file did not change, and `load`
+  keeps the old day. It struck 6 of 9 saves sent right after `stop-at 0` in
+  one run from the `undefended` save (`agent_docs/original-save-editing.md`).
+  A click on an open window's close box, sent after the release, brings F1
+  back. With no window open, a click on the galaxy map at 370,200 opens the
+  Sesswenna sector window, whose close box is 431,59. A loaded save reopens
+  the windows it was saved with.
+- A new `stop-at DAY` or `run-to-day DAY` leaves a hold already in place: a
+  game held on day 465 stayed there through a 600 s `run-to-day 485`. Send
+  `stop-at 0` first. The clock runs again from the release, so aim the next
+  DAY at least two days ahead, and chain hold, read, release and save with
+  `&&` so that a refused verb ends the chain.
+- `load` keeps the timescale and restores the speed the save was made at.
+  Steps per day show the speed: about 9 a day after `speed fast empire`,
+  about 600 a day in the copies of the `undefended` save, which is 35 s a
+  day at K = 4, so an 18-day `run-to-day` outran its 600 s default LIMIT.
+  After a `load`, send `speed fast SIDE` or size LIMIT from two `clock`
+  reads.
+- `speed pause` reports success without checking. Behind an open Battle
+  Alert it does nothing, and after the alert's `resolve` and a `save` the
+  game ran on at Fast (day 801 to 876 in about 100 s). `resolve` first and
+  confirm a pause with two `clock` reads.
+- A save made while `run-to-day` holds the game writes a slot file the
+  parser cannot read: send `stop-at 0` before `save`. A slot written after
+  the release can still fail: a day-801 save gave "no object header at
+  0xde5b5" (cause not traced). Run `save_tree.py check` on a save before
+  building on it.
+- At normal speed each helper call costs about a game day, and `run-to-day`
+  at timescale 8 overshot its day by 20-45 days in one loop.
+  Check each `save`'s exit and hash, stop at the first failure, and drop to
+  timescale 1-2 near a target day. `load`'s clock warning goes to stderr.
+
+- Input is hardware input. The game polls `GetAsyncKeyState` for Escape and
+  button 1 (`FUN_005f7240`, `FUN_006036a0`) and its keyboard and mouse hooks
+  see only hardware messages, so the helpers make the game Wine's foreground
+  window first; cnc-ddraw reports every key up while it is not. Keys go
+  through `SendInput`, held 200 ms (60 ms in runs of more than three); a
+  button is held 60 ms. The macOS frontmost app does not change.
+- Wine warps the Mac pointer after injected mouse input only, so mouse verbs
+  go to `drive64.exe`, the 64-bit build of the same source. It sends moves
+  and buttons the way Wine's macOS driver sends its own, through win32u's
+  `NtUserCallHwndParam` (`SendHardwareInput`, 28 in Wine 10.0) with flags 0,
+  which a 32-bit caller cannot lay out. Wine's `GetCursorPos` reports the
+  Mac pointer 100 ms after the last mouse input, so `drive.exe cursor on`
+  points the game's `user32!GetCursorPos` at the last point `drive64.exe`
+  sent. `up` runs both after `drive64.exe selftest`, which checks that a
+  move reaches Wine's cursor and leaves the Mac pointer where it was;
+  `status` prints `mouse=drive64.exe`. `up` waits up to 180 s for the game
+  window, since Wine's services took about 80 s to start on a loaded Mini,
+  and a shorter wait skipped the selftest. If the selftest fails, mouse verbs
+  stay on `SendInput`, whose moves warp the pointer, and the Wine game's
+  mouse must not be driven while the VM is in use. Loading, the speed
+  menu, `drag` and `dclick` left the Mini's pointer where it was.
+- Wine's macOS driver keeps a window's pixels inside the process that owns
+  it, so `cap` loads `drive-cap.dll` into `REBEXE.EXE` and copies the window
+  there. macOS `screencapture` has no Screen Recording grant on the Mini and
+  shows only the wallpaper. The game keeps the copy of `drive-cap.dll` it
+  first loaded, so after rebuilding the helpers restart the game; `drive.exe`
+  compares its build ID (the first 16 hex digits of the source's SHA-256)
+  with the loaded copy's and refuses to call into another build. The
+  patches `drive-cap.dll` writes into code (the hold below, `cursor on`)
+  land with every other thread of the game suspended outside the bytes
+  being replaced.
+- `clock` reads the day and step count from memory: the day scheduler
+  `*DAT_006b2fcc` (`FUN_0051ce00`), day `+0x10`, steps `+0xc`. A day runs
+  the larger side speed word plus one steps. `peek PTR OFF [N]` reads the
+  dword at `*PTR + OFF` (PTR and OFF decimal or `0x` hex), or prints a
+  histogram of N reads 1 ms apart.
+- The game busy-waits: the main loop (`FUN_00413560`) steps the session on
+  every pass. The strategic step waits in phase 0 until the speed timer at
+  GameOptions `+0x110` passes `_DAT_006588f0` (`FUN_0041e390`,
+  `FUN_00415e20`), and that timer reads `QueryPerformanceCounter`
+  (`FUN_005fbbe0`); animations and the droids tick on `timeGetTime`
+  (`FUN_00441d70`). Fast therefore runs 0.8 days a second under Wine as on
+  the VM. `timescale K` points REBEXE's imports of both functions at
+  versions that run K times faster (1-64), leaving cnc-ddraw's frame limiter
+  on real time: at Fast, K = 4 gave 3.3 days a second and K = 16 gave 13.
+  Pace changes; the work of each step does not. At K = 16, F1, the speed
+  menu's right-click and its clicks still land.
+- `stop-at DAY` holds the game at the first step of DAY the way its own
+  Pause does. In phase 2 the step waits while the current step
+  (`FUN_0041e1b0`, read by `FUN_0041e300`) equals the step object's stop at
+  `*DAT_006b1218 + 0x10`, and Pause sets that stop and both sides' holds
+  (`side + 0x48`, `FUN_004888d0`) to the current step; `FUN_004361d0`
+  clears the stop once both holds are 0. `drive-cap.dll` replaces the start
+  of `FUN_0041e300` with a jump to its own check (`load` installs it),
+  which sets all three at the first step of DAY. DAY must be after the
+  current day: a day that has begun is past its first step, so `stop-at`
+  and `run-to-day` refuse it. `stop-at 0` releases the hold. While held the
+  frame is frozen and the game acts on no input: two captures seconds apart
+  are byte-identical, the day readout keeps the previous day, F1 opens no
+  Game Options, and a click on a sector window's close box had no effect
+  then or after the release. The main loop (`FUN_00413560`) still
+  dispatches window messages, but each pass of the step parked in phase 2
+  runs `FUN_004361d0`, which calls both sides' slot `+0x28`
+  (`FUN_00486520`, vtable `0x0065ad70`), and that runs the side's pending
+  orders (`FUN_00488b90`) only while the side's hold is 0 and
+  `FUN_0041dc10` finds no stop. Unlike the game's Pause, the hold opens no
+  "Resume Game Play?" dialog (only `FUN_00415e60` opens it). `clock` and
+  `messages` work while held, so read the state then and save after the
+  release. `run-to-day DAY [LIMIT]` sets the hold and waits for it; on
+  timeout it disarms the stop (`drive.exe stopat disarm`, which leaves a
+  hold alone), so the game does not hold at DAY later, unasked.
+- `messages [N]` prints the newest N Message Index entries from memory, run
+  on the game's own thread inside the step check: the list `*(*DAT_006b14e4
+  + 0xc) + 0x7c` is a threaded tree whose rightmost node is the newest, and
+  each entry gives its kind (vtable slot `+0x10`), category mask `+0x34`,
+  read bit `+0x24`, filing step `+0x38`, title `+0x48` and body `+0x54`.
+  Entries hold no day, so the check logs the day of every step it sees and
+  prints `day=?` for an entry filed before that log began (before `load`).
+  The index drops entries: kind-3 entries from days 439-464, listed on day
+  465, were gone by day 796 in the same game, while the kind-8 advice and
+  two early Manufacturing entries stayed. Read `messages` within days of
+  the event.
+- A Battle Alert is detected by its button bar against reference frames that
+  `alert-ref NAME` saves on the Mini as `ref/alert-NAME.png` (game output,
+  not committed; the Mini holds `alert-empire`, so save an Alliance one
+  before matching Alliance alerts), and its title by the share of changed
+  pixels in the title box (two titles differ in 8%). `resolve` presses the
+  auto-resolve button only when an alert is open (exit 1 when none is);
+  with no reference saved it warns and presses it unchecked. `run-to-alert
+  TITLE.png LIMIT FILE` resolves every other alert.
+- Play forward is deterministic and the time scale does not change it. From
+  `empire-fleet-to-yaga-minor.sav`, two fresh launches at K = 1 and two at
+  K = 16, each held at the first step of day 45, printed identical message
+  lists and held at the same step (2776). Fleet 1's arrival at Yaga Minor
+  and its blockade were filed on day 42 in all four; the VM's captures of
+  the same transit show the arrival by day 43.
+- `resolve` auto-resolves, which rolls the battle afresh, so a run through
+  it follows a VM run only until a battle's outcome matters. From
+  `empire-day660-palpatine-jailed.sav` at K = 16 the alerts open on the VM's
+  days (Carida 669, Coruscant 676), but with those battles auto-resolved the
+  Empire still stood on day 924, where the VM run's Alliance had won by day
+  692 (the Standard win also needs Coruscant, `victory-flag-word.md`).

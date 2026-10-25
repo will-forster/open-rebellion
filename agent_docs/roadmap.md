@@ -1,6 +1,6 @@
 ---
 title: "Roadmap"
-description: "Development milestones from Galaxy Viewer through Release packaging"
+description: "Audit-driven milestones M0-M5 and the v1.0 release, addons, and known technical debt"
 category: "agent-docs"
 created: 2026-03-11
 updated: 2026-10-25
@@ -10,7 +10,7 @@ tags: [roadmap, planning, milestones, parity]
 # Roadmap
 
 <!-- interface-parity-status:start -->
-Required interface families: 43. Complete: 1. Partial: 15. Failing: 27. Blocked: 0. Strictly accepted cells: 13/627.
+Required interface families: 43. Complete: 2. Partial: 15. Failing: 26. Blocked: 0. Strictly accepted cells: 28/627.
 The current CMD-02 GID catalog has 38 scenarios (29 baseline cells and nine additional native filter variants) and 152 faction/viewport executions. Its strict original-evidence and cross-browser gate remains open.
 <!-- interface-parity-status:end -->
 
@@ -20,10 +20,11 @@ audit-driven milestones are the source of truth.
 
 The bounded strategic-windowing backend sequence SW-00–SW-14 is reconciled at
 the accepted r29 candidate; see the [SW-14 evidence record](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-25-strategic-windowing-acceptance.md).
-This closes the backend implementation/evidence graph only: strict interface
-status remains 1 complete, 15 partial, 27 failing, with 13/627 cells accepted.
-Original-runtime comparisons, native-Windows proof, A0 bitmap/layout/text
-coverage, and the missing System Finder remain open.
+This closes the backend implementation/evidence graph only; it does not itself
+promote strict interface parity. Current strict family and cell counts are
+reported by the audit snapshot below. Original-runtime comparisons,
+native-Windows proof, A0 bitmap/layout/text coverage, and the missing System
+Finder remain open.
 
 PR #11 checkpoint (2026-09-14): [cockpit routing is corrected](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-cockpit-routing-correction.md) for commands `0x131` through `0x133`, both factions, and F1/F7. GID uses its authentic bottom control and can open and close its original menu. Encyclopedia was fail-closed at that checkpoint and is activated by E32 below. The [2026-09-26 Game Options review checkpoint](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-26-game-options-review.md) restores the shared bitmap surface and save/audio/display wiring; PRE-03 strict acceptance remains open.
 
@@ -440,44 +441,43 @@ Based on 3-agent review + 23-function GhidraMCP session (2026-03-23) + TheArchit
 - [x] Finding: parameter space is narrow — most mutations cause degenerate games
 
 ---
+Where the project stands is in the [full-functionality audit](../docs/qa/2026-09-08-full-functionality-audit/README.md):
+its feature ledger and evidence files, and in `audit-report.md` beside it
+"Where work left off", the evidence contract and the definition of done. Its
+sister [original-interface audit](../docs/qa/2026-09-10-interface-parity-audit/README.md)
+owns visible surface, bitmap, geometry, hotspot, navigation, animation and
+audio acceptance. Their JSON ledgers hold the finding, feature and cell IDs
+cited below; each ticked item names its evidence, and each open item keeps its
+acceptance criteria.
 
+Delivery notes from March and April 2026 are in
+[archive/roadmap-history-2026-03-to-04.md](../archive/roadmap-history-2026-03-to-04.md);
+they establish no current parity.
 ## Audit-Driven Parity, Browser, and Multiplayer Roadmap
 
-The completed milestones above describe implementation delivery, not final
-release acceptance. The September 2026 [full-functionality audit](../docs/qa/2026-09-08-full-functionality-audit/)
-owns behavior acceptance. Its sister [original-interface audit](../docs/qa/2026-09-10-interface-parity-audit/)
-owns visible surface, bitmap, geometry, hotspot, navigation, animation, and audio
-acceptance. Their JSON ledgers provide stable finding and feature IDs.
+### M0: Truth and Critical Integration (1 week)
 
-### M0: Truth and Critical Integration — 1 week
-
-- [x] Wire Save, Load, Delete, and the main-menu save picker; browser review r2 passed the 33/33 deletion/reload gate after exposing and fixing empty-slot Load activation ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-save-delete.md)).
+- [x] F-001 Save, Load, Delete and the main-menu save picker: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-save-delete.md)).
 - [ ] Surface browser corruption/quota errors and move production saves to asynchronous IndexedDB.
-- [x] Correct the native HD root, prefetch `TROOPSD.DAT`, and package all 52 game-data entries plus 2,231 BMPs in deterministic `runtime.orpk` (`F-014A`; [browser evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-08-runtime-pack.md)).
-- [x] Map all 38 fighter/capital-ship records to authentic GOKRES fleet miniatures and pass independent bitmap/interaction proof (`4589d2e`; F-010B).
-- [x] Add the F-011A versioned canonical save-state fingerprint, v9 integrity verification, v8 compatibility, and lossless browser metadata; browser review r3 passed all 34 save/reload/load and bitmap assertions ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-08-state-fingerprints.md)).
-- [x] Add the F-011B1 v10 continuation envelope for simulation RNG, second AI, repair, combat cooldowns, and active configuration; preserve real v9 artifacts and pass the 40/40 browser continuation gate ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-state-continuation.md)).
-- [x] Resolve the original cockpit command-to-animation table from Ghidra and screenshot evidence, implement it without inferred sequential mappings, and pass the browser bitmap/hotspot/audio tranche ([reference](main-menu-parity.md); [evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-cockpit.md)).
-- [x] Persist the original cockpit's faction, difficulty, galaxy size, and game type through save v11. All 495 workspace tests passed and browser review R2 passed 18/18 state, bitmap, storage, network, and error gates. The selection path is closed; the source review later reopened victory resolution semantics ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-game-setup-propagation.md)).
-- [x] Close P04 and the remaining P03 functional gates: Credits and Multiplayer destinations, gain/mute, return-to-menu audio, original menu SFX, and clean second-campaign reset. Native build/startup passed; F-016D/E later closed the then-open semantic and native visual gates ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-completion.md)).
-- [x] Close F-016D browser semantics: one navigation landmark exposes all 14 original hotspots with selection state, cyclic keyboard traversal, bitmap focus, shared action/SFX routing, and no visible replacement controls. Independent review passed all nine acceptance gates ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-semantics.md)).
-- [x] Close P03 final presentation: native visual acceptance and a 10/10 browser acceptance pass for the documented music-only extension without changing the original 14-control contract ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-music-toggle.md)).
+- [x] F-014A native HD root, `TROOPSD.DAT` prefetch and the deterministic `runtime.orpk`: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-08-runtime-pack.md)).
+- [x] F-010B fleet miniatures for all 38 fighter and capital-ship records: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-08-fleet-miniatures.md)).
+- [x] F-011A save-state fingerprint: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-08-state-fingerprints.md)).
+- [x] F-011B1 save continuation envelope: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-state-continuation.md)).
+- [x] F-016A cockpit command-to-animation table: pass ([reference](main-menu-parity.md); [evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-cockpit.md)).
+- [x] F-016B cockpit faction, difficulty, galaxy size and game type persist in saves: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-game-setup-propagation.md)).
+- [x] F-016C / P03-P04 Credits, Multiplayer, audio controls and campaign reset: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-completion.md)).
+- [x] F-016D main-menu browser semantics: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-semantics.md)).
+- [x] F-016E / P03 final presentation and the music-only extension: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-main-menu-music-toggle.md)).
 - [ ] Make a clean packaged browser artifact boot in CI.
-- [x] Link README parity claims to current acceptance evidence.
-- [x] Add F-011B2 replay format v1: strict JSON, typed `{tick, sequence, actor}` commands, checkpoint positions, configuration identity, and canonical per-file/aggregate hashes for all 51 simulation DATs ([contract](deterministic-replay.md); [evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-replay-contract.md)).
-- [x] Add the F-011B3 recorder/executor with fail-fast checkpoints, save-v11 continuation, stable state-affecting iteration, and a five-process native original-data golden ([contract](deterministic-replay.md); [evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-replay-execution.md)).
-- [x] Execute one exact F-011B4 artifact in native and WASM. All nine checkpoints, initial/final fingerprints, and artifact text match; independent browser review passed success, fail-closed, and normal four-request startup gates ([contract](deterministic-replay.md); [evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-replay-wasm-equivalence.md)).
+- [x] README parity claims link to current acceptance evidence: done (`README.md`).
+- [x] F-011B2 replay format v1: pass ([contract](deterministic-replay.md); [evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-replay-contract.md)).
+- [x] F-011B3 replay recorder and executor: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-replay-execution.md)).
+- [x] F-011B4 native/WASM replay equivalence: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-replay-wasm-equivalence.md)).
 
-### M1: Simulation Correctness and Determinism — 2–3 weeks
+### M1: Simulation Correctness and Determinism (2–3 weeks)
 
-- [x] Prevent in-transit fleet redispatch and travel-progress resets. Active
-  orders are immutable until arrival or explicit cancellation, AI candidates
-  exclude transit and same-pass reservations, and seed 42 reduced attack
-  orders from 306,012 to 78,946 ([F-007A evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-fleet-redispatch.md)).
-- [x] Model fleet position explicitly, merge compatible arrivals, and prevent
-  production from attaching to in-transit fleets ([F-007B evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-fleet-position-consolidation.md)).
-  The arrival merge was retired on 2026-10-05 with joining fleets: it had no
-  original source (`ghidra/notes/fleet-join-split.md`).
+- [x] F-007A in-transit fleet redispatch prevented: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-fleet-redispatch.md)).
+- [x] F-007B explicit fleet position, no production onto fleets in transit: pass; its arrival merge is retired as unsourced (`ghidra/notes/fleet-join-split.md`) ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-fleet-position-consolidation.md)).
 - [ ] Wire ordinary player fleet dispatch through the validated authoritative
   departure path and pass independent bitmap acceptance for both factions
   ([F-007C evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-09-player-fleet-dispatch.md)).
@@ -488,25 +488,10 @@ acceptance. Their JSON ledgers provide stable finding and feature IDs.
   system window drag pass a two-sided browser gate (2026-10-02), and the
   blockade bit follows the original. Regiments load through the Fleet window
   (2026-10-04, below). A native check remains.
-- [x] Resolve every hostile task force at a system as one bounded engagement,
-  persist fighter attrition, correct fighter launch and shield handling, and
-  suppress unchanged five-tick stalemates. Seed 42 now reports two decisive
-  engagements instead of 603 repeated combat events
-  ([F-007D evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-system-combat-resolution.md)).
+- [x] F-007D one bounded engagement per system: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-system-combat-resolution.md)).
 - [ ] Extend stable ordering and versioned random streams through five 5,000-tick campaign seeds.
-- [x] Close the F-007E logistics checkpoint: require control for AI production,
-  eliminate friendly cycling and production-fed transit fan-in, retain an HQ
-  defender, preserve blockaded surface troops, load real `TROOPSD.DAT` class
-  stats, and persist repair episodes in save v12. Five seeds finish with 0%
-  transit, a 1.0 move/arrival ratio, at most 1.2× initial fleets, and only 0–5
-  repair starts ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-ai-campaign-logistics.md)).
-- [x] Close the verified portion of the F-007E conquest checkpoint: transport regiments within living
-  ship capacity, preserve cargo through transit and consolidation, land after
-  orbital control, continue unresolved surface battles, persist tactical
-  casualties, and occupy systems. Deterministic character capture and
-  occupation-based Imperial HQ victory are current behaviors, not accepted
-  parity, and have been reopened
-  ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-troop-transport-occupation.md)).
+- [x] F-007E logistics checkpoint (AI production control, transit, HQ defender, troop classes, repair in saves): pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-ai-campaign-logistics.md)).
+- [x] F-007E conquest checkpoint (transport, landing, surface battles, occupation): pass; capture stays open below ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-troop-transport-occupation.md)).
 - [ ] Add player troop selection to the bitmap fleet workflow with live
   capacity, authoritative embarkation, transit, and automatic landing
   ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-player-troop-dispatch.md)).
@@ -516,17 +501,8 @@ acceptance. Their JSON ledgers provide stable finding and feature IDs.
   regiment's Move released on the Fleet window's fleet, opened from the
   sector window's fleet icon; the `fleet-window.mjs` gate passes both sides
   (load, hold, move, land, full-fleet refusal). A native check remains.
-- [x] Establish a cited historical campaign baseline from the original manual,
-  contemporary guides, and player testimony. It separates binding mechanics,
-  observed original-AI behavior, reverse-engineered behavior, desired
-  enhancements, and provisional engineering guards
-  ([reference](../docs/reference/campaign-history/)).
-- [x] Correct victory semantics: distinguish Coruscant capture from destruction
-  and occupation of the mobile Alliance HQ; preserve Standard leader
-  conjunctions after Death Star fire; make Death Star loss nonterminal; remove
-  the uncited 200-tick grace period; and route contested, unopposed, manual, and
-  tactical bombardment through the persisted HQ-survival flag
-  ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-victory-contract.md)).
+- [x] F-007E cited campaign-history baseline: done ([reference](../docs/reference/campaign-history/)).
+- [x] F-007E victory semantics (Coruscant, mobile HQ, Standard conjunctions, nonterminal Death Star loss): pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-victory-contract.md)).
 - [ ] Replace deterministic mass capture with validated capture/evasion
   behavior.
 - [ ] Establish faction liveness and the full cited campaign loop, including
@@ -537,9 +513,11 @@ acceptance. Their JSON ledgers provide stable finding and feature IDs.
   `ghidra/notes/death-star-strategic.md` recovers the original: an ordinary
   shipyard build of CAPSHPSD record 136, one per system; fire is order
   `0x223` (gate `FUN_00582440`, no side or owner test); the destroy cascade
-  leaves fleets standing; sabotage has no build-delay rule (F-017). Port
-  nodes: `or-port-destroy-system-cascade-imrv` (P1), `or-port-bombardment-8usw`,
-  `or-port-death-star-family-qtde`; whether the AI fires it is
+  leaves fleets standing; sabotage has no build-delay rule (F-017). The
+  orders, the gate and the per-hit run are ported
+  (`docs/plans/2026-10-16-feat-orbital-strike-and-bombardment.md`). Open:
+  `or-port-destroy-system-cascade-imrv` (P1; an Alliance-player native
+  Destroy System and the browser probes) and whether the AI fires it,
   `or-q-ai-death-star-use-z9ow`.
 - [ ] Wire the recovered rules the 2026-09-25 test-pruning pass found uncalled:
   research gating of buildable ships (F-018), the decoy roll and the SUBDMSTB
@@ -549,16 +527,16 @@ acceptance. Their JSON ledgers provide stable finding and feature IDs.
   pending).
 - [ ] Correct or re-source the code behaviors the 2026-09-26 citation audit
   found without a binary source: the economy's KDY production modifier
-  (F-023), the Emperor's 1.5x battle bonus (F-024), and family-`0x34` Death
-  Star detection (F-025; the original uses capital-ship family `0x18`,
-  `0x34` is the Emperor: `ghidra/notes/death-star-strategic.md`,
-  `or-port-death-star-family-qtde`). The revolt lifecycle, uprising incident, and
-  disaster now follow recovered code (F-026, browser pass pending).
+  (F-023) and the Emperor's 1.5x battle bonus (F-024). Death Star detection
+  keys on capital-ship family `0x18` as the original does; its shield's
+  battle role waits on the TAC-05 cells (F-025,
+  `ghidra/notes/death-star-strategic.md`). The revolt lifecycle, uprising
+  incident, and disaster now follow recovered code (F-026, browser pass
+  pending).
 - [ ] Move the remaining probability-table consumers to the recovered step
   lookup (F-028) and the informant and resource incidents to their recovered
   timers (F-029).
-- [x] Port the en-route delivery of manufactured objects on the recovered
-  per-object transit (F-030, save v16, browser pass pending).
+- [x] F-030 en-route delivery of manufactured objects: ported (save v16); browser pass pending (audit F-030).
 - [ ] Port the mission phases, decoys, and per-member success roll (F-019).
   The rules are in `ghidra/notes/decoy-roll.md`, `mission-lifecycle.md`,
   `ai-mission-planning.md`, and `mission-dialog.md`. Phases 0-6 have landed:
@@ -574,53 +552,12 @@ acceptance. Their JSON ledgers provide stable finding and feature IDs.
   (F-007C). Retire, the Command submenu, and Status share the menu. Phases
   0-8 have landed and pass the `fleet-move.mjs` and `fleet-window.mjs` gates
   for both sides; a native check remains.
-- [x] Trace what sets the system blockade bit (`+0x88` bit `0x20`) and replace
-  the uncited `BlockadeSystem::system_is_blockaded` rule (F-007C). It follows
-  `FUN_0050b8e0` (`ghidra/notes/blockade-bit.md`); the Move confirmation's
-  blockade branch meets only a stale bit in the original, so it stays
-  unreachable in the port.
-- [x] Trace and port the original order that loads a regiment onto a fleet,
-  through the existing capacity and embark core (F-007E player troop
-  dispatch). A regiment's Move released on the Fleet window (type 4,
-  `FUN_004a2630`) loads it (`ghidra/notes/fleet-window.md`); the port holds
-  the cargo aboard at its loading system until the fleet arrives elsewhere
-  (save v24). The native check is tracked with F-007C.
-- [x] Port the sector window's four quadrant icons (`FUN_00459e30`) and the
-  windows the other three open: the System window (type 9), the System
-  Defenses window (type 10, `FUN_004a7790`) and the Missions window (type
-  11, `FUN_0049f130`), each with its rail icon (`ghidra/notes/sector-quadrants.md`).
-  The `sector-quadrants.mjs` gate passes both sides, its pixel compares exact
-  against STRATEGY.DLL and GOKRES.DLL. A native check remains.
-- [x] Port unloading a regiment by hand and regiment travel
-  (`ghidra/notes/regiment-unload.md`). A regiment dragged out of the Fleet
-  window's Troops tab, or a surface regiment's Move, issues `0x201` against
-  the release window's `+0x70` (`FUN_00556390`): within one system it lands
-  or boards at once; across systems it travels at speed GNPRTB 1
-  (`FUN_004f63f0`, `FUN_00556430`) and is placed on arrival (save v25).
-  Another side's populated destination is refused (`FUN_0053d430`, 1/0x28).
-  The `fleet-window.mjs` gate passes both sides. A native check remains.
-- [x] Port joining and splitting fleets (`ghidra/notes/fleet-join-split.md`).
-  A fleet's or ship's Move released on another fleet joins it
-  (`FUN_004ffc90`, `FUN_004feca0`), and an emptied fleet disbands
-  (`FUN_004fe630`); a ship's Create Fleet (`0x270`, sort 50, TEXTSTRA 12319)
-  or Move to its own system makes it a fleet of its own (`FUN_005809c0`,
-  `FUN_00509b40`, `FUN_00507750`). A Capital Ships tab item drags like a
-  regiment. Across systems the movers depart as a fleet and join on arrival
-  if the target is still there (port: hyp; save v26). The port's merge of
-  every compatible arrival (F-007B) is retired: no original rule merges
-  fleets the player did not join (Tom, 2026-10-05). The `fleet-window.mjs`
-  gate passes both sides. A native check remains.
-- [x] Port the Fleet Finder (window type `0x15`, `ghidra/notes/fleet-finder.md`).
-  The cockpit's control (`0x12e`) or F3 opens it (`FUN_0042a0c0`); it lists
-  the side's fleets, or in Ship Finder mode their capital ships, by name
-  under All, Alliance and Imperial tabs (`FUN_00462be0`); a typed name picks
-  the row it best begins (`FUN_00609650`), and Display, Enter or a double
-  click opens the system's sector window and its Fleet window with the
-  fleet or ship selected (`FUN_00429440`). The `fleet-finder.mjs` gate
-  passes 18/18 across both sides, including an authentic covered sector
-  window and an open Fleet window; its chrome is exact against STRATEGY.DLL.
-  The Finder now remains above modeless windows. Transport-limited native
-  journeys remain open under F-007C.
+- [x] F-007C system blockade bit follows `FUN_0050b8e0`: ported (`ghidra/notes/blockade-bit.md`).
+- [x] F-007E regiment loading through the Fleet window: ported, `fleet-window.mjs` passes both sides; native check under F-007C (`ghidra/notes/fleet-window.md`).
+- [x] F-007C sector window quadrant icons and the System, System Defenses and Missions windows: ported, `sector-quadrants.mjs` passes both sides; native check open (`ghidra/notes/sector-quadrants.md`).
+- [x] F-007E unloading a regiment by hand and regiment travel: ported, `fleet-window.mjs` passes both sides; native check open (`ghidra/notes/regiment-unload.md`).
+- [x] F-007C joining and splitting fleets: ported, `fleet-window.mjs` passes both sides; native check open (`ghidra/notes/fleet-join-split.md`).
+- [x] F-007C Fleet Finder: ported, `fleet-finder.mjs` passes 18/18 on both sides; transport-limited native journeys open ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-10-05-f007c-native-interface-acceptance.md)).
 - [ ] Balance one-ship fleets in the AI. With the arrival merge retired, the
   AI's own fleets no longer combine where they meet: in seed 42's 1,500-tick
   dual-AI run the fleet count at its six snapshots runs 5, 6, 11, 11, 17, 17
@@ -637,17 +574,17 @@ acceptance. Their JSON ledgers provide stable finding and feature IDs.
   Abduction (F-019).
 - [ ] Trace the galaxy view's right click on a system or fleet, then port
   what it opens.
-- [ ] Play the advisor's mission-refusal reactions (P34; the slots are in
-  `ghidra/notes/mission-dialog.md`, "Refusal"), replacing the message-log
-  stand-ins.
+- [ ] Sort a refused order's status by its first word as the advisor does
+  (P34; `FUN_004c3bb0`, `FUN_004c19f0`; `ghidra/notes/mission-dialog.md`,
+  "Refusal"). Every refusal (missions, fleet, regiment and squadron moves)
+  already reaches `AdvisorState::refuse` and files no text; any status but a
+  repeat takes the generic reaction.
 - [ ] Add the original mission kinds the port lacks: Reconnaissance, Palace,
   Bounty, Jedi Training, and the leisure and movement kinds (F-040).
-- [x] Gate uncited simulation rules with `tools/provenance-scan`; its baseline
-  may only shrink (F-031; 130 items after F-032 transit).
-- [x] Port fleet transit time from `FUN_0055d8c0` (F-032 transit; bombardment
-  and fog remain).
+- [x] F-031 provenance gate on uncited simulation rules: in place, and its baseline may only shrink (`tools/provenance-scan`).
+- [x] F-032 fleet transit time and bombardment: ported from `FUN_0055d8c0` and orders `0x220`-`0x223`; fog open (audit F-032).
 - [ ] Replace the invented rules found by the invention review, one system at
-  a time: transit and bombardment (F-032), strategic combat (F-033), missions
+  a time: fog (F-032), strategic combat (F-033), missions
   (F-034), manufacturing and repair (F-035), AI (F-036), economy and research
   (F-037), character timers and story events (F-038), and false notes (F-039).
 - [ ] Pass five reproducibly configured 5,000-tick seeds: transit ≤10%, orders
@@ -659,532 +596,121 @@ acceptance. Their JSON ledgers provide stable finding and feature IDs.
 Parameter autoresearch remains paused until this milestone closes; otherwise it
 would tune around known simulation feedback defects.
 
-### M2: One Authoritative Game Engine — 3 weeks
+### M2: One Authoritative Game Engine (3 weeks)
 
 - [ ] Route the app and playtest through one simulation tick API and event sink.
 - [ ] Move the panel-action handling out of `rebellion-app/src/main.rs` into
   modules native tests reach; every mutation run leaves survivors there.
-- [ ] Make automatic, tactical, and ground combat share resumable core state and calculations. Tactical ground damage and occupation capture now persist.
+- [ ] Make automatic, tactical, and ground combat share resumable core state and calculations. Unplayed battles run the tactical engine headless; the Planetary Assault (`assault.rs`) resolves in one pass with nothing to resume.
 - [ ] Construct the victory modal and unify win/loss transitions.
 - [ ] Remove `AdvanceTicks` or make it execute the real simulation.
 - [ ] Prove identical fingerprints for the same seed and command stream across app/playtest, native/WASM, and auto/tactical paths.
 
-### M3: Exceptional Browser Runtime — 3 weeks
+### M3: Exceptional Browser Runtime (3 weeks)
 
-- [x] Replace thousands of serial startup requests with deterministic `runtime.orpk`; both factions now boot in four requests with lazy bitmap decode and zero loose asset requests (`F-014A`).
+- [x] F-014A deterministic `runtime.orpk` startup in four requests for both factions: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-08-runtime-pack.md)).
 - [ ] Complete `UIP-T01` through `UIP-T05`: replace the synthetic strategy,
   object-window, report, and tactical surfaces with the original bitmap-driven
   compositions for both factions. No invented visible control may satisfy a
   parity cell.
 - [ ] Bring the ground assault to parity (`UIP-F-010`, `TAC-08`,
   `RE-GND-01`).
-  - Remove the invented live ground-combat screen
-    (`rebellion-render/src/ground_combat.rs`). The original has no ground
-    battle.
-  - Port the original report-only flow (manual pp. 119-121, figs. 2.58,
-    3.66 and 3.67).
-    - The fleet's Planetary Assault order: enabled when troops are aboard,
-      greyed out against two planetary shields.
-    - Immediate resolution.
-    - The Assault Summary window: Summary, Imperial Forces, Alliance Forces,
-      Go to System.
-    - Its damage summary tabs: troopers, capital ships, fighters, facilities
-      and personnel.
-    - The same window delivered as a message when the opponent assaults the
-      player.
-  - Recover the window's resources and the resolution rules from the
-    executable first.
+  - The original report-only flow is ported (manual pp. 119-121, figs. 2.58,
+    3.66 and 3.67; `ghidra/notes/ground-assault.md`): the fleet's Planetary
+    Assault order (`assault::order_enabled`, greyed out against two
+    planetary shields), immediate resolution (`assault::resolve`), and the
+    Operation Report window (`rebellion-render/src/operation_report.rs`),
+    filed to both sides. The invented ground-combat screen is gone.
   - Cover both factions, win and loss, casualties, occupation and the return
     to the map.
   - Close the eight `TAC-08` cells against A0 captures of the original.
     All eight references are captured (an A0-only family outside the
     106-cell tactical denominator; saves `empire-day53-yaga-orbit` and
     `empire-day128-assault-fails-selonia`).
-- [x] Complete P44 / `RE-ADV-01` for the advisor idle-frame tranche: recover
-  type-302 decoding, stage all 3,988 ALSPRITE/EMSPRITE frames, render both
-  faction pairs in native/WASM, and fail closed with browser-visible diagnostics.
-- [x] Complete P46A / the first `RE-STR-01` checkpoint: render both faction
-  shells on one centered 640x480 canvas, crop the extra source row, apply the
-  recovered galaxy apertures, and share their transform across map layers,
-  hit tests, blockades, and advisors. The reference rail and the rest of
-  `UIP-T01` remain open.
-- [x] Complete P46B / the primary `RE-STR-02` checkpoint: remove the replacement
-  text strip; render both factions' six exact normal and captured-press bitmap
-  pairs; reproduce native capture, release, palette-key, and strict-edge input;
-  prevent them from opening replacement destinations; and withhold the
-  replacement message and status bars that covered them. A0 captures, the disabled path,
-  original destination windows, speed and GID controls, and the rest of
-  `UIP-T01` remain open.
-- [x] Complete the first UIP-B01 strategic-navigation checkpoint: replace the
-  invented sidebar with recovered sector and detailed-system shells, original
-  planet and tab resources, double-click routing, modeless focus and close,
-  plus both factions' 12-slot minimize/restore rail geometry. Nested tab
-  compositions, commands, exact rail thumbnails, uncommon states, and the
-  complete `CMD-03` and `CMD-04` acceptance matrices remain open.
-- [x] Establish the shared strategic-window routing boundary: immutable
-  frame snapshots, active-scene command eligibility, fail-closed content
-  reconciliation, stable managed-host identities, event-local ownership, and
-  one production app coordinator now pass their scoped tests. This is
-  infrastructure only. Task 6 onward must migrate each existing family before
-  the exact rail, modal, and multiwindow acceptance cells can close.
-- [x] Complete P46D / the detailed-system item checkpoint: populate all six
-  core tabs with source-mapped GOKRES miniatures and displayed entity labels;
-  restore selection, foreground focus, and the three-column scrolled viewport
-  with STRATEGY `10365` through `10369`; preserve tab, item, and scroll state
-  through rail restoration; and prevent stale hostile views from exposing
-  opposing objects without current system intelligence. Nested compositions,
-  drag and command paths, exact original intelligence semantics, uncommon
-  states, exact rail thumbnails, and A0 acceptance remain open.
-- [x] Complete P47A / the first `UIP-B02` checkpoint: draw the original bright
-  STRATEGY 902 galaxy at canvas origin beneath the strategic layers, preserve
-  source-aligned faction crops, use the same original bytes in native and
-  packaged WASM, and pass muted browser acceptance with no findings.
-  P47B later proves this is the Display Off resource.
-- [x] Complete P47B / the default Popular Support checkpoint: select STRATEGY
-  903 for active GID, restore the exact faction GID control, compact legend,
-  native marker families and support thresholds, remove synthetic overlays
-  from the default parity view, preserve system activation, and pass four
-  muted faction/viewport browser campaigns with no product findings. The
-  code-built menu, expanded legend, remaining modes and overlays, sector art,
-  exact map input, and complete `CMD-02` matrix remain open.
-- [x] Adopt the interface-parity acceleration sidecar: bundle the complete GID
-  family, build one permanent fresh-process muted browser harness, use
-  deterministic test-only fixtures, generate repeated status prose from
-  canonical JSON, and reserve full workspace, WASM, and browser verification for
-  the family gate. The first test-only 38-scenario harness and code-built GID
-  command tree are implemented. All 152 muted browser probes pass, but no
-  original-executable captures are accepted. The original floating legend,
-  non-support filter predicates, special markers, native comparison, and
-  complete `CMD-02` acceptance remain open.
-- [x] Restore the P49 Message Index rail resting artwork: map nine controls
-  per faction from `FUN_00427270` and verify all eighteen STRATEGY BMPs
-  pixel-for-pixel in the muted 640x480 browser harness. `CMD-08` remains open
-  for illuminated/unread states, pointer routing, the original index window,
-  categories, navigation, and its full acceptance matrix.
-- [x] Restore the P60 original Game Speed control: the day readout and its
-  right-click STRATEGY menu with Pause, Very Slow, Slow, Medium, and Fast (the
-  original has no faster speed); the stop-day pause with the REBDLOG "Resume
-  Game Play?" alert; and the Alt+P and Alt+NumPad accelerators. Save v14
-  persists the speed and pause stop. Statically recover the Message Index
-  window, categories, rail resting path, and Advice slowdown. `CMD-05` stays
-  open for A0 comparison, the wall-clock rate unit, and font and tooltip
-  details; `CMD-08` for rail illumination and the window itself.
-- [x] Complete P62, the bounded encyclopedia-artwork transport checkpoint:
-  validate all 187 owned `EDATA.NNN` images, package them under a dedicated
-  namespace, route them to a lazy native/WASM cache, preserve nearest sampling
-  and exact missing-asset diagnostics, and prove `EDATA.042` at 80,000 of
-  80,000 source pixels in a fresh muted four-request browser session. The
-  authentic catalog, index and topic windows, text and entity bindings,
-  navigation, and every `OBJ-01` acceptance cell remain open.
-- [x] Correct and preserve the P63 Message Index shell checkpoint: recover the
-  470-by-331 faction compositions and ten command `0x79` through `0x82`
-  control pairs, block click-through into the galaxy, and compare normal,
-  every held state, and one outside edge across two fresh muted browsers at
-  3,733,680 of 3,733,680 source pixels. Independent visual review found no
-  P0-P3 issue. Populated rows, navigation, clear/delete actions, Advice
-  slowdown, chat, production routing, A0, and every `CMD-08` acceptance cell
-  remain open. The separate authentic Encyclopedia remains open under P35.
-- [x] Complete the P64 bounded Encyclopedia index-shell checkpoint: recover
-  both 470-by-330 faction compositions, seven selected category states, three
-  rail held states, native `0x75` clipping, modal boundaries, exclusive-edge
-  and transparent-pixel rejection, opaque press capture, and drag cancellation.
-  Compare 32 states and 4,963,200 source pixels exactly
-  in two fresh muted browsers, then retain independent source and visual
-  reviews. Production labels, rows, topics, navigation, routing, A0, and every
-  `OBJ-01` cell remain open.
-- [x] Complete the P65 bounded Encyclopedia index-catalog checkpoint: build the
-  immutable 356-entry catalog from the owned DAT and TEXTSTRA sources, apply
-  all seven recovered family filters and English labels, preserve compound
-  object identity through category changes, and support nine-row selection and
-  scrolling. Verify 22 two-faction browser states, including the native
-  selected-category no-op, and all 1,567,280 static shell pixels while
-  preserving the complete P64 regression matrix. Topic
-  composition, ENCYTEXT/EDATA bindings, contextual entry, production routing,
-  A0, and every `OBJ-01` cell remain open.
-- [x] Complete the P66A Encyclopedia topic-source checkpoint: strictly extract
-  the owned English ENCYTEXT and ENCYBMAP resources, reproduce ordinary,
-  system-picture, and factional mission lookup identities, bind all supported
-  index objects, and report missing source parts without invented fallback.
-  Browser transport, topic composition, interactive navigation, contextual and
-  production routing, other languages, A0, and every `OBJ-01` cell remain open.
-- [x] Complete the W2 immutable Encyclopedia content-session checkpoint: parse
-  and bind a complete candidate off to the side, retain exact artwork bytes and
-  dimensions/digest metadata, validate the fixed 400-by-200 indexed BMP class,
-  publish atomically, preserve the prior session on failure, and invalidate only
-  its texture generation on replacement or teardown. The session is inactive
-  until W5 supplies and installs canonical packaged or native bytes; no
-  production route or `OBJ-01` cell is accepted.
-- [x] Complete the W3 pure Encyclopedia presenter checkpoint: project the
-  immutable session without I/O or texture ownership, retain the validated
-  catalog order and faction-specific bindings, expose all ten source-empty
-  topics without fallback, bound previous/next without wrapping, and preserve
-  exact cockpit, index and typed contextual return origins through follow-up
-  transitions. W5 packaged production routing, A0 comparison, and every strict
-  `OBJ-01` cell remain open.
-- [x] Complete the W4 authentic Encyclopedia topic-surface checkpoint: adapt
-  W3's borrowed presentation into renderer-owned DTOs, reuse the recovered
-  faction shell/index/topic controls, implement bounded keyboard and scrolling
-  behavior, and retain at most one generation-keyed decoded topic texture.
-  Ten two-faction fixture-gated browser A1 cases cover native and scaled
-  viewports, endpoints, pressed/disabled states, source-unavailable clearing,
-  close, and navigation with zero runtime errors. W5 canonical-reader and
-  production routes, original A0/title placement, and strict `OBJ-01`
-  acceptance remain open.
-- [x] Complete the W5A canonical Encyclopedia publication checkpoint: publish
-  the P66A catalog, sidecar, and exact 186-file referenced artwork set through
-  deterministic, read-back-verified, atomically replaced ORPK and a
-  development-only immutable loose generation. Native, packed-browser, and
-  loose readers now install identical bytes into one W2 session with the same
-  logical fingerprint and 346 visible topics per faction; ten source-hidden
-  mission records remain excluded, and the production artifact
-  retains its four-request startup budget and excludes fixture routes. E30
-  packaged visual journeys, E32 command `0x131` activation, A0 comparison, and
-  strict `OBJ-01` acceptance remain open.
-- [x] Complete the W6 original-first Encyclopedia HD checkpoint: prepare one
-  native selection snapshot from the validated W2 session, require the existing
-  faithful-HD manifest review plus exact source/output digests and 4x PNG
-  dimensions, retain original bytes for every absent or invalid candidate, and
-  key textures by sampling policy. Browser builds and strict parity evidence
-  remain original-only; no enhanced asset is committed or generated.
-- [x] Complete the W7 native Encyclopedia overlay checkpoint: reserve root
-  `encyclopedia.json` outside `GameWorld`, share one deterministic
-  dependency-first order with lexicographic ready tie-breaks, distinguish
-  absent/replacement/legal-removal fields, confine and bound author BMPs,
-  validate the base and every complete layer, and publish only one atomic W2
-  session. Invalid candidates retain the last-known-good snapshot; disabling
-  all layers restores the exact base. Browser content, save bodies, and
-  simulation state remain unchanged.
-- [x] Complete the E32 Encyclopedia production-activation checkpoint: require
-  the complete canonical namespace for every new browser package; keep old
-  packs without that namespace bootable with the route unavailable; activate
-  cockpit and real contextual callers through the shared presenter/renderer;
-  reconstruct stable compound source IDs; preserve typed close/return origins;
-  and pass native plus both-faction packaged journeys with four-request startup
-  and zero production fixture tokens. Strict original A0 and every `OBJ-01`
-  acceptance cell remain open.
-- [x] Complete the E34 assembled technical-acceptance checkpoint: verify the
-  final native, packed and loose readers, deterministic package, both-faction
-  production journeys, old-pack behavior, replay/save invariance, scoped
-  lint/format and isolation boundaries.
-- [x] Complete E35 Encyclopedia acceptance for the approved evidence boundary.
-  The current implementation
-  passes all twelve applicable lossless original-executable-under-Wine
-  comparisons after correcting faction origins, headings, embedded production
-  fonts, empty selection, hover tooltip and modal ordering. The explicit
-  source-unavailable state passes from functional evidence with original A0
-  not applicable. The user accepted Wine evidence for this delivery on
-  2026-10-07; all thirteen `OBJ-01` cells pass and native-Windows parity is not
-  claimed.
-- [x] Restore the P50 GID root and submenu frame from STRATEGY 10100 through
-  10107. Paint repeated edges in four batched meshes, remove the invented menu
-  fade, and check native-size root pixels against the source BMPs in both
-  factions. Menu interior, typography, exact geometry, remaining GID rules,
-  original-executable captures, and `CMD-02` acceptance remain open.
-- [x] Remove the P51 unproven GID row-hover wash, retain submenu routing, and
-  verify every visible source-frame pixel under the detailed system window.
-  Original hover/focus art and full window-stacking acceptance remain open.
-- [x] Complete the P52 first tactical-shell checkpoint: render TACTICAL 1000
-  on the 640×480 canvas, replace active-combat replacement panels, wire bitmap
-  pause, red Alliance and green Imperial highlight/dim states, and zoom, and
-  verify both factions and viewports
-  in fresh muted browser sessions. Procedural battle contents and all 106
-  `TAC-01` through `TAC-07` cells remain open.
-- [x] Complete the P53 tactical input-state checkpoint: apply the original
-  palette-key hit mask and outer-edge exclusion to each working tactical
-  control, render zoom pressed resources 1045/1047 while held, and verify
-  inert matte pixels plus exact zoom round-trip restoration in both factions
-  and viewports. Drag/repeat semantics and all 106 tactical cells remain open.
-- [x] Complete P54 reproducible tactical 3D staging: preserve all 87 type-301
-  DirectX meshes and 397 type-303 texture or palette resources from an owned
-  `TACTICAL.DLL` in a validated content-addressed store. Keep the proprietary
-  output ignored. Binary X and type-303 decoding begin in P55.
-- [x] Complete P55 deterministic tactical conversion: decode all 87 binary-X
-  meshes, 370 indexed images, and 27 palettes into a verified content-addressed
-  runtime store. Confirm topology, bounds, materials, and 59 texture links
-  against Assimp 6.0.5 raw import. Keep proprietary output ignored.
-- [x] Complete P56 single-resource browser rendering: package exact typed
-  resource `2560/1033` and `SDESTI52.BMP/1033`, render the pair through a
-  normals-aware depth-tested WebGL 1 path, and prove draw submission against a
-  negative control in eight fresh muted browser cases. Keep its DAT identity,
-  original camera and palette activation, production integration, and all 106
-  tactical acceptance cells open.
-- [x] Complete P57A source-bound three-LOD selection: package exact resources
-  `2560/1033` through `2562/1033` plus both named textures, preserve the far
-  mesh material color, reproduce the original divide-then-round predicate, and
-  verify all fixed selections in 20 fresh muted browser cases. Keep live
-  same-renderer switching, no-churn proof, original view rules, production
-  integration, and all 106 tactical acceptance cells open.
-- [x] Complete P57B1 live cached-slot switching: exercise one renderer through
-  `2560 -> 2561 -> 2562 -> 2561 -> 2560` with the authentic bitmap zoom
-  controls, prove exactly one family load, and verify both factions and both
-  viewports in 24 fresh muted browser cases. Keep the test-only zoom-to-depth
-  bridge excluded from production and all 106 tactical cells open.
-- [x] Complete P57B2A source-camera and D-pad proof: recover the two faction
-  entry views, field zoom, clip planes, four orbit commands, adaptive step,
-  pitch bounds, and Direct3D handedness conversion; render the original normal
-  and held directional bitmaps; and pass the 28-case muted browser bundle.
-  Keep every strict tactical cell open pending A0 view acceptance.
-- [x] Complete P57B2B1 selected-object target proof: recover command 9's
-  selection-ID and retained-frame `LookAt` path, activate source resources
-  1058/1059, center the selected production fallback ship, and pass the
-  focused four-case and complete 28-case muted browser gates. Keep the fixture
-  object IDs provisional until P58 joins stable DAT and tactical identities.
-- [x] Complete P57B2B2 active-force layout proof: recover the original
-  `100 + 3 * max(force object count)` battle extent, exclude docked fighter
-  groups, derive the four source lanes, and verify both factions and viewports
-  in four fresh muted browser journeys. Keep production object placement and
-  every strict tactical cell open pending stable identity and A0 evidence.
-- [x] Complete P57B2B3 production participant placement: retain DAT class and
-  unfiltered fleet-roster identity, reproduce the exact signed-zero and
-  alternating five-unit X slots on all four lanes, target the selected source
-  world point through the handedness boundary, and pass the full 28-case muted
-  browser bundle. Keep DAT-to-tactical resource joins, production 3D family
-  selection, and every strict tactical cell open pending A0 evidence.
-- [x] Complete P57B2C1 authored transform and system palette selection: remove
-  inferred center-and-fit normalization, preserve source coordinates with only
-  the recovered Z reflection and winding reversal, package palettes 5531
-  through 5557, select `5530 + SYSTEMSD.picture_id`, and pass the focused
-  four-case and complete 28-case muted browser gates. Keep every strict
-  tactical cell open pending A0 evidence.
-- [x] Complete P57B2C2A source light-rig recovery: replace the provisional
-  shader light with `FUN_005d4d10`'s directional RGB `0.8` frame at source
-  `(5,5,-1)`, Z-constrained origin target, ambient RGB `0.5`, and transformed
-  surface-to-light vector; pass the focused four-case and complete 28-case
-  muted browser gates. Keep every strict tactical cell open pending A0 evidence.
-- [x] Complete P57B2C2B retained-mode render-state recovery: preserve explicit
-  dither-off state, Gouraud lighting, nearest/no-mip filtering,
-  `D3DCULL_CCW`, LessEqual depth with writes, specular-off behavior, and
-  diffuse-plus-emissive materials; pass the focused four-case and complete
-  28-case muted browser gates. Keep every strict tactical cell open pending A0
-  evidence.
-- [x] Complete P58A tactical resource identity: join all 29 capital ships,
-  eight fighters, and the Death Star from stable DAT identities to their
-  original tactical ordinals and resource bases; replace approximate ship
-  sprite arithmetic; validate and pack all 87 meshes and 397 textures; and
-  pass the complete 28-case muted browser gate. Keep production family drawing,
-  A0 comparison, and every strict tactical cell open.
-- [x] Complete P58B production capital-family rendering: install the complete
-  source corpus in native and browser builds, load exact joined three-LOD
-  families on demand, render live Mon Calamari and Strike Cruiser participants
-  at their recovered source positions, and pass the hardened 36-case muted
-  browser gate with paired 3D-off framebuffer controls. Keep fighters,
-  selection presentation, effects, commands,
-  outcomes, A0 comparison, and every strict tactical cell open.
-- [x] Complete P58C tactical fighter rendering and projected interaction:
-  render the exact type-303 close, far, and indicator resources through the
-  recovered detail predicate; move capital selection, focus, targeting, and
-  framing onto projected mesh bounds; and pass the 36-case muted browser gate
-  with paired controls. Keep every strict tactical cell open pending A0.
-- [x] Complete P58D production fighter-detail journey: focus the test camera on
-  each faction's real fighter, exercise the original zoom controls through all
-  nine independent indicator/far/close transitions, retain both cached
-  families, and pass the 40-case muted browser gate. Keep every strict tactical
-  cell open pending A0.
-- [x] Complete P58E task-force and fighter-group presentation: restore all
-  eight task-force controls and four RGBY fighter controls from source art;
-  add source-shaped hit testing, mutual exclusion, Ctrl assignment, F1 through
-  F12 routing, and selected fighter portraits; then pass the 44-case muted
-  browser gate. Keep automatic production grouping and every strict tactical
-  cell open pending A0.
-- [x] Complete P58F1 system-selected tactical planets: recover the executable
-  selector chain, bind `SYSTEMSD.picture_id` to type-303 planet
-  `5500 + selector` and palette `5530 + selector`, reject mismatched pairs,
-  and pass the 44-case muted browser gate. Keep exact retained-frame placement,
-  visibility conditions, and every strict tactical cell open pending A0.
-- [x] Complete P58F2 tactical impact effects: recover the executable hit-message
-  and stage dispatcher, restore all six type-303 hit, damage, and destruction
-  families with exact frame counts, draw sizes, priority, 10 Hz cadence,
-  indexed transparency, and target attachment, and pass the 48-case muted
-  browser gate. Keep retained projectile geometry, shield or field semantics,
-  fighter emission, audio, and every strict tactical cell open pending A0.
-- [x] Complete P58F3 tactical projectiles and fields: recover all retained
-  projectile vertices and face variants, weapon thresholds, longitudinal
-  scales, material selectors, interpolation and duration; restore both
-  128-by-128 field families, 10 Hz animation, source counts, and shared gravity
-  priority; then pass the 52-case muted browser gate with selector-color
-  framebuffer probes. Keep exact command timing, fighter emission, special
-  weapons, audio, and every strict tactical cell open pending A0.
-- [x] Complete P58F4 selected-capital damage presentation: bind the source
-  tactical ordinal to portraits `2001` through `2029`, composite their lime
-  mats over original panel `1302`, render live shield and hull values with
-  faction-correct colors, and pass the 56-case muted browser gate. Keep power
-  allocation, commands, destroyed selection, Death Star states, and every
-  strict tactical cell open pending A0.
-- [x] Complete P58F5 selected-capital subsystem and field-source presentation:
-  restore the five source-quantized condition families at their exact panel
-  positions; retain exact tractor and gravity source IDs; enforce one tractor
-  target and four gravity targets per source; preserve gravity priority and
-  frame reset; and pass the 60-case muted browser gate. Keep combat-driven
-  subsystem damage, interactive command delivery, A0, and every strict
-  tactical cell open.
-- [x] Complete P58F6 live subsystem damage: route capital and fighter fire
-  through one source-derived damage function; preserve inclusive shield-loss
-  probability, hull overflow, all five subsystem thresholds and hit limits,
-  condition recalculation, and tractor-source cancellation; then pass the
-  64-case muted browser gate. Keep exact RNG sequencing, repair, movement
-  penalties, A0, and every strict tactical cell open.
-- [x] Complete P58F7 subsystem repair and mobility: restore the 50-second
-  repair cadence, inclusive damage-control roll, source subsystem order,
-  sublight-engine condition, active tractor drag, and full field-frame
-  containment; then pass the 68-case muted browser gate. Keep exact global RNG
-  sequencing, physical movement, A0, and every strict tactical cell open.
-- [x] Complete P58F8 maneuver and movement: restore the source one-through-nine
-  maneuver bonus, effective-power velocity, signed faction direction, and
-  250-millisecond position integration; then pass the 72-case muted browser
-  gate. Keep interactive maneuver delivery, turning, collision, formation,
-  A0, and every strict tactical cell open.
-- [x] Complete P58F9 tactical command assignment: restore the original
-  Maneuvers and Tactics and Missions panels, exact shared order and tactic
-  codes, source-shaped controls, disabled states, group delivery, and
-  commit/cancel semantics; then pass the 76-case muted browser gate. Keep order
-  execution, Death Star enablement, turning, collision, formation, A0, and
-  every strict tactical cell open.
-- [x] Complete P58F10 tactical order execution: connect Left Hook, Right Hook,
-  Hammer, and Anvil to the recovered pi-over-eight, 0.75-scale waypoint
-  executors; execute Hold by clearing movement intent; and start Recover
-  through same-side carrier reservation and Returning state 2. Pass the
-  80-case muted browser gate. Keep exact turning, waypoint completion, carrier
-  ingress and docking, attack executors, Death Star execution, collision,
-  formation, A0, and every strict tactical cell open.
-- [x] Complete P58F11 tactical command progression: apply the recovered
-  maneuverability clamp and signed turn rate, snap completed waypoints, and
-  advance fighter recovery through Returning, Docking, and Recovered while
-  preserving strategic squadron counts. Pass the 84-case muted browser gate.
-  Keep exact original arrival callbacks and recovery trajectories, attack
-  executors, collision, formation, A0, and every strict tactical cell open.
-- [x] Complete P58F12 tactical attack target acquisition: connect Attack
-  Fighters and Attack Capital Ships to typed first-eligible target selection
-  for both capital and fighter owners, preserve valid live engagements, and
-  pass the 88-case muted browser gate. Keep exact weapon resolution,
-  target-loss reacquisition, collision, formation, A0, and every strict
-  tactical cell open.
-- [x] Complete P58F13 tactical attack-target lifecycle: retain valid typed
-  targets, replace invalid targets with the first eligible hostile target of
-  the requested class, clear exhausted lists, and pass the 92-case muted
-  browser gate plus independent A1 review. Keep exact weapon behavior, fighter
-  combat, collision, formation, A0, and every strict tactical cell open.
-- [x] Complete the consolidated UIP-B06 practical space-battle bundle: exact weapon arcs,
-  ranges, availability, projectile events and recharge; fighter combat;
-  collision and formation; Death Star and outcome paths; campaign return; and
-  direct test launch of the same production scene. Run the complete 120-case
-  implementation matrix and independent browser-use review. Keep the separate
-  106-cell original-game matrix open until its lossless baselines pass.
-  P58F14 through P58F17C are implemented at the current checkpoint. They add
-  recovered capital and fighter combat, collision, automatic colored groups,
-  capability-sorted task forces, forward-relative retained follower geometry,
-  the separate Death Star object, original Battle Results and Battle Options
-  surfaces, resource 5030 stars, the superlaser control journey, and exact
-  result-state routing to MDATA.201 and MDATA.202. Campaign victory no longer
-  reuses the trench-run films. The complete 120-case muted browser matrix
-  passes both factions and both viewports with four-request startup, stable
-  frames, clean diagnostics, and complete browser cleanup. Independent visual
-  review is a qualified A1 pass with no P0 or P1 findings. The authentic Game
-  Options window, Alliance Death Star framing baseline, and persistent
-  trench-run outcome proof remain bounded follow-ups. See the
-  [P58-B06 checkpoint](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-22-tactical-completion-bundle.md).
-  Exact beam dimensions and timing, the original trench-run result producer,
-  native playback comparison, persistent trench-run outcome, the strict
-  106-cell A0 evidence matrix, and release gates remain pending, so this parent
-  item is not checked off. Execute the remaining work as the local commit set
-  in the [Tactical 106-Cell Acceptance Train](../docs/plans/2026-09-22-tooling-tactical-106-cell-acceptance.md),
-  then push only after its strict matrix passes. P58-B07 completes C1: the
-  ledger-derived validator fixes the denominator at 106, enforces the
-  13/13/20/14/23/9/14 family distribution, validates original-capture
-  provenance, and fails closed on missing, duplicate, unknown, or tracked A0
-  evidence. P58-B08 completes the fail-closed C2 ingestion path: the guest
-  records the running executable hash and per-cell provenance, while the host
-  verifies and stores exact 640×480 PNGs only under the ignored A0 tree.
-  Authoritative capture remains 0/106 because the owned Windows capture host
-  was offline at this checkpoint; C2 is not complete until all 106 source
-  states are captured and ingested. P58-B09 begins C5 by schema-validating the
-  tactical catalog and mapping 82/106 cells to current deterministic evidence:
-  64 journeys and 18 snapshots. The remaining 24 cells have a concrete
-  new-scenario queue; none is accepted without its A0 and comparison gates.
-  P58-B10 expands that crosswalk to 96/106 cells: 78 journeys and 18 snapshots.
-  Four navigation sets, ordered routes and targets, camera memory/chase, Anvil,
-  and Stand Off now have deterministic production journeys. The remaining ten
-  cells and all A0 comparisons stay open.
-  P58-B11 expands the crosswalk to 98/106 cells: 80 journeys and 18 snapshots.
-  Production order 6 now proves an active trench-run launch, and Battle Results
-  proves exact 3-to-2 strategic capital and fighter losses before system/fleet
-  routing. The fleet destination presentation and Alliance Death Star framing
-  remain bounded follow-ups. The remaining eight cells and all A0 comparisons
-  stay open.
-  P58-B12 expands the crosswalk to 100/106 cells: 81 journeys and 19 snapshots.
-  The original COMMON Game Options surface now serves shuttle, command-center,
-  and tactical routes; its in-battle display controls are disabled as in the
-  manual. Empty-space battles retain resource 5030 stars and omit the planet.
-  The remaining six cells and all A0 comparisons stay open.
-  P58-B13 expands the crosswalk to 101/106 cells: 82 journeys and 19 snapshots.
-  The tactical withdrawal command now opens the source TACTICAL 1310 panel,
-  uses TEXTTACT 56772/56771, and routes controls 1113 through 1116 through
-  cancel and confirm before withdrawal. The remaining five cells and all A0
-  comparisons stay open.
-  P58-B14 expands the crosswalk to 104/106 cells: 85 journeys and 19 snapshots.
-  The selected-capital 1302 contents apertures now use compact GOKRES
-  assignments, destroyed presentation retains TACTICAL 3368, and direct
-  right-click Escort uses source order code 1 with the protected-target marker
-  and target lifecycle. Battle Alert entry, tactical audio, and every A0
-  comparison remain open.
-  P58-B15 completes deterministic A1 mapping at 106/106 cells: 87 journeys and
-  19 snapshots. It restores the source-built faction Battle Alert, Take
-  Command entry, MDATA 307 battle score, and TACTICAL WAVE 13054 event routing.
-  A0 evidence and strict acceptance remain 0/106; the strict gate was not run.
-  P58-B16 corrects event 0x14 from the provisional destruction label to its
-  registered torpedo-impact meaning and restores all eight weapon fire/impact
-  events across TACTICAL WAVE 13033–13054. Production capital and fighter
-  paths now emit the typed cues; exact shared-RNG sequencing, audible native
-  comparison, A0 evidence, and strict acceptance remain open.
-  P58-B17 restores 90 exact faction command recordings from VOICEFXA and
-  VOICEFXE: battle ready plus task-force and RGBY maneuver, attack, formation,
-  and mission acknowledgements. Production commands now queue the source event
-  and group ordinal; the focused four-case muted browser gate loads and routes
-  all 22 weapon and 90 command-voice resources. Result, withdrawal, and Death
-  Star voice families, mixing, audible native comparison, A0 evidence, and
-  strict acceptance remain open.
-  P58-B18 transports every source-addressed tactical voice: 153 Alliance and
-  132 Imperial, 285 total. Production paths now dispatch selected withdrawal,
-  battle-outcome, Death Star, and RGBY trench-run transitions; the focused
-  four-case muted browser gate loads and routes all 307 tactical weapon and
-  voice resources. Remaining completion, destruction, recovery, warning, and
-  ordered trench callers, exact shared-RNG sequencing, mixing, audible native
-  comparison, A0 evidence, and strict acceptance remain open.
-  P58-B19 restores `FUN_005a24d0`'s mixed-task-force focus-target rejection.
-  Selecting capitals from different task forces now preserves their manual,
-  active, and Escort targets and routes exact Alliance `0x84`/WAVE `14101` or
-  Imperial `0x102`/WAVE `15105` feedback. The four-case muted browser gate
-  passes; the remaining caller families and all strict A0 comparisons stay
-  open.
-  P58-B20 restores final RGBG fighter recovery, no-carrier-capacity, and
-  disabled-hyperdrive withdrawal feedback. `FUN_005b8630` and
-  `FUN_005a0240`/`FUN_005b1b70` anchor the recovered source routes; twelve
-  muted browser cases pass across both factions and viewports. Remaining
-  completion, destruction, warning, and ordered trench callers, audible native
-  comparison, and every strict A0 comparison stay open.
-  P58-B21 routes interactive and automatic space-battle outcomes through one
-  production post-battle entry. Shared bombardment, troop landing, contested
-  ground continuation, unopposed occupation, and Battle Results destination
-  routing pass seven focused tests, the full workspace, and four muted browser
-  cases. Exact global sequencing, native playback, remaining special-state and
-  audio routes, and every strict A0 comparison stay open.
-  P58-B22 closes the bounded practical launcher implementation. It adds one
-  source-compatible tactical RNG stream, persisted shield/weapon allocation,
-  exact maneuver/order completion and destruction/loss callbacks, and the
-  native timed trench-run producer with ordered chatter and casualty rules.
-  The final fresh-process muted matrix passes 144/144, and independent review
-  finds no P0/P1 visual blocker across 88 full-resolution captures.
-  Whole-process RNG continuity, strategic commander-slot binding, native beam
-  and playback comparison, rare audio routes, and all 106 strict A0 cells stay
-  open.
-  The A0 evidence now exists: 113 of 114 references captured from the
-  original in the capture VM, with TAC-03-C020 settled without a frame. The
-  first strict C6 verdict is pass 11, fail 66, not-run 28, settled 1, with
-  the negative controls failing their rows (6 of 6). The selected-ship panel
-  was brought to A0 and Ghidra: container origin, meters, labels, ship art,
-  Recover art, button wiring and numbered ship names (save v38). The
-  remaining work is the task graph (`agent_docs/task-graph.md`): one
-  acceptance node per failing region, fed by Ghidra questions, diagnoses and
-  the fixtures that let the 28 not-run cells run.
+
+Strategic interface checkpoints. Each is a bounded checkpoint; the cells it
+leaves open belong to the family named.
+
+- [x] P44 / `RE-ADV-01` advisor idle frames in native and WASM: pass; actions and voice under `RE-ADV-02` ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-10-authentic-droid-advisors.md)).
+- [x] P46A / `RE-STR-01` strategic shell canvas: checkpoint; `UIP-T01` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-11-strategic-shell-canvas.md)).
+- [x] P46B / `RE-STR-02` cockpit command bitmaps and input: checkpoint; A0 and `UIP-T01` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-11-strategic-command-controls.md)).
+- [x] `UIP-B01` sector and detailed-system shells and the rail: checkpoint; `CMD-03` and `CMD-04` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-11-strategic-window-navigation.md)).
+- [x] Strategic-window routing boundary and app coordinator: infrastructure; each window family still migrates onto it ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-12-strategic-window-routing-coordinator.md)).
+- [x] P46D detailed-system tab items: checkpoint; nested compositions, drag, intelligence and A0 open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-11-detailed-system-tab-items.md)).
+- [x] P47A / `UIP-B02` STRATEGY 902 galaxy backdrop (the Display Off resource): pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-11-authored-galaxy-backdrop.md)).
+- [x] P47B default Popular Support GID view: checkpoint; `CMD-02` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-11-popular-support-gid.md)).
+- [x] GID browser harness and 38-scenario catalog: in place, 152 probes pass; no original capture accepted, `CMD-02` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-gid-browser-harness.md)).
+- [x] P49 Message Index rail resting artwork: pass; `CMD-08` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-message-index-rail.md)).
+- [x] P60 Game Speed control, stop-day pause and accelerators (save v14): checkpoint; `CMD-05` and `CMD-08` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-24-game-speed-recovery.md)).
+- [x] P63 Message Index shell: checkpoint; `CMD-08` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-28-message-index-shell.md)).
+- [x] P50 GID root and submenu frame: checkpoint; `CMD-02` open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-gid-menu-frame.md)).
+- [x] P51 GID row-hover wash removed: checkpoint; original hover art and stacking open ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-gid-hover-and-occlusion.md)).
+
+Encyclopedia (`OBJ-01`): all thirteen cells pass against the original under
+Wine, accepted by Tom on 2026-10-07; native-Windows parity is not claimed.
+
+- [x] P62 EDATA artwork transport: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-28-encyclopedia-artwork-transport.md)).
+- [x] P64 index shells: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-30-encyclopedia-index-shell.md)).
+- [x] P65 index catalog, corrected by P68 to 346 visible topics: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-08-encyclopedia-visible-catalog-correction.md)).
+- [x] P66A topic sources: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-01-encyclopedia-topic-source-bindings.md)).
+- [x] W2 content session: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-06-encyclopedia-content-session.md)).
+- [x] W3 presenter: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-06-encyclopedia-presenter.md)).
+- [x] W4 topic surface: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-06-encyclopedia-topic-surface.md)).
+- [x] W5A canonical publication: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-06-encyclopedia-canonical-publication.md)).
+- [x] W6 opt-in native faithful-HD selection: pass; browser stays original-only ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-06-encyclopedia-hd-selection.md)).
+- [x] W7 native mod overlays: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-07-encyclopedia-mod-overlays.md)).
+- [x] E32 production activation: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-07-encyclopedia-production-activation.md)).
+- [x] E34 assembled technical acceptance: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-07-encyclopedia-technical-acceptance.md)).
+- [x] E35 original comparison: pass ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-07-encyclopedia-a0-compatibility.md)).
+
+Tactical (`TAC-01` through `TAC-07`, 106 cells). Each checkpoint below passes
+its muted browser gate; every strict cell waits on the A0 matrix after them.
+
+- [x] P52 tactical shell (TACTICAL 1000) and bitmap controls ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-tactical-shell-controls.md)).
+- [x] P53 tactical control hit masks and held states ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-tactical-control-hit-states.md)).
+- [x] P54 tactical 3D resource staging ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-tactical-3d-staging.md)).
+- [x] P55 tactical mesh, image and palette conversion ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-12-tactical-3d-runtime-pack.md)).
+- [x] P56 single-resource browser rendering ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-3d-render-proof.md)).
+- [x] P57A three-LOD selection ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-3d-lod-family.md)).
+- [x] P57B1 live cached-slot switching ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-live-lod-journey.md)).
+- [x] P57B2A source camera and D-pad ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-camera-contract.md)).
+- [x] P57B2B1 selected-object target ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-target-control.md)).
+- [x] P57B2B2 active-force layout ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-battle-layout.md)).
+- [x] P57B2B3 participant placement ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-participant-placement.md)).
+- [x] P57B2C1 authored transforms and system palettes ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-13-tactical-transform-palette.md)).
+- [x] P57B2C2A light rig ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-light-rig.md)).
+- [x] P57B2C2B retained-mode render state ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-render-state.md)).
+- [x] P58A tactical resource identity ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-resource-join.md)).
+- [x] P58B production capital-ship families ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-production-participants.md)).
+- [x] P58C fighters and projected selection ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-fighters-selection.md)).
+- [x] P58D fighter-detail journey ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-fighter-detail-journey.md)).
+- [x] P58E task-force and fighter-group controls ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-group-presentation.md)).
+- [x] P58F1 system-selected planets ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-planets.md)).
+- [x] P58F2 impact effects ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-impact-effects.md)).
+- [x] P58F3 projectiles and fields ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-tactical-projectile-fields.md)).
+- [x] P58F4 selected-capital damage panel ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-15-tactical-selected-damage.md)).
+- [x] P58F5 subsystem and field-source presentation ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-15-tactical-subsystem-field-commands.md)).
+- [x] P58F6 live subsystem damage ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-15-tactical-live-subsystem-damage.md)).
+- [x] P58F7 subsystem repair and mobility ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-15-tactical-subsystem-repair-mobility.md)).
+- [x] P58F8 maneuver and movement ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-16-tactical-maneuver-movement.md)).
+- [x] P58F9 command assignment panels ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-17-tactical-command-assignment.md)).
+- [x] P58F10 order execution ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-17-tactical-order-execution.md)).
+- [x] P58F11 command progression and fighter recovery ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-18-tactical-command-progression.md)).
+- [x] P58F12 attack target acquisition ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-18-tactical-attack-targeting.md)).
+- [x] P58F13 attack-target lifecycle ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-19-tactical-attack-target-lifecycle.md)).
+- [x] `UIP-B06` practical space-battle bundle, P58-B06 through P58-B22: implemented, 144/144 final muted matrix ([evidence](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-28-tactical-source-completion.md); the B-series files sit beside it).
+- [ ] Pass the strict 106-cell tactical matrix against A0 captures of the
+  original. 113 of 114 references are captured in the capture VM, with
+  TAC-03-C020 settled without a frame. The first strict C6 verdict was pass
+  11, fail 66, not-run 28, settled 1, with the negative controls failing
+  their rows (6 of 6). The remaining work is the task graph
+  (`agent_docs/task-graph.md`, `or-ep-tac-x15`): one acceptance node per
+  failing region, fed by Ghidra questions, diagnoses and the fixtures that
+  let the not-run cells run. Exact beam dimensions and timing, native
+  playback comparison and rare audio routes close with it.
+
+Further M3 work:
+
 - [ ] After original parity, use a separate Fable and `/ce:plan` design pass for
   an optional X-Wing Alliance-style skirmish setup menu. It may select ship
   distribution, planet, and space background, but it must reuse the production
@@ -1205,7 +731,7 @@ would tune around known simulation feedback defects.
   and voice mappings; extend the decoder/pack to briefings and every other
   required resource kind; then consume the proven shell/control/window mappings.
   Done: triggered droid actions, voices, and the opening briefing tour with
-  its skip, both factions, native and packed (`droid-advisor-triggers.md`).
+  its skip, both factions, native and packed (`ghidra/notes/droid-advisor-triggers.md`).
   Open: the Advice topics the tour leaves, droids during the battle dialog.
 - [ ] Add Brotli compression plus bounded raw-byte and decoded-texture caches to the verified runtime-pack foundation.
 - [ ] Complete P45 faithful-HD modernization. P45A is complete: original parity
@@ -1220,7 +746,7 @@ would tune around known simulation feedback defects.
 - [ ] Exercise real mouse/keyboard input and bitmap screenshots in Chrome, Firefox, and Safari.
 - [ ] Meet budgets: ≤3 s cold start at 50 Mbps/30 ms, ≤4 pre-menu requests, ≤8 ms frame, ≤12 ms WASM tick at 1,000 fleets, ≤5 MB optimized WASM, and ≤256 MB combined memory after 10 minutes.
 
-### M4: Authoritative Multiplayer — 6–8 weeks after M1–M3
+### M4: Authoritative Multiplayer (6–8 weeks after M1–M3)
 
 - [ ] Add validated `{player, tick, sequence}` commands and route single-player through the same boundary.
 - [ ] Add `rebellion-net` and `rebellion-server` responsibilities for authoritative simulation and fog-filtered faction deltas/snapshots.
@@ -1229,25 +755,22 @@ would tune around known simulation feedback defects.
 - [ ] Pass two clients for 5,000 ticks with hashes matching every 250 ticks; no 200 ms RTT input stalls; ≤1 reconcile per 100 commands; reconnect ≤60 s; reject 100% of illegal commands.
 - [ ] Consider trusted lockstep/WebRTC only after deterministic replay is proven.
 
-### M5: Continuous Release Proof — parallel from M0
+### M5: Continuous Release Proof (parallel from M0)
 
 - [ ] Restore a reviewed CI provider; GitHub Actions workflow definitions are intentionally local/untracked as of 2026-09-08, so current gates are manual.
 - [ ] Enforce format, strict clippy, native, packaged-WASM, and clean-package boot gates.
-  Local `make all` now covers tests, formatting, strict all-target Clippy, and
-  native build; packaged browser and CI enforcement remain open.
+  `make all` defines tests, formatting, strict all-target Clippy and the native
+  build, but runs Cargo in place, so it does not run on this Mac; formatting and
+  strict Clippy fail on the audited baseline. Packaged browser and CI
+  enforcement remain open.
 - [ ] Add at least 20 app/browser integration cases and promote long campaigns when stable.
 - [ ] Generate the complete bitmap resource ledger from the entity map; fail on unexplained misses. Fleet-list miniatures are verified in F-010B.
-- [x] Establish 627 stable required interface baseline cells, link all 43
-  required surface families to 27 bounded retrieval or removal packages, and
-  explicitly cover 106 space-battle cells across `TAC-01` through `TAC-07`.
+- [x] Interface baseline of 627 required cells across 43 families, 106 of them tactical (`TAC-01` through `TAC-07`): established ([interface audit](../docs/qa/2026-09-10-interface-parity-audit/README.md)).
 - [ ] Close every required surface-state cell in the original-interface audit
   with authoritative captures, exact-resource provenance, screenshot and hotspot
   comparison, complete navigation edges, and zero unknown or invented pixels.
 - [ ] Retain screenshot, console, network, performance, data-hash, and save-schema evidence. F-010B fleet and F-014A runtime-pack evidence are retained; the full ledger remains open.
-- [x] Revalidate current project documentation from `main` through GitHub Pages.
-  Run `34505121163` built and deployed commit `bcc224f`; the landing page,
-  documentation and campaign indexes, contract, source ledger, audit, and
-  preserved manual all return HTTP 200.
+- [x] P40 project documentation on GitHub Pages: pass ([evidence](../docs/qa/2026-09-08-full-functionality-audit/evidence/2026-09-08-github-pages.md)).
 - [ ] Close every supported P00–P40 functionality pass and every required
   interface surface-state cell from release artifacts before claiming 100%
   functionality.
@@ -1274,7 +797,7 @@ secrets and signed sessions.
 ### Addon 1: Create Your Own Character (Demiurgos)
 *Plan at `docs/plans/2026-03-21-addon-create-your-own-character.md`*
 
-**Phase 1: Homeworld System** (universal — enriches base game)
+**Phase 1: Homeworld System** (universal—enriches base game)
 - [ ] Add `homeworld: Option<SystemKey>` to Character
 - [ ] Create `data/homeworlds.json` with canon homeworld assignments (Luke→Tatooine, etc.)
 - [ ] HomeworldModifier: +10% at homeworld, -5% when enemy controls, -15 loyalty on fall
@@ -1290,7 +813,7 @@ secrets and signed sessions.
 
 **Phase 3: Force Sensitivity**
 - [ ] 8-16% base chance depending on species + archetype
-- [ ] Success: jedi_probability 15-30 (Luke = 100 — custom characters strictly inferior)
+- [ ] Success: jedi_probability 15-30 (Luke = 100—custom characters strictly inferior)
 - [ ] Wire to existing JediSystem progression
 
 **Phase 4: Portraits & Flavor**
@@ -1328,8 +851,7 @@ a fixed rule as mod data.
   majors-only recruiters and major-first mission leads
   (`or-port-recruit-major-lead-8grm`), the original music selector in place
   of `track_for_context` (`or-port-music-selector-v9nd`), the Force fields
-  (`or-port-force-fields-2u0m`), movie triggers
-  (`or-port-movie-triggers-45gd`), and the post-battle pass for system
+  (`or-port-force-fields-2u0m`), and the post-battle pass for system
   squadrons (`or-port-system-squadron-pass-oa3p`).
 - [ ] Decide whether mods may append records. The original loads any count
   but has no class for a new family byte and the port's loader skips
@@ -1340,11 +862,8 @@ a fixed rule as mod data.
 
 ## Known Technical Debt
 
-- dat-dumper in `tools/` is also a library dep of rebellion-data -- works but unconventional
+- dat-dumper in `tools/` is also a library dep of rebellion-data; it works but is unconventional
 - Browser data now loads from deterministic `runtime.orpk`; compression, HD
   entries, and bounded caches remain open.
-- Save v3 files rejected (bincode layout incompatible) -- no migration possible without SaveStateV3
-- `enabled_sorted()` silently returns empty on dependency resolution errors
-- No additive entity creation in mods -- patches only modify existing entities (until Addon 1 Phase 5)
+- No additive entity creation in mods; patches only modify existing entities (until Addon 1 Phase 5)
 - 27 LOC dead code identified by simplicity reviewer (2026-03-21)
-- 5 stale doc comments referencing old `controlling_faction` field

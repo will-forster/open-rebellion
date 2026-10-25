@@ -372,7 +372,7 @@ fn enter_tactical_alert(
         fighters: Vec::new(),
         characters: Vec::new(),
         is_alliance,
-        has_death_star: false,
+        bombarding: false,
     };
     let alliance = world
         .fleets
@@ -384,6 +384,7 @@ fn enter_tactical_alert(
     rebellion_core::carriage::tag_all(world);
     tactical_flow::begin_player_battle(
         world,
+        None,
         BattleEntry {
             system,
             attacker: CombatForce::of_fleet(world, alliance),

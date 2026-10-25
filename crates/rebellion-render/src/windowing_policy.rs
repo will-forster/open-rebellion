@@ -20,6 +20,19 @@ pub const SUBJECT_SYSTEM: u32 = 2;
 pub const SUBJECT_COMMAND_CONTEXT: u32 = 3;
 /// Subject namespace for coordinator-allocated battle sessions.
 pub const SUBJECT_BATTLE: u32 = 4;
+/// Subject namespace for Galaxy Operation Reports keyed by stable message id.
+/// It is intentionally distinct from the tactical battle-session namespace.
+pub const SUBJECT_OPERATION_REPORT: u32 = 5;
+
+/// Builds the manager identity for one contextual Galaxy Operation Report.
+#[must_use]
+pub const fn operation_report_spec(message_id: u64) -> WindowSpec {
+    contextual_spec(
+        WindowKind::BattleResults,
+        SubjectId::new(SUBJECT_OPERATION_REPORT, message_id),
+        WindowOwner::StrategicRoot,
+    )
+}
 
 /// Resolves a runtime system handle to its stable original DAT identity.
 ///
@@ -230,8 +243,8 @@ mod tests {
     };
 
     use super::{
-        contextual_spec, policy_for, sector_subject, singleton_spec, system_subject,
-        SUBJECT_SECTOR, SUBJECT_SYSTEM,
+        contextual_spec, operation_report_spec, policy_for, sector_subject, singleton_spec,
+        system_subject, SUBJECT_BATTLE, SUBJECT_OPERATION_REPORT, SUBJECT_SECTOR, SUBJECT_SYSTEM,
     };
 
     const fn policy(
@@ -257,6 +270,26 @@ mod tests {
 
     const SUBJECT: Cardinality = Cardinality::Subject { max_open: None };
     const SINGLETON: Cardinality = Cardinality::Singleton;
+
+    #[test]
+    fn operation_reports_use_a_distinct_galaxy_battle_results_identity() {
+        let report = operation_report_spec(42);
+        let tactical = contextual_spec(
+            WindowKind::BattleResults,
+            SubjectId::new(SUBJECT_BATTLE, 42),
+            WindowOwner::StrategicRoot,
+        );
+
+        assert_eq!(report.key.kind, WindowKind::BattleResults);
+        assert_eq!(
+            report.key.subject,
+            Some(SubjectId::new(SUBJECT_OPERATION_REPORT, 42))
+        );
+        assert_ne!(report.key, tactical.key);
+        assert_eq!(report.owner, WindowOwner::StrategicRoot);
+        assert_eq!(SUBJECT_OPERATION_REPORT, SUBJECT_BATTLE + 1);
+        assert_eq!(report.policy.input, InputPolicy::StrategicModal);
+    }
 
     #[test]
     fn windowing_policy_inventory_covers_all_nineteen_kinds() {
