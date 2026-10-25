@@ -3,7 +3,7 @@ title: "Roadmap"
 description: "Development milestones from Galaxy Viewer through Release packaging"
 category: "agent-docs"
 created: 2026-03-11
-updated: 2026-10-16
+updated: 2026-10-25
 tags: [roadmap, planning, milestones, parity]
 ---
 
@@ -17,6 +17,13 @@ The current CMD-02 GID catalog has 38 scenarios (29 baseline cells and nine addi
 The delivery notes before “Audit-Driven Parity” are historical implementation
 records. They do not establish current parity or release acceptance; the active
 audit-driven milestones are the source of truth.
+
+The bounded strategic-windowing backend sequence SW-00–SW-14 is reconciled at
+the accepted r29 candidate; see the [SW-14 evidence record](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-25-strategic-windowing-acceptance.md).
+This closes the backend implementation/evidence graph only: strict interface
+status remains 1 complete, 15 partial, 27 failing, with 13/627 cells accepted.
+Original-runtime comparisons, native-Windows proof, A0 bitmap/layout/text
+coverage, and the missing System Finder remain open.
 
 PR #11 checkpoint (2026-09-14): [cockpit routing is corrected](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-14-cockpit-routing-correction.md) for commands `0x131` through `0x133`, both factions, and F1/F7. GID uses its authentic bottom control and can open and close its original menu. Encyclopedia was fail-closed at that checkpoint and is activated by E32 below. The [2026-09-26 Game Options review checkpoint](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-09-26-game-options-review.md) restores the shared bitmap surface and save/audio/display wiring; PRE-03 strict acceptance remains open.
 

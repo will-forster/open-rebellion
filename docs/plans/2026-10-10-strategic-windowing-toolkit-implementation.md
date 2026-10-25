@@ -2,24 +2,21 @@
 title: "Strategic Windowing Toolkit Implementation Plan"
 created: 2026-10-10
 status: active
-progress: "44% — tasks 0-5B merged (d174b9be); PR #45 (9533b516) migrated the Fleet family: its share of 7A-7C, capture cancellation including focus loss; task 6 Sector next"
-updated: 2026-10-15
+progress: "Bounded SW-00–SW-14 backend implementation/evidence graph complete at accepted r29; original-runtime, native-Windows, System Finder, and A0 parity evidence remain open"
+updated: 2026-10-25
 ---
 
 # Strategic Windowing Toolkit Implementation Plan
 
 > **For future implementers:** Execute the reviewed plan task-by-task using the applicable implementation workflow. This document does not authorize implementation or delegation. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** Active implementation. Tasks 0 through 5A are merged. The
-2026-10-12 combined routing/coordinator slice implements Task 4 and the shared
-coordinator, router, holds, and legacy gate from Task 5B in one review unit.
-Backend event normalization finishes alongside feature-family migration,
-beginning with Task 6 after that gate lands. PR #45 (`9533b516`) migrated the
-Fleet family ahead of Task 6: stable kind/system identity, manager-committed
-content, rail restore by `WindowId`, drag capture with cancellation on modal,
-hold and focus loss (browser blur and macOS `isActive`), and per-key Rename
-routing. Sector, System, Defenses and Missions remain retained legacy windows,
-muted under strategic modals. Task 6 is next.
+**Status:** The bounded SW-00–SW-14 strategic-windowing backend and acceptance
+evidence sequence is complete at the accepted r29 candidate. The SW-14
+reconciliation records the final candidate, browser and production-native
+evidence without changing strict interface-cell statuses. This plan remains
+active because original-runtime comparisons, native-Windows proof, the System
+Finder, and A0 bitmap/layout/text acceptance are still open; this is not a
+claim of full original-interface parity.
 
 **Baseline:** Inspected worktree `/data/tmp/open-rebellion-strategic-window-modality-focus`, commit `f0648ef0e6b1f832a9f7643ccd6321e9f7ea5b52`. Revalidate before execution.
 
@@ -33,8 +30,13 @@ muted under strategic modals. Task 6 is next.
 
 **Latest evidence:**
 [`2026-10-12-strategic-window-routing-coordinator.md`](../qa/2026-09-10-interface-parity-audit/evidence/2026-10-12-strategic-window-routing-coordinator.md)
-records immutable route/reconciliation behavior and the production
-coordinator boundary. It does not promote visual acceptance cells.
+records immutable route/reconciliation behavior and the production coordinator
+boundary. It does not promote visual acceptance cells. The final bounded
+reconciliation is
+
+[`2026-10-25-strategic-windowing-acceptance.md`](../qa/2026-09-10-interface-parity-audit/evidence/2026-10-25-strategic-windowing-acceptance.md)
+(candidate manifest SHA-256 `28ae5cc5e9b798d02e30a3bb6b0785bcb40781fd0e0e27d8f185808eb09b8221`);
+strict audit status remains 1/15/27 families and 13/627 cells.
 
 ## Global Constraints
 

@@ -3,7 +3,7 @@ title: "Architecture"
 description: "Crate dependency graph and module structure for the Open Rebellion codebase"
 category: "agent-docs"
 created: 2026-03-11
-updated: 2026-10-16
+updated: 2026-10-25
 tags: [architecture, crate-graph, entity-identity, simulation]
 ---
 
@@ -14,11 +14,24 @@ tags: [architecture, crate-graph, entity-identity, simulation]
 ```
 rebellion-app (quad-snd, rand_xoshiro)
 ├── rebellion-render (macroquad 0.4, egui-macroquad 0.17, image, nucleo-matcher, quad-snd)
+│   ├── rebellion-windowing (std-only strategic window identity and routing kernel)
 │   └── rebellion-core
+├── rebellion-windowing
 ├── rebellion-data (notify [native only], web-sys + wasm-bindgen [wasm32 only])
 │   ├── rebellion-core
 │   └── dat-dumper (library mode)
 └── rebellion-core (slotmap 1.0, serde 1)
+
+The strategic-windowing boundary is split by authority: `rebellion-windowing`
+owns semantic IDs, lifecycle/order/focus/history/modality/capture, and immutable
+per-frame `RoutingSnapshot`s; `rebellion-render` maps feature families to those
+IDs and translates snapshots into layout, focus requests, paint, and normalized
+input routing; `rebellion-app::StrategicWindowing` owns the manager, pending
+content publication, scene transitions, and frame-boundary commits after event
+dispatch. Content lifecycle observations are distinct from paint observations.
+The accepted source-level contract and its limits are recorded in the
+[SW-14 strategic-windowing reconciliation](../docs/qa/2026-09-10-interface-parity-audit/evidence/2026-10-25-strategic-windowing-acceptance.md);
+it does not promote visual parity cells.
 
 rebellion-playtest (clap, rand_xoshiro, serde_json)  [headless play-test binary]
 ├── rebellion-data

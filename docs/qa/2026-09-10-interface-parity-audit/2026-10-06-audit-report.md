@@ -3,7 +3,7 @@ title: "Original Interface Parity Audit Report"
 description: "Current evidence-backed diagnosis and execution plan for complete bitmap-driven UI parity"
 category: qa
 created: 2026-09-10
-updated: 2026-10-06
+updated: 2026-10-25
 tags: [qa, interface, parity, bitmap, strategy, tactical, multiplayer]
 ---
 
@@ -17,8 +17,13 @@ tags: [qa, interface, parity, bitmap, strategy, tactical, multiplayer]
 | Practical interface scope remaining | approximately 75% |
 | Bounded practical space-battle launcher implementation | complete at P58-B22 |
 | Required surface families | 43 |
-| Family status | 0 complete, 15 partial, 28 fail |
-| Strictly accepted required cells | 0 of 627 |
+| Family status | 1 complete, 15 partial, 27 fail |
+| Strictly accepted required cells | 13 of 627 |
+
+The 2026-10-25 SW-14 reconciliation records completion of the bounded
+strategic-windowing backend/evidence sequence at candidate r29. It does not
+change any strict family or cell status; see
+[the reconciliation record](evidence/2026-10-25-strategic-windowing-acceptance.md).
 
 The practical percentage measures scoped implementation work and guides the
 [current batched plan](../../plans/2026-09-11-feat-batched-interface-parity-plan.md).

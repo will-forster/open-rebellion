@@ -28,6 +28,9 @@ and passes the complete comparison contract.
 
 ## Start here
 
+- Read the [SW-14 strategic-windowing reconciliation](evidence/2026-10-25-strategic-windowing-acceptance.md)
+  for the accepted r29 backend/evidence sequence and its explicit non-parity
+  boundary.
 - Read the [audit overview](index.md) for the current result and definition of
   100% interface parity.
 - Follow the current
@@ -326,10 +329,10 @@ The current CMD-02 GID catalog has 38 scenarios (29 baseline cells and nine addi
 <!-- interface-parity-status:end -->
 
 The practical implementation estimate is approximately 25% tackled and 75%
-remaining. Formally, the ledger has 43 required families: 0 complete,
-15 partial, and 28 failing. All 627 required cells remain pending until their
-complete evidence and execution matrices pass. The practical estimate guides
-bundle planning; it does not replace strict acceptance.
+remaining. Formally, the ledger has 43 required families: 1 complete,
+15 partial, and 27 failing; 13 of 627 required cells are strictly accepted.
+The practical estimate guides bundle planning; it does not replace strict
+acceptance.
 
 The manual cross-check added 63 previously absent or compound requirements
 without accepting any of them. Research leads came from the original manual
