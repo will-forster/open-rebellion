@@ -31,7 +31,7 @@ claim of full original-interface parity.
 **Latest evidence:**
 [`2026-10-12-strategic-window-routing-coordinator.md`](../qa/2026-09-10-interface-parity-audit/evidence/2026-10-12-strategic-window-routing-coordinator.md)
 records immutable route/reconciliation behavior and the production coordinator
-boundary. It does not promote visual acceptance cells. The final bounded
+boundary; it does not promote visual acceptance cells. The final bounded
 reconciliation is
 
 [`2026-10-25-strategic-windowing-acceptance.md`](../qa/2026-09-10-interface-parity-audit/evidence/2026-10-25-strategic-windowing-acceptance.md)
