@@ -247,6 +247,46 @@ impl SectorWindowState {
         })
     }
 
+    /// Prepares a saved Sector for the manager-owned publication path while
+    /// retaining its saved primary/secondary column. Later saved Sectors are
+    /// prepared only after the prior receipt commits, so replacement is
+    /// resolved against the exact live renderer content.
+    #[must_use]
+    pub fn prepare_restore_saved(
+        &self,
+        world: &GameWorld,
+        faction: CockpitFaction,
+        saved: &SavedWindow,
+    ) -> Option<PreparedSectorWindow> {
+        let SavedWindowKind::Sector { sector: dat_id } = saved.kind else {
+            return None;
+        };
+        if !self.windows.is_empty() && self.faction != faction {
+            return None;
+        }
+        let sector = world
+            .sectors
+            .iter()
+            .find_map(|(key, value)| (value.dat_id == dat_id).then_some(key))?;
+        let subject = sector_subject(world, sector)?;
+        let column = [WindowColumn::Primary, WindowColumn::Secondary]
+            .into_iter()
+            .min_by_key(|column| {
+                (i32::from(logical_origin(faction, *column).0) - i32::from(saved.position.0)).abs()
+            })?;
+        let replacing = match self.windows.iter().find(|window| window.column == column) {
+            Some(window) => Some(window.id?),
+            None => None,
+        };
+        Some(PreparedSectorWindow {
+            spec: contextual_spec(WindowKind::Sector, subject, WindowOwner::StrategicRoot),
+            faction,
+            sector,
+            column,
+            replacing,
+        })
+    }
+
     /// Publishes prepared content only for its exact manager receipt. Existing
     /// `NoOp` leaves vector order, selection, and drag payload untouched.
     pub fn commit_open(
@@ -808,6 +848,9 @@ impl SectorWindowState {
             .collect()
     }
 
+    /// Test-only unmanaged fixture for saved-sector renderer behavior. Live
+    /// interface restoration must use `prepare_restore_saved` and publish
+    /// through an exact manager receipt.
     /// Rebuild a saved sector window (`FUN_00441190` type 1, `FUN_004591d0`)
     /// above the sector windows already rebuilt. It comes back shown
     /// whatever its saved flag: the type-1 branch clears the rail flag
@@ -818,6 +861,7 @@ impl SectorWindowState {
     /// (`FUN_00440f80.c:31-35`). The column is the one at the saved
     /// position; false when the sector is not in the world or the record is
     /// not a sector's.
+    #[cfg(test)]
     pub fn restore_saved(
         &mut self,
         world: &GameWorld,

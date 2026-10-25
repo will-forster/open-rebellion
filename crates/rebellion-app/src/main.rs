@@ -3567,9 +3567,9 @@ mod frame_input_tests {
         tactical_result_destination, take_approved_tactical_window_action,
         take_tactical_destination_for_galaxy, with_strategic_input, with_visual_fixture_pointer,
         CommittedTacticalWindowAction, PendingSectorPublication, PreparedTacticalWindowAction,
-        RoutedEguiInputFilter, SectorDependentIntent, StrategicPointerBatch, StrategicPointerEvent,
-        StrategicRawKeyEvent, StrategicRawPointerEvent, StrategicRootKeyBatch,
-        TacticalResultDestination,
+        RoutedEguiInputFilter, SectorDependentIntent, SectorPublicationIntent,
+        StrategicPointerBatch, StrategicPointerEvent, StrategicRawKeyEvent,
+        StrategicRawPointerEvent, StrategicRootKeyBatch, TacticalResultDestination,
     };
     use egui_macroquad::egui;
     use rebellion_render::build_selection::BuildSelectionState;
@@ -3889,7 +3889,10 @@ mod frame_input_tests {
         assert_eq!(
             pending
                 .iter()
-                .map(|candidate| candidate.system)
+                .map(|candidate| match candidate.intent {
+                    SectorPublicationIntent::System(system) => system,
+                    SectorPublicationIntent::Saved(_) => panic!("fixture uses System intents"),
+                })
                 .collect::<Vec<_>>(),
             vec![elsewhere, primary],
         );
@@ -3953,7 +3956,10 @@ mod frame_input_tests {
         assert_eq!(
             pending
                 .iter()
-                .map(|candidate| candidate.system)
+                .map(|candidate| match candidate.intent {
+                    SectorPublicationIntent::System(system) => system,
+                    SectorPublicationIntent::Saved(_) => panic!("fixture uses System intents"),
+                })
                 .collect::<Vec<_>>(),
             vec![elsewhere, primary],
         );
@@ -4554,7 +4560,10 @@ mod frame_input_tests {
         }
         assert!(sectors.window_id(world.systems[next].sector).is_none());
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].system, next);
+        assert!(matches!(
+            pending[0].intent,
+            SectorPublicationIntent::System(system) if system == next
+        ));
         assert!(pending[0].prepared.is_some());
         assert_eq!(coordinator.begin_apply_batch(), 1);
         refresh_pending_sector_publication(&mut coordinator, &sectors, &world, &mut pending);
@@ -9687,7 +9696,7 @@ async fn main() {
             }
         }
     }
-    // A load's saved windows, waiting for its Fleet windows' commit.
+    // A load's saved windows, waiting for exact Sector publication receipts.
     let mut pending_window_restore: Option<Vec<rebellion_data::save::SavedWindow>> = None;
     let mut strategic_input_router = rebellion_render::windowing_input::FrameInputRouter::default();
     let mut routed_egui_input_filter = RoutedEguiInputFilter::default();
@@ -14938,10 +14947,9 @@ async fn main() {
                             MissionsWindowAction::Minimize {
                                 system,
                                 logical_position,
-                                serial,
                             } => {
                                 if let Some(window) = system_window_state
-                                    .minimize_missions_window_at(system, logical_position, serial)
+                                    .minimize_missions_window_at(system, logical_position)
                                 {
                                     strategic_windowing
                                         .enqueue(rebellion_windowing::WindowCommand::Close(window));
@@ -18003,6 +18011,7 @@ async fn main() {
                                     defenses: &mut defenses_window_state,
                                     missions: &mut missions_window_state,
                                 },
+                                &mut pending_sector_publications,
                                 &mut strategic_windowing,
                             );
                             pending_window_restore = Some(interface.windows);
@@ -19691,19 +19700,19 @@ async fn main() {
                 );
             }
         }
-        // The load's Fleet windows have committed: the saved order and the
-        // focus come back (FUN_00440f80).
-        if let Some(order) = pending_window_restore.take() {
-            let hidden = finish_interface_restore(
-                &order,
-                &world,
-                &mut system_window_state,
-                &mut defenses_window_state,
-                &mut missions_window_state,
-                &mut fleet_window_state,
-                &mut strategic_windowing,
-            );
-            let _ = hidden;
+        // Sector restores are serialized through exact publication receipts.
+        // Replay saved focus/order only after every saved Sector has attached.
+        if pending_sector_publications.is_empty() {
+            if let Some(order) = pending_window_restore.take() {
+                let hidden = finish_interface_restore(
+                    &order,
+                    &world,
+                    &mut system_window_state,
+                    &mut fleet_window_state,
+                    &mut strategic_windowing,
+                );
+                let _ = hidden;
+            }
         }
         next_frame().await;
     }
@@ -20582,14 +20591,24 @@ fn saved_interface(
     order: &[(rebellion_windowing::WindowId, bool)],
 ) -> rebellion_data::save::SavedInterface {
     let mut content = BTreeMap::new();
-    for (_, window) in systems
+    for window in systems
         .saved_windows(world)
         .into_iter()
         .chain(defenses.saved_windows(world))
         .chain(missions.saved_windows(world))
-        .chain(fleets.saved_windows(world, |id| systems.rail_holds_fleet(id)))
-        .chain(sectors.saved_windows(world))
-        .chain(systems.saved_rail(world, |id| fleets.saved_tab(id).map(|tab| (tab, 0))))
+        .chain(
+            fleets
+                .saved_windows(world, |id| systems.rail_holds_fleet(id))
+                .into_iter()
+                .map(|(_, window)| window),
+        )
+        .chain(
+            sectors
+                .saved_windows(world)
+                .into_iter()
+                .map(|(_, window)| window),
+        )
+        .chain(systems.saved_rail(world, |id| fleets.saved_tab(id)))
     {
         if let Some(key) = saved_window_key(world, &window) {
             content.insert(key, window);
@@ -20621,10 +20640,9 @@ struct RestoredWindows<'a> {
     missions: &'a mut MissionsWindowState,
 }
 
-/// Rebuild a load's windows in saved order (`FUN_00440f80` →
-/// `FUN_00441190`): each family's own restore, a hidden detail window back
-/// on the rail. Fleet windows open through the window manager, which
-/// commits them at the end of the frame (`finish_interface_restore`).
+/// Rebuild a load's windows from saved records. Sector content is admitted
+/// through its serialized pending-publication receipt; all other details are
+/// prepared for manager-owned publication here.
 #[expect(
     clippy::too_many_arguments,
     reason = "The restore reads the world, the player's fog and missions, and the layout."
@@ -20637,27 +20655,66 @@ fn restore_interface(
     faction: CockpitFaction,
     layout: rebellion_render::CockpitLayout,
     windows: RestoredWindows<'_>,
+    pending_sectors: &mut Vec<PendingSectorPublication>,
     strategic_windowing: &mut strategic_windowing::StrategicWindowing,
 ) {
     use rebellion_data::save::SavedWindowKind;
     for window in order {
         match window.kind {
             SavedWindowKind::Sector { .. } => {
-                windows.sectors.restore_saved(world, faction, window);
+                pending_sectors.push(PendingSectorPublication {
+                    intent: SectorPublicationIntent::Saved(*window),
+                    faction,
+                    prepared: None,
+                    dependent: None,
+                });
+                pump_pending_sector_publication(
+                    strategic_windowing,
+                    windows.sectors,
+                    world,
+                    pending_sectors,
+                );
             }
-            SavedWindowKind::System { .. } => {
-                windows.systems.restore_saved(world, faction, window);
+            SavedWindowKind::System { system } => {
+                if let Some(system) = system_by_dat_id(world, system) {
+                    if let Some(prepared) = windows.systems.prepare_open(
+                        world,
+                        system,
+                        window.position,
+                        faction,
+                        layout,
+                    ) {
+                        strategic_windowing.enqueue_galaxy_system_open(prepared);
+                    }
+                }
             }
-            SavedWindowKind::Defenses { .. } if window.shown => {
-                windows.defenses.restore_saved(world, faction, window);
+            SavedWindowKind::Defenses { system } => {
+                if let Some(system) = system_by_dat_id(world, system) {
+                    if let Some(prepared) = windows.defenses.prepare_open(
+                        world,
+                        system,
+                        window.position,
+                        faction,
+                        layout,
+                    ) {
+                        strategic_windowing.enqueue_defenses_open(prepared);
+                    }
+                }
             }
-            SavedWindowKind::Missions { .. } if window.shown => {
-                windows
-                    .missions
-                    .restore_saved(world, fog, mission_state, faction, window);
-            }
-            SavedWindowKind::Defenses { .. } | SavedWindowKind::Missions { .. } => {
-                windows.systems.restore_saved(world, faction, window);
+            SavedWindowKind::Missions { system } => {
+                if let Some(system) = system_by_dat_id(world, system) {
+                    if let Some(prepared) = windows.missions.prepare_open(
+                        world,
+                        fog,
+                        mission_state,
+                        system,
+                        window.position,
+                        faction,
+                        layout,
+                    ) {
+                        strategic_windowing.enqueue_missions_open(prepared);
+                    }
+                }
             }
             SavedWindowKind::Fleet { system, tab } => {
                 let prepared = system_by_dat_id(world, system).and_then(|system| {
@@ -20677,29 +20734,36 @@ fn restore_interface(
             }
         }
     }
+    pump_pending_sector_publication(strategic_windowing, windows.sectors, world, pending_sectors);
 }
 
-/// After a load's Fleet windows commit: a hidden one takes its slot on the
-/// rail, where `FUN_00441190` appends each hidden window in save order
-/// (slot `+0x08`, `FUN_00428b40`), and the shown windows take the saved
-/// z-order again, each above the last, hidden and shown alike, since the
-/// Fleet windows committed last. Sector windows stay at the bottom
-/// (`FUN_00440f80.c:31-35`). A shown Fleet window brings the Fleet windows'
-/// layer forward (`fleet_front`, the serial `galaxy_front` reads) at its
-/// place in that order. Returns the Fleet windows going to the rail, which
-/// take no focus.
+/// After all Sector receipts have committed, replay saved manager order and
+/// focus. Hidden detail windows take their rail slots in saved order; shown
+/// windows are raised in serialized order. Sector content remains shown and
+/// its saved column is retained by preparation.
 fn finish_interface_restore(
     order: &[rebellion_data::save::SavedWindow],
     world: &GameWorld,
     systems: &mut SystemWindowState,
-    defenses: &mut DefensesWindowState,
-    missions: &mut MissionsWindowState,
     fleets: &mut FleetWindowState,
     strategic_windowing: &mut strategic_windowing::StrategicWindowing,
 ) -> Vec<GalaxyChild> {
     let mut hidden = Vec::new();
     let mut slot = 0;
     for window in order {
+        if matches!(
+            window.kind,
+            rebellion_data::save::SavedWindowKind::Sector { .. }
+        ) {
+            if window.shown {
+                if let Some(id) =
+                    saved_window_manager_id(world, window, &strategic_windowing.begin_frame())
+                {
+                    strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
+                }
+            }
+            continue;
+        }
         let child = saved_child(world, fleets, window);
         match child {
             Some(GalaxyChild::Fleet(id)) if !window.shown => {
@@ -20718,36 +20782,64 @@ fn finish_interface_restore(
             Some(GalaxyChild::Fleet(id)) => {
                 strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
             }
-            Some(child) if !window.shown => {
-                systems.lift_hidden(child);
+            Some(_child) if !window.shown => {
+                if !matches!(
+                    window.kind,
+                    rebellion_data::save::SavedWindowKind::Sector { .. }
+                ) {
+                    if let Some(id) =
+                        saved_window_manager_id(world, window, &strategic_windowing.begin_frame())
+                    {
+                        strategic_windowing
+                            .enqueue(rebellion_windowing::WindowCommand::Minimize(id));
+                    }
+                }
             }
-            Some(GalaxyChild::System(system)) => {
-                if let Some(id) = systems.window_id(system) {
+            Some(GalaxyChild::System(_)) => {
+                if let Some(id) =
+                    saved_window_manager_id(world, window, &strategic_windowing.begin_frame())
+                {
                     strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
                 }
             }
-            Some(GalaxyChild::Defenses(system)) => {
-                if let Some(id) = defenses.window_id(system) {
+            Some(GalaxyChild::Defenses(_)) => {
+                if let Some(id) =
+                    saved_window_manager_id(world, window, &strategic_windowing.begin_frame())
+                {
                     strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
                 }
             }
-            Some(GalaxyChild::Missions(system)) => {
-                if let Some(id) = missions.window_id(system) {
+            Some(GalaxyChild::Missions(_)) => {
+                if let Some(id) =
+                    saved_window_manager_id(world, window, &strategic_windowing.begin_frame())
+                {
                     strategic_windowing.enqueue(rebellion_windowing::WindowCommand::Raise(id));
                 }
             }
-            Some(GalaxyChild::Sector(_)) | None => {}
+            // Sector identities are handled by the manager-owned publication
+            // path above; never synthesize renderer-local restore state here.
+            Some(GalaxyChild::Sector(_)) => {}
+            None => {}
         }
-        if !window.shown
-            && !matches!(
-                window.kind,
-                rebellion_data::save::SavedWindowKind::Sector { .. }
-            )
-        {
+        if !window.shown {
             slot += 1;
         }
     }
     hidden
+}
+
+fn saved_window_manager_id(
+    world: &GameWorld,
+    saved: &rebellion_data::save::SavedWindow,
+    snapshot: &rebellion_windowing::RoutingSnapshot,
+) -> Option<rebellion_windowing::WindowId> {
+    let key = saved_window_key(world, saved)?;
+    snapshot
+        .paint_order()
+        .iter()
+        .chain(snapshot.presentation_history())
+        .copied()
+        .find(|&id| snapshot.key(id) == Some(key))
 }
 
 /// The GID mode a loaded game shows: the save's (view `+0xc8`), which
@@ -21309,8 +21401,14 @@ enum SectorDependentIntent {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum SectorPublicationIntent {
+    System(SystemKey),
+    Saved(rebellion_data::save::SavedWindow),
+}
+
+#[derive(Debug, Clone, Copy)]
 struct PendingSectorPublication {
-    system: SystemKey,
+    intent: SectorPublicationIntent,
     faction: CockpitFaction,
     prepared: Option<rebellion_render::sector_window::PreparedSectorWindow>,
     dependent: Option<SectorDependentIntent>,
@@ -22807,7 +22905,7 @@ fn enqueue_sector_window(
         return false;
     }
     pending.push(PendingSectorPublication {
-        system,
+        intent: SectorPublicationIntent::System(system),
         faction,
         prepared: None,
         dependent,
@@ -22829,7 +22927,15 @@ fn pump_pending_sector_publication(
         return false;
     }
     while let Some(candidate) = pending.first_mut() {
-        if let Some(prepared) = state.prepare_open(world, candidate.system, candidate.faction) {
+        let prepared = match candidate.intent {
+            SectorPublicationIntent::System(system) => {
+                state.prepare_open(world, system, candidate.faction)
+            }
+            SectorPublicationIntent::Saved(saved) => {
+                state.prepare_restore_saved(world, candidate.faction, &saved)
+            }
+        };
+        if let Some(prepared) = prepared {
             candidate.prepared = Some(prepared);
             strategic_windowing.enqueue_sector_open(prepared);
             return true;
@@ -22855,7 +22961,14 @@ fn refresh_pending_sector_publication(
     };
     let candidate = pending[index];
     let previous = candidate.prepared.expect("prepared candidate");
-    let refreshed = state.prepare_open(world, candidate.system, candidate.faction);
+    let refreshed = match candidate.intent {
+        SectorPublicationIntent::System(system) => {
+            state.prepare_open(world, system, candidate.faction)
+        }
+        SectorPublicationIntent::Saved(saved) => {
+            state.prepare_restore_saved(world, candidate.faction, &saved)
+        }
+    };
     if refreshed == Some(previous) {
         return;
     }
@@ -27257,661 +27370,456 @@ mod mission_end_message_tests {
     }
 }
 
-// The former tests below asserted ordering and focus through renderer-local
-// serials. Manager/RoutingSnapshot coverage replaces those duplicate rules.
-#[cfg(all(test, any()))]
-mod interface_restore_tests {
-    use super::*;
-    use rebellion_core::ids::DatId;
-    use rebellion_data::save::{SavedInterface, SavedWindow, SavedWindowKind};
-
-    /// A sector of three systems. port: test fixture values, not rules.
-    fn world() -> (GameWorld, [SystemKey; 4]) {
-        let mut world = GameWorld::default();
-        let sector = world.sectors.insert(rebellion_core::world::Sector {
-            dat_id: DatId::new(0x9200_0001),
-            ..rebellion_core::world::Sector::default()
-        });
-        let systems = [1, 2, 3, 4].map(|index| {
-            world.systems.insert(rebellion_core::world::System {
-                dat_id: DatId::new(0x9000_0000 + index),
-                sector,
-                ..rebellion_core::world::System::default()
-            })
-        });
-        world.sectors[sector].systems = systems.to_vec();
-        (world, systems)
-    }
-
-    struct Windows {
-        sectors: SectorWindowState,
-        systems: SystemWindowState,
-        fleets: FleetWindowState,
-        defenses: DefensesWindowState,
-        missions: MissionsWindowState,
-    }
-
-    impl Windows {
-        fn new() -> Self {
-            Self {
-                sectors: SectorWindowState::default(),
-                systems: SystemWindowState::default(),
-                fleets: FleetWindowState::default(),
-                defenses: DefensesWindowState::default(),
-                missions: MissionsWindowState::default(),
-            }
-        }
-
-        fn children(&self) -> Vec<(u64, GalaxyChild)> {
-            self.children_in(&strategic_windowing::StrategicWindowing::new().begin_frame())
-        }
-
-        fn children_in(
-            &self,
-            snapshot: &rebellion_windowing::RoutingSnapshot,
-        ) -> Vec<(u64, GalaxyChild)> {
-            galaxy_children(
-                &self.sectors,
-                &self.systems,
-                &self.defenses,
-                &self.missions,
-                &self.fleets,
-                snapshot,
-            )
-        }
-
-        fn saved(
-            &self,
-            world: &GameWorld,
-            cockpit: &rebellion_render::CockpitState,
-        ) -> SavedInterface {
-            saved_interface(
-                world,
-                cockpit,
-                &self.sectors,
-                &self.systems,
-                &self.fleets,
-                &self.defenses,
-                &self.missions,
-            )
-        }
-    }
-
-    fn fog(faction: CockpitFaction) -> FogState {
-        FogState::new(Faction::of_alliance(faction == CockpitFaction::Alliance))
-    }
-
-    /// In kind, the galaxy of Empire day-2 start played on to day 6 under
-    /// Wine: a sector window; from the bottom up a minimized System window,
-    /// a Defenses window, a minimized Defenses window, a Missions window and
-    /// a System window over them.
-    fn opened(world: &GameWorld, systems: [SystemKey; 4], faction: CockpitFaction) -> Windows {
-        let layout = rebellion_render::CockpitState::new(faction).layout_for(1280.0, 960.0);
-        let mut windows = Windows::new();
-        assert!(windows.sectors.open_for_system(world, systems[0], faction));
-        assert!(windows.systems.restore_saved(
-            world,
-            faction,
-            &SavedWindow {
-                kind: SavedWindowKind::System {
-                    system: DatId::new(0x9000_0002),
-                },
-                position: (90, 50),
-                shown: false,
-            },
-        ));
-        assert!(windows
-            .defenses
-            .open(world, systems[1], (100, 60), faction, layout));
-        // A minimized window keeps its place in the z-order.
-        assert!(windows
-            .defenses
-            .open(world, systems[2], (130, 75), faction, layout));
-        let serial = windows.defenses.focus_serial();
-        assert!(windows.defenses.close_window(systems[2]));
-        windows
-            .systems
-            .minimize_defenses_window_at(systems[2], (130, 75), serial);
-        assert!(windows.missions.open(
-            world,
-            &fog(faction),
-            &MissionState::new(),
-            systems[2],
-            (110, 70),
-            faction,
-            layout,
-        ));
-        assert!(windows
-            .systems
-            .open(world, systems[0], (120, 80), faction, layout));
-        windows
-    }
-
-    fn kinds(interface: &SavedInterface) -> Vec<(SavedWindowKind, bool)> {
-        interface
-            .windows
-            .iter()
-            .map(|window| (window.kind, window.shown))
-            .collect()
-    }
-
-    #[test]
-    fn a_save_keeps_every_window_from_the_bottom_of_the_z_order_up() {
-        // FUN_00440ea0 writes every child of the view from the bottom of
-        // the z-order up, a hidden one (+0x110 = 0) at its own place
-        // (FUN_00440ea0.c:19-24).
-        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
-            let (world, systems) = world();
-            let windows = opened(&world, systems, faction);
-            let cockpit = rebellion_render::CockpitState::new(faction);
-            let interface = windows.saved(&world, &cockpit);
-            assert_eq!(interface.gid_mode, Some(cockpit.gid_mode.command_id()));
-            let system = |id| SavedWindowKind::System {
-                system: DatId::new(id),
-            };
-            assert_eq!(
-                kinds(&interface),
-                [
-                    (
-                        SavedWindowKind::Sector {
-                            sector: DatId::new(0x9200_0001)
-                        },
-                        true
-                    ),
-                    (system(0x9000_0002), false),
-                    (
-                        SavedWindowKind::Defenses {
-                            system: DatId::new(0x9000_0002)
-                        },
-                        true
-                    ),
-                    (
-                        SavedWindowKind::Defenses {
-                            system: DatId::new(0x9000_0003)
-                        },
-                        false
-                    ),
-                    (
-                        SavedWindowKind::Missions {
-                            system: DatId::new(0x9000_0003)
-                        },
-                        true
-                    ),
-                    (system(0x9000_0001), true),
-                ],
-                "{faction:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_window_the_gid_menu_hides_saves_hidden_but_a_sector_stays_shown() {
-        // GID's slot +0x08 clears +0x110 on each child it hides. Under Wine
-        // a System window the menu hid came back on the rail, and the
-        // sector window it hid came back shown (Empire day-2 start, played
-        // on to day 8).
-        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
-            let (world, systems) = world();
-            let windows = opened(&world, systems, faction);
-            let mut cockpit = rebellion_render::CockpitState::new(faction);
-            cockpit.gid_ui.open_menu();
-            let shown: Vec<bool> = kinds(&windows.saved(&world, &cockpit))
-                .into_iter()
-                .map(|(_, shown)| shown)
-                .collect();
-            assert_eq!(
-                shown,
-                [true, false, false, false, false, false],
-                "{faction:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_load_rebuilds_the_saved_order_and_focuses_the_top_window() {
-        // FUN_00440f80 → FUN_00441190 rebuilds the windows bottom first,
-        // the rail's back on the rail and sectors at the bottom; the focus
-        // is the top shown window that is not a sector (Wine runs r, t1,
-        // t3, u and w1, empire-fleet-to-yaga-minor at day 38).
-        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
-            let (world, systems) = world();
-            let windows = opened(&world, systems, faction);
-            let cockpit = rebellion_render::CockpitState::new(faction);
-            let interface = windows.saved(&world, &cockpit);
-
-            let mut restored = Windows::new();
-            let mut strategic = strategic_windowing::StrategicWindowing::new();
-            restore_interface(
-                &interface.windows,
-                &world,
-                &fog(faction),
-                &MissionState::new(),
-                faction,
-                cockpit.layout_for(1280.0, 960.0),
-                RestoredWindows {
-                    sectors: &mut restored.sectors,
-                    systems: &mut restored.systems,
-                    fleets: &restored.fleets,
-                    defenses: &mut restored.defenses,
-                    missions: &mut restored.missions,
-                },
-                &mut strategic,
-            );
-            let hidden = finish_interface_restore(
-                &interface.windows,
-                &world,
-                &mut restored.systems,
-                &mut restored.defenses,
-                &mut restored.missions,
-                &mut restored.fleets,
-                &mut strategic,
-                &mut 0,
-            );
-            assert!(hidden.is_empty());
-
-            let order = |windows: &Windows| {
-                let mut children = windows.children();
-                children.sort_by_key(|(serial, _)| *serial);
-                children
-                    .into_iter()
-                    .map(|(_, child)| child)
-                    .collect::<Vec<_>>()
-            };
-            assert_eq!(order(&restored), order(&windows), "{faction:?}");
-            assert_eq!(restored.systems.rail_count(), 2);
-            assert_eq!(kinds(&restored.saved(&world, &cockpit)), kinds(&interface));
-            let focus = GalaxyFocusState::after_load(restored.children());
-            assert_eq!(
-                focus.focus,
-                GalaxyFocus::Child(GalaxyChild::System(systems[0]))
-            );
-        }
-    }
-
-    /// Commit the manager's pending opens as the frame's end does: publish
-    /// each Fleet window and note its activation.
-    fn commit_fleets(
-        strategic: &mut strategic_windowing::StrategicWindowing,
-        fleets: &mut FleetWindowState,
-    ) {
-        for mut applied in strategic.apply_pending() {
-            let (Some(prepared), Some(id), Ok(commit)) = (
-                applied.prepared_fleet.take(),
-                applied.fleet_content_id,
-                applied.result.as_ref(),
-            ) else {
-                continue;
-            };
-            assert_eq!(fleets.commit_open(prepared, &commit.transition), Some(id));
-            assert!(strategic.acknowledge_fleet_publication(id));
-            fleets.note_activation(id);
-        }
-    }
-
-    #[test]
-    fn a_fleet_window_saved_on_top_comes_back_in_front_with_the_keyboard() {
-        // FUN_00441190 makes the saved windows bottom first, each above the
-        // last, and the top shown one takes the focus (Wine runs r, t1, t3,
-        // u and w1, empire-fleet-to-yaga-minor at day 38). A Fleet window
-        // saved over a System window paints over it again, and holds the
-        // keyboard; saved under it, the System window stays in front.
-        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
-            for fleet_on_top in [true, false] {
-                let (world, systems) = world();
-                let fleet = SavedWindow {
-                    kind: SavedWindowKind::Fleet {
-                        system: DatId::new(0x9000_0001),
-                        tab: 0x66,
-                    },
-                    position: (130, 60),
-                    shown: true,
-                };
-                let system = SavedWindow {
-                    kind: SavedWindowKind::System {
-                        system: DatId::new(0x9000_0002),
-                    },
-                    position: (120, 80),
-                    shown: true,
-                };
-                let order = if fleet_on_top {
-                    [system, fleet]
-                } else {
-                    [fleet, system]
-                };
-                let cockpit = rebellion_render::CockpitState::new(faction);
-                let mut restored = Windows::new();
-                let mut strategic = strategic_windowing::StrategicWindowing::new();
-                restore_interface(
-                    &order,
-                    &world,
-                    &fog(faction),
-                    &MissionState::new(),
-                    faction,
-                    cockpit.layout_for(1280.0, 960.0),
-                    RestoredWindows {
-                        sectors: &mut restored.sectors,
-                        systems: &mut restored.systems,
-                        fleets: &restored.fleets,
-                        defenses: &mut restored.defenses,
-                        missions: &mut restored.missions,
-                    },
-                    &mut strategic,
-                );
-                commit_fleets(&mut strategic, &mut restored.fleets);
-                // The commit brings the Fleet window forward, as the frame's
-                // end does.
-                let mut fleet_front = FleetWindowState::next_legacy_bridge_serial();
-                let hidden = finish_interface_restore(
-                    &order,
-                    &world,
-                    &mut restored.systems,
-                    &mut restored.defenses,
-                    &mut restored.missions,
-                    &mut restored.fleets,
-                    &mut strategic,
-                    &mut fleet_front,
-                );
-                assert!(hidden.is_empty());
-                let front = galaxy_front(
-                    &restored.systems,
-                    fleet_front,
-                    &restored.defenses,
-                    &restored.missions,
-                );
-                let id = restored.fleets.window_id(systems[0]).unwrap();
-                let focus = focus_after_load(
-                    restored.children_in(&strategic.begin_frame()),
-                    &mut strategic,
-                );
-                let commands: Vec<_> = strategic
-                    .apply_pending()
-                    .into_iter()
-                    .map(|applied| applied.command)
-                    .collect();
-                // The keyboard goes where the focus is: the Fleet window, or
-                // the galaxy view's own windows through the root.
-                let keyboard = strategic.begin_frame().keyboard_route().target;
-                if fleet_on_top {
-                    assert_eq!(front, GalaxyFront::Fleet, "{faction:?}");
-                    assert_eq!(focus.focus, GalaxyFocus::Child(GalaxyChild::Fleet(id)));
-                    assert_eq!(commands, [rebellion_windowing::WindowCommand::Activate(id)]);
-                    assert!(
-                        matches!(keyboard, rebellion_windowing::RouteTarget::Window(target) if target.window == id),
-                        "{faction:?}"
-                    );
-                } else {
-                    assert_eq!(front, GalaxyFront::System, "{faction:?}");
-                    assert_eq!(
-                        focus.focus,
-                        GalaxyFocus::Child(GalaxyChild::System(systems[1]))
-                    );
-                    assert_eq!(commands, [rebellion_windowing::WindowCommand::FocusRoot]);
-                    assert_eq!(
-                        keyboard,
-                        rebellion_windowing::RouteTarget::StrategicRoot,
-                        "{faction:?}"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn a_save_from_game_options_keeps_a_shown_fleet_window_shown_and_a_minimized_one_hidden() {
-        // FUN_00440ea0 walks the galaxy view's child windows from the
-        // bottom up and writes each one's shown flag (+0x110): the Game
-        // Options window hides none of them, so a Fleet window open under it
-        // saves shown and one on the rail saves hidden. Game Options
-        // suspends the strategic scene, so its frame paints no Fleet window.
-        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
-            let (world, systems) = world();
-            let fleet = |system, shown| SavedWindow {
-                kind: SavedWindowKind::Fleet {
-                    system: DatId::new(system),
-                    tab: 0x67,
-                },
-                position: (130, 60),
-                shown,
-            };
-            let order = [fleet(0x9000_0001, true), fleet(0x9000_0002, false)];
-            let cockpit = rebellion_render::CockpitState::new(faction);
-            let mut windows = Windows::new();
-            let mut strategic = strategic_windowing::StrategicWindowing::new();
-            restore_interface(
-                &order,
-                &world,
-                &fog(faction),
-                &MissionState::new(),
-                faction,
-                cockpit.layout_for(1280.0, 960.0),
-                RestoredWindows {
-                    sectors: &mut windows.sectors,
-                    systems: &mut windows.systems,
-                    fleets: &windows.fleets,
-                    defenses: &mut windows.defenses,
-                    missions: &mut windows.missions,
-                },
-                &mut strategic,
-            );
-            commit_fleets(&mut strategic, &mut windows.fleets);
-            finish_interface_restore(
-                &order,
-                &world,
-                &mut windows.systems,
-                &mut windows.defenses,
-                &mut windows.missions,
-                &mut windows.fleets,
-                &mut strategic,
-                &mut 0,
-            );
-            for applied in strategic.apply_pending() {
-                if let Some((window, system, position)) = applied.minimized_fleet {
-                    windows
-                        .systems
-                        .minimize_fleet_window(window, system, position);
-                }
-            }
-            assert!(
-                windows.fleets.window_id(systems[0]).is_some(),
-                "{faction:?}"
-            );
-
-            strategic.enter_scene(strategic_windowing::WindowScene::Suspended);
-            let saved = saved_interface(
-                &world,
-                &cockpit,
-                &windows.sectors,
-                &windows.systems,
-                &windows.fleets,
-                &windows.defenses,
-                &windows.missions,
-            );
-            assert_eq!(
-                kinds(&saved),
-                order.map(|window| (window.kind, window.shown)),
-                "{faction:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_load_keeps_fleet_windows_at_their_saved_places_and_rail_slots() {
-        // FUN_00441190 creates each window above the last and appends each
-        // hidden one to the rail as it meets it (slot +0x08, FUN_00428b40),
-        // so a hidden Fleet window takes its rail slot among the hidden
-        // windows and a shown one its place in the z-order. The port's
-        // Fleet windows commit at the frame's end, after the others, so the
-        // others are raised again in saved order and the hidden Fleet window
-        // takes its slot before the manager's minimize.
-        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
-            let (world, systems) = world();
-            let fleet = |system, shown| SavedWindow {
-                kind: SavedWindowKind::Fleet {
-                    system: DatId::new(system),
-                    tab: 0x67,
-                },
-                position: (130, 60),
-                shown,
-            };
-            let window = |kind, shown| SavedWindow {
-                kind,
-                position: (120, 80),
-                shown,
-            };
-            let order = [
-                fleet(0x9000_0001, true),
-                window(
-                    SavedWindowKind::System {
-                        system: DatId::new(0x9000_0002),
-                    },
-                    true,
-                ),
-                // A hidden window before the hidden Fleet window takes the
-                // rail slot ahead of it.
-                window(
-                    SavedWindowKind::Defenses {
-                        system: DatId::new(0x9000_0002),
-                    },
-                    false,
-                ),
-                fleet(0x9000_0004, false),
-                fleet(0x9000_0003, true),
-                window(
-                    SavedWindowKind::Defenses {
-                        system: DatId::new(0x9000_0001),
-                    },
-                    true,
-                ),
-                window(
-                    SavedWindowKind::System {
-                        system: DatId::new(0x9000_0003),
-                    },
-                    false,
-                ),
-                window(
-                    SavedWindowKind::Missions {
-                        system: DatId::new(0x9000_0001),
-                    },
-                    false,
-                ),
-            ];
-            let cockpit = rebellion_render::CockpitState::new(faction);
-            let mut restored = Windows::new();
-            let mut strategic = strategic_windowing::StrategicWindowing::new();
-            restore_interface(
-                &order,
-                &world,
-                &fog(faction),
-                &MissionState::new(),
-                faction,
-                cockpit.layout_for(1280.0, 960.0),
-                RestoredWindows {
-                    sectors: &mut restored.sectors,
-                    systems: &mut restored.systems,
-                    fleets: &restored.fleets,
-                    defenses: &mut restored.defenses,
-                    missions: &mut restored.missions,
-                },
-                &mut strategic,
-            );
-            commit_fleets(&mut strategic, &mut restored.fleets);
-            let hidden = finish_interface_restore(
-                &order,
-                &world,
-                &mut restored.systems,
-                &mut restored.defenses,
-                &mut restored.missions,
-                &mut restored.fleets,
-                &mut strategic,
-                &mut 0,
-            );
-            let id = |system| restored.fleets.window_id(system).unwrap();
-            let (first, third, hidden_fleet) = (id(systems[0]), id(systems[2]), id(systems[3]));
-            assert_eq!(hidden, [GalaxyChild::Fleet(hidden_fleet)], "{faction:?}");
-            assert_eq!(
-                restored.fleets.selection(systems[0]).map(|(_, tab)| tab),
-                Some(rebellion_render::fleet_window::FleetWindowTab::Fighters)
-            );
-
-            let mut children: Vec<_> = restored
-                .children_in(&strategic.begin_frame())
-                .into_iter()
-                .filter(|(_, child)| !hidden.contains(child))
-                .collect();
-            children.sort_by_key(|(serial, _)| *serial);
-            assert_eq!(
-                children.iter().map(|(_, child)| *child).collect::<Vec<_>>(),
-                [
-                    GalaxyChild::Fleet(first),
-                    GalaxyChild::System(systems[1]),
-                    GalaxyChild::Fleet(third),
-                    GalaxyChild::Defenses(systems[0]),
-                ],
-                "{faction:?}"
-            );
-            assert_eq!(
-                GalaxyFocusState::after_load(children).focus,
-                GalaxyFocus::Child(GalaxyChild::Defenses(systems[0]))
-            );
-
-            // The manager's minimize commits next frame; the rail keeps the
-            // slot the load gave it.
-            for applied in strategic.apply_pending() {
-                if let Some((window, system, position)) = applied.minimized_fleet {
-                    restored
-                        .systems
-                        .minimize_fleet_window(window, system, position);
-                }
-            }
-            let rail: Vec<_> = restored
-                .systems
-                .saved_rail(&world, |_| Some((0x67, 0)))
-                .into_iter()
-                .map(|(_, window)| window.kind)
-                .collect();
-            assert_eq!(
-                rail,
-                [
-                    SavedWindowKind::Defenses {
-                        system: DatId::new(0x9000_0002),
-                    },
-                    SavedWindowKind::Fleet {
-                        system: DatId::new(0x9000_0004),
-                        tab: 0x67,
-                    },
-                    SavedWindowKind::System {
-                        system: DatId::new(0x9000_0003),
-                    },
-                    SavedWindowKind::Missions {
-                        system: DatId::new(0x9000_0001),
-                    },
-                ],
-                "{faction:?}"
-            );
-            // Saved again, every window comes back in the same order.
-            let again = saved_interface(
-                &world,
-                &cockpit,
-                &restored.sectors,
-                &restored.systems,
-                &restored.fleets,
-                &restored.defenses,
-                &restored.missions,
-            );
-            assert_eq!(again.windows, order, "{faction:?}");
-        }
-    }
-}
-
 #[cfg(test)]
 mod managed_interface_save_tests {
     use super::*;
     use rebellion_core::ids::DatId;
-    use rebellion_data::save::SavedWindowKind;
+    use rebellion_data::save::{SavedWindow, SavedWindowKind};
     use rebellion_render::windowing_policy::system_subject;
     use rebellion_windowing::{
-        WindowCommand, WindowKey, WindowKind, WindowOwner, WindowSpec, WindowTransition,
+        FocusTarget, WindowCommand, WindowKey, WindowKind, WindowOwner, WindowSpec,
+        WindowTransition,
     };
+
+    fn fixture_world() -> (GameWorld, [SystemKey; 4]) {
+        let mut world = GameWorld::default();
+        let systems = [1, 2, 3, 4].map(|index| {
+            world.systems.insert(rebellion_core::world::System {
+                dat_id: DatId::new(0x9000_0000 + index),
+                ..rebellion_core::world::System::default()
+            })
+        });
+        (world, systems)
+    }
+
+    /// Exercise the same manager admission/publication, saved-order replay,
+    /// and minimize receipt path as load, without consulting renderer serials.
+    fn restore_manager_owned(
+        world: &GameWorld,
+        order: &[SavedWindow],
+        faction: CockpitFaction,
+    ) -> (
+        SystemWindowState,
+        FleetWindowState,
+        strategic_windowing::StrategicWindowing,
+    ) {
+        let cockpit = rebellion_render::CockpitState::new(faction);
+        let fog = FogState::new(Faction::of_alliance(faction == CockpitFaction::Alliance));
+        let missions = MissionState::new();
+        let mut sectors = SectorWindowState::default();
+        let mut systems = SystemWindowState::default();
+        let mut fleets = FleetWindowState::default();
+        let mut defenses = DefensesWindowState::default();
+        let mut mission_windows = MissionsWindowState::default();
+        let mut strategic = strategic_windowing::StrategicWindowing::new();
+        let mut pending_sectors = Vec::new();
+        restore_interface(
+            order,
+            world,
+            &fog,
+            &missions,
+            faction,
+            cockpit.layout_for(1280.0, 960.0),
+            RestoredWindows {
+                sectors: &mut sectors,
+                systems: &mut systems,
+                fleets: &fleets,
+                defenses: &mut defenses,
+                missions: &mut mission_windows,
+            },
+            &mut pending_sectors,
+            &mut strategic,
+        );
+
+        // The first commit batch publishes all prepared manager-owned content.
+        for mut applied in strategic.apply_pending() {
+            let transition = &applied.result.as_ref().unwrap().transition;
+            if let (Some(prepared), Some(id)) =
+                (applied.prepared_system.take(), applied.system_content_id)
+            {
+                assert_eq!(systems.commit_open(prepared, transition), Some(id));
+                assert!(strategic.acknowledge_system_publication(id));
+            }
+            if let (Some(prepared), Some(id)) = (
+                applied.prepared_defenses.take(),
+                applied.defenses_content_id,
+            ) {
+                assert_eq!(defenses.commit_open(prepared, transition), Some(id));
+                assert!(strategic.acknowledge_defenses_publication(id));
+            }
+            if let (Some(prepared), Some(id)) = (
+                applied.prepared_missions.take(),
+                applied.missions_content_id,
+            ) {
+                assert_eq!(mission_windows.commit_open(prepared, transition), Some(id));
+                assert!(strategic.acknowledge_missions_publication(id));
+            }
+            if let (Some(prepared), Some(id)) =
+                (applied.prepared_fleet.take(), applied.fleet_content_id)
+            {
+                assert_eq!(fleets.commit_open(prepared, transition), Some(id));
+                assert!(strategic.acknowledge_fleet_publication(id));
+            }
+        }
+        assert!(pending_sectors.is_empty());
+        let hidden =
+            finish_interface_restore(order, world, &mut systems, &mut fleets, &mut strategic);
+        assert_eq!(
+            hidden.len(),
+            order
+                .iter()
+                .filter(|window| {
+                    !window.shown && matches!(window.kind, SavedWindowKind::Fleet { .. })
+                })
+                .count()
+        );
+
+        // Apply the saved raise/minimize commands. Renderer rail entries are
+        // projections of accepted manager minimize transitions, never owners.
+        for applied in strategic.apply_pending() {
+            let Ok(commit) = applied.result else {
+                panic!("saved manager command failed: {:?}", applied.command);
+            };
+            if let Some((id, system, position)) = applied.minimized_fleet {
+                assert!(matches!(
+                    &commit.transition,
+                    WindowTransition::Minimized { id: minimized, .. } if *minimized == id
+                ));
+                systems.minimize_fleet_window(id, system, position);
+            }
+            if let WindowTransition::Minimized { id, .. } = &commit.transition {
+                if let Some(window) = order.iter().find(|window| {
+                    saved_window_manager_id(world, window, &strategic.begin_frame()) == Some(*id)
+                }) {
+                    if let Some(system) = match window.kind {
+                        SavedWindowKind::Defenses { system }
+                        | SavedWindowKind::Missions { system } => system_by_dat_id(world, system),
+                        _ => None,
+                    } {
+                        match window.kind {
+                            SavedWindowKind::Defenses { .. } => {
+                                systems.minimize_defenses_window_at(system, window.position);
+                            }
+                            SavedWindowKind::Missions { .. } => {
+                                systems.minimize_missions_window_at(system, window.position);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        (systems, fleets, strategic)
+    }
+
+    #[test]
+    fn save_restore_minimize_and_restore_order_are_manager_owned_for_both_factions() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut world = GameWorld::default();
+            let first_sector = world.sectors.insert(rebellion_core::world::Sector {
+                dat_id: DatId::new(0x9100_0001),
+                x: 10,
+                ..rebellion_core::world::Sector::default()
+            });
+            let second_sector = world.sectors.insert(rebellion_core::world::Sector {
+                dat_id: DatId::new(0x9100_0002),
+                x: 900,
+                ..rebellion_core::world::Sector::default()
+            });
+            let first = world.systems.insert(rebellion_core::world::System {
+                dat_id: DatId::new(0x9000_0001),
+                sector: first_sector,
+                ..rebellion_core::world::System::default()
+            });
+            let second = world.systems.insert(rebellion_core::world::System {
+                dat_id: DatId::new(0x9000_0002),
+                sector: second_sector,
+                ..rebellion_core::world::System::default()
+            });
+            let layout = rebellion_render::CockpitState::new(faction).layout_for(1280.0, 960.0);
+            let fog = FogState::new(Faction::of_alliance(faction == CockpitFaction::Alliance));
+            let missions = MissionState::new();
+            let mut source_sectors = SectorWindowState::default();
+            let mut source_fleets = FleetWindowState::default();
+            let mut source_systems = SystemWindowState::default();
+            let mut source_defenses = DefensesWindowState::default();
+            let mut source_missions = MissionsWindowState::default();
+            assert!(source_systems.open(&world, first, (20, 30), faction, layout));
+            assert!(source_systems.open(&world, second, (40, 50), faction, layout));
+            assert!(source_defenses.open(&world, first, (60, 70), faction, layout));
+            assert!(source_missions.open(
+                &world,
+                &fog,
+                &missions,
+                second,
+                (80, 90),
+                faction,
+                layout,
+            ));
+            assert!(source_sectors.open_for_system(&world, first, faction));
+            assert!(source_sectors.open_for_system(&world, second, faction));
+
+            let mut manager = strategic_windowing::StrategicWindowing::new();
+            for kind in [
+                SavedWindowKind::Sector {
+                    sector: DatId::new(0x9100_0001),
+                },
+                SavedWindowKind::Sector {
+                    sector: DatId::new(0x9100_0002),
+                },
+                SavedWindowKind::System {
+                    system: DatId::new(0x9000_0001),
+                },
+                SavedWindowKind::Defenses {
+                    system: DatId::new(0x9000_0001),
+                },
+                SavedWindowKind::Missions {
+                    system: DatId::new(0x9000_0002),
+                },
+                SavedWindowKind::Fleet {
+                    system: DatId::new(0x9000_0001),
+                    tab: 0x66,
+                },
+                SavedWindowKind::System {
+                    system: DatId::new(0x9000_0002),
+                },
+            ] {
+                let saved = rebellion_data::save::SavedWindow {
+                    kind,
+                    position: (0, 0),
+                    shown: true,
+                };
+                let key = saved_window_key(&world, &saved).unwrap();
+                if matches!(kind, SavedWindowKind::Fleet { .. }) {
+                    let prepared = source_fleets
+                        .prepare_open(&world, first, (100, 110), faction, layout, None)
+                        .unwrap();
+                    manager.enqueue_fleet_open(
+                        prepared.with_tab(rebellion_render::fleet_window::FleetWindowTab::Fighters),
+                    );
+                } else {
+                    manager.enqueue(WindowCommand::Open(WindowSpec {
+                        key,
+                        owner: WindowOwner::StrategicRoot,
+                        policy: rebellion_render::windowing_policy::policy_for(key.kind),
+                    }));
+                }
+            }
+            for mut applied in manager.apply_pending() {
+                if let (Some(prepared), Some(id), Ok(commit)) = (
+                    applied.prepared_fleet.take(),
+                    applied.fleet_content_id,
+                    applied.result.as_ref(),
+                ) {
+                    assert_eq!(
+                        source_fleets.commit_open(prepared, &commit.transition),
+                        Some(id)
+                    );
+                    assert!(manager.acknowledge_fleet_publication(id));
+                }
+            }
+            let snapshot = manager.begin_frame();
+            let minimized = manager
+                .saved_galaxy_order()
+                .iter()
+                .map(|(id, _)| *id)
+                .find(|id| {
+                    snapshot
+                        .key(*id)
+                        .is_some_and(|key| key.kind == WindowKind::Defenses)
+                })
+                .unwrap();
+            manager.enqueue(WindowCommand::Minimize(minimized));
+            assert!(matches!(
+                &manager.apply_pending()[0].result.as_ref().unwrap().transition,
+                WindowTransition::Minimized { id, .. } if *id == minimized
+            ));
+
+            let cockpit = rebellion_render::CockpitState::new(faction);
+            let snapshot = manager.begin_frame();
+            let manager_order = manager.saved_galaxy_order();
+            let saved = saved_interface(
+                &world,
+                &cockpit,
+                &source_sectors,
+                &source_systems,
+                &source_fleets,
+                &source_defenses,
+                &source_missions,
+                &snapshot,
+                &manager_order,
+            );
+            let expected: Vec<_> = saved
+                .windows
+                .iter()
+                .map(|window| (saved_window_key(&world, window).unwrap(), window.shown))
+                .collect();
+            assert_eq!(expected.len(), 7, "{faction:?}");
+            let manager_keys: Vec<_> = manager_order
+                .iter()
+                .map(|(id, shown)| (snapshot.key(*id).unwrap(), *shown))
+                .collect();
+            assert_eq!(expected, manager_keys, "{faction:?}");
+            assert_eq!(
+                expected.iter().filter(|(_, shown)| !shown).count(),
+                1,
+                "{faction:?}"
+            );
+
+            let mut restored_sectors = SectorWindowState::default();
+            let mut restored_fleets = FleetWindowState::default();
+            let mut restored_systems = SystemWindowState::default();
+            let mut restored_defenses = DefensesWindowState::default();
+            let mut restored_missions = MissionsWindowState::default();
+            let mut restored_manager = strategic_windowing::StrategicWindowing::new();
+            let mut pending_sectors = Vec::new();
+            restore_interface(
+                &saved.windows,
+                &world,
+                &fog,
+                &missions,
+                faction,
+                layout,
+                RestoredWindows {
+                    sectors: &mut restored_sectors,
+                    systems: &mut restored_systems,
+                    fleets: &restored_fleets,
+                    defenses: &mut restored_defenses,
+                    missions: &mut restored_missions,
+                },
+                &mut pending_sectors,
+                &mut restored_manager,
+            );
+            loop {
+                let mut batch = restored_manager.apply_pending();
+                if batch.is_empty() {
+                    break;
+                }
+                for mut applied in batch.drain(..) {
+                    let transition = &applied.result.as_ref().unwrap().transition;
+                    if let Some(prepared) = applied.prepared_sector.take() {
+                        let _ = commit_sector_window_publication(
+                            &mut restored_manager,
+                            &mut restored_sectors,
+                            &mut pending_sectors,
+                            Some(prepared),
+                            applied.sector_content_id,
+                            &applied.result,
+                        );
+                        pump_pending_sector_publication(
+                            &mut restored_manager,
+                            &restored_sectors,
+                            &world,
+                            &mut pending_sectors,
+                        );
+                        continue;
+                    }
+                    if let (Some(prepared), Some(id)) =
+                        (applied.prepared_system.take(), applied.system_content_id)
+                    {
+                        assert_eq!(restored_systems.commit_open(prepared, transition), Some(id));
+                        assert!(restored_manager.acknowledge_system_publication(id));
+                    }
+                    if let (Some(prepared), Some(id)) = (
+                        applied.prepared_defenses.take(),
+                        applied.defenses_content_id,
+                    ) {
+                        assert_eq!(
+                            restored_defenses.commit_open(prepared, transition),
+                            Some(id)
+                        );
+                        assert!(restored_manager.acknowledge_defenses_publication(id));
+                    }
+                    if let (Some(prepared), Some(id)) = (
+                        applied.prepared_missions.take(),
+                        applied.missions_content_id,
+                    ) {
+                        assert_eq!(
+                            restored_missions.commit_open(prepared, transition),
+                            Some(id)
+                        );
+                        assert!(restored_manager.acknowledge_missions_publication(id));
+                    }
+                    if let (Some(prepared), Some(id)) =
+                        (applied.prepared_fleet.take(), applied.fleet_content_id)
+                    {
+                        assert_eq!(restored_fleets.commit_open(prepared, transition), Some(id));
+                        assert!(restored_manager.acknowledge_fleet_publication(id));
+                    }
+                }
+            }
+            assert!(pending_sectors.is_empty(), "{faction:?}");
+            finish_interface_restore(
+                &saved.windows,
+                &world,
+                &mut restored_systems,
+                &mut restored_fleets,
+                &mut restored_manager,
+            );
+            for applied in restored_manager.apply_pending() {
+                assert!(applied.result.is_ok(), "{faction:?}: {:?}", applied.result);
+            }
+
+            let restored_snapshot = restored_manager.begin_frame();
+            let actual: Vec<_> = restored_manager
+                .saved_galaxy_order()
+                .iter()
+                .map(|(id, shown)| (restored_snapshot.key(*id).unwrap(), *shown))
+                .collect();
+            assert_eq!(actual, expected, "{faction:?}");
+            let expected_sectors: Vec<_> = saved
+                .windows
+                .iter()
+                .filter(|window| matches!(window.kind, SavedWindowKind::Sector { .. }))
+                .map(|window| (window.kind, window.position))
+                .collect();
+            let actual_sectors: Vec<_> = restored_sectors
+                .saved_windows(&world)
+                .into_iter()
+                .map(|(_, window)| (window.kind, window.position))
+                .collect();
+            assert_eq!(actual_sectors, expected_sectors, "{faction:?}");
+            assert!(
+                restored_sectors
+                    .content_reports(&restored_snapshot, &world)
+                    .iter()
+                    .all(|report| report.status == rebellion_windowing::ContentStatus::Ready),
+                "{faction:?}"
+            );
+            let focused_shown = restored_manager
+                .saved_galaxy_order()
+                .iter()
+                .rev()
+                .find_map(|(id, shown)| shown.then_some(*id))
+                .unwrap();
+            assert_eq!(
+                restored_snapshot.focused(),
+                Some(FocusTarget {
+                    window: focused_shown,
+                    control: None,
+                }),
+                "{faction:?}"
+            );
+
+            let hidden_saved = saved.windows.iter().find(|window| !window.shown).unwrap();
+            let restored_minimized =
+                saved_window_manager_id(&world, hidden_saved, &restored_snapshot).unwrap();
+            assert_ne!(restored_minimized, minimized, "{faction:?}");
+            restored_manager.enqueue(WindowCommand::Restore(restored_minimized));
+            let restored_commit = restored_manager.apply_pending().remove(0);
+            assert!(matches!(
+                restored_commit.result.unwrap().transition,
+                WindowTransition::Restored { id, .. } if id == restored_minimized
+            ));
+            let after_restore = restored_manager.begin_frame();
+            assert!(after_restore.is_visible(restored_minimized), "{faction:?}");
+            assert_eq!(
+                after_restore.focused().unwrap().window,
+                restored_minimized,
+                "{faction:?}"
+            );
+        }
+    }
 
     #[test]
     fn save_order_and_visibility_follow_the_manager_snapshot_not_renderer_serials() {
@@ -28043,6 +27951,315 @@ mod managed_interface_save_tests {
                     ),
                 ],
                 "{faction:?}; IDs were {second_id:?} and {first_id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gid_hidden_detail_is_saved_hidden_while_the_sector_stays_shown_for_both_factions() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let mut world = GameWorld::default();
+            let sector = world.sectors.insert(rebellion_core::world::Sector {
+                dat_id: DatId::new(0x9200_0001),
+                ..rebellion_core::world::Sector::default()
+            });
+            let system = world.systems.insert(rebellion_core::world::System {
+                dat_id: DatId::new(0x9000_0001),
+                sector,
+                ..rebellion_core::world::System::default()
+            });
+            world.sectors[sector].systems = vec![system];
+            let layout = rebellion_render::CockpitState::new(faction).layout_for(1280.0, 960.0);
+            let mut sectors = SectorWindowState::default();
+            let mut systems = SystemWindowState::default();
+            assert!(sectors.open_for_system(&world, system, faction));
+            assert!(systems.open(&world, system, (30, 40), faction, layout));
+            let sector_position = sectors.saved_windows(&world)[0].1.position;
+            let system_position = systems.saved_windows(&world)[0].position;
+
+            let sector_saved = SavedWindow {
+                kind: SavedWindowKind::Sector {
+                    sector: DatId::new(0x9200_0001),
+                },
+                position: sector_position,
+                shown: true,
+            };
+            let system_saved = SavedWindow {
+                kind: SavedWindowKind::System {
+                    system: DatId::new(0x9000_0001),
+                },
+                position: system_position,
+                shown: true,
+            };
+            let mut manager = rebellion_windowing::WindowManager::new();
+            let mut manager_order = Vec::new();
+            for window in [sector_saved, system_saved] {
+                let key = saved_window_key(&world, &window).unwrap();
+                let id = match manager
+                    .apply(WindowCommand::Open(WindowSpec {
+                        key,
+                        owner: WindowOwner::StrategicRoot,
+                        policy: rebellion_render::windowing_policy::policy_for(key.kind),
+                    }))
+                    .unwrap()
+                    .transition
+                {
+                    WindowTransition::Opened { id } => id,
+                    transition => panic!("expected manager open, got {transition:?}"),
+                };
+                manager_order.push((id, true));
+            }
+
+            let mut cockpit = rebellion_render::CockpitState::new(faction);
+            cockpit.gid_ui.windows_hidden = true;
+            let snapshot = manager.begin_frame();
+            let saved = saved_interface(
+                &world,
+                &cockpit,
+                &sectors,
+                &systems,
+                &FleetWindowState::default(),
+                &DefensesWindowState::default(),
+                &MissionsWindowState::default(),
+                &snapshot,
+                &manager_order,
+            );
+            assert_eq!(
+                saved.windows.as_slice(),
+                &[
+                    SavedWindow {
+                        shown: true,
+                        ..sector_saved
+                    },
+                    SavedWindow {
+                        shown: false,
+                        ..system_saved
+                    },
+                ],
+                "{faction:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn saved_fleet_and_system_order_controls_manager_focus_and_keyboard_owner() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = fixture_world();
+            for fleet_on_top in [true, false] {
+                let fleet = SavedWindow {
+                    kind: SavedWindowKind::Fleet {
+                        system: DatId::new(0x9000_0001),
+                        tab: 0x66,
+                    },
+                    position: (130, 60),
+                    shown: true,
+                };
+                let system = SavedWindow {
+                    kind: SavedWindowKind::System {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    position: (120, 80),
+                    shown: true,
+                };
+                let order = if fleet_on_top {
+                    [system, fleet]
+                } else {
+                    [fleet, system]
+                };
+                let (systems_state, fleets, strategic) =
+                    restore_manager_owned(&world, &order, faction);
+                let snapshot = strategic.begin_frame();
+                let fleet_id = fleets.window_id(systems[0]).unwrap();
+                let system_id = saved_window_manager_id(&world, &system, &snapshot).unwrap();
+                let top = if fleet_on_top { fleet_id } else { system_id };
+                assert_eq!(
+                    snapshot.focused().map(|focus| focus.window),
+                    Some(top),
+                    "{faction:?}"
+                );
+                assert_eq!(snapshot.paint_order().last(), Some(&top), "{faction:?}");
+                let keyboard = snapshot.keyboard_route().target;
+                assert!(
+                    matches!(
+                        keyboard,
+                        rebellion_windowing::RouteTarget::Window(target) if target.window == top
+                    ),
+                    "{faction:?}: top managed detail must own keyboard input, got {keyboard:?}"
+                );
+                if fleet_on_top {
+                    assert_eq!(fleets.keyboard_owner(&snapshot), Some((fleet_id, false)));
+                } else {
+                    assert_eq!(fleets.keyboard_owner(&snapshot), None);
+                }
+                assert!(systems_state.window_id(systems[1]).is_some(), "{faction:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn suspended_game_options_save_keeps_shown_and_minimized_fleets_distinct() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = fixture_world();
+            let order = [
+                SavedWindow {
+                    kind: SavedWindowKind::Fleet {
+                        system: DatId::new(0x9000_0001),
+                        tab: 0x67,
+                    },
+                    position: (130, 60),
+                    shown: true,
+                },
+                SavedWindow {
+                    kind: SavedWindowKind::Fleet {
+                        system: DatId::new(0x9000_0002),
+                        tab: 0x67,
+                    },
+                    position: (170, 95),
+                    shown: false,
+                },
+            ];
+            let (systems_state, fleets, mut strategic) =
+                restore_manager_owned(&world, &order, faction);
+            let shown_id = fleets.window_id(systems[0]).unwrap();
+            let hidden_id =
+                saved_window_manager_id(&world, &order[1], &strategic.begin_frame()).unwrap();
+            assert!(strategic.begin_frame().is_visible(shown_id), "{faction:?}");
+            assert!(
+                !strategic.begin_frame().is_visible(hidden_id),
+                "{faction:?}"
+            );
+
+            strategic.enter_scene(strategic_windowing::WindowScene::Suspended);
+            let cockpit = rebellion_render::CockpitState::new(faction);
+            let saved = saved_interface(
+                &world,
+                &cockpit,
+                &SectorWindowState::default(),
+                &systems_state,
+                &fleets,
+                &DefensesWindowState::default(),
+                &MissionsWindowState::default(),
+                &strategic.begin_frame(),
+                &strategic.saved_galaxy_order(),
+            );
+            assert_eq!(saved.windows, order, "{faction:?}");
+        }
+    }
+
+    #[test]
+    fn fleet_positions_and_hidden_rail_slots_follow_saved_manager_order() {
+        for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
+            let (world, systems) = fixture_world();
+            let fleet = |system, position, shown| SavedWindow {
+                kind: SavedWindowKind::Fleet {
+                    system: DatId::new(system),
+                    tab: 0x67,
+                },
+                position,
+                shown,
+            };
+            let detail = |kind, position, shown| SavedWindow {
+                kind,
+                position,
+                shown,
+            };
+            let order = [
+                fleet(0x9000_0001, (130, 60), true),
+                detail(
+                    SavedWindowKind::System {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    (120, 80),
+                    true,
+                ),
+                detail(
+                    SavedWindowKind::Defenses {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    (140, 90),
+                    false,
+                ),
+                fleet(0x9000_0004, (175, 105), false),
+                fleet(0x9000_0003, (155, 85), true),
+                detail(
+                    SavedWindowKind::Missions {
+                        system: DatId::new(0x9000_0001),
+                    },
+                    (160, 100),
+                    false,
+                ),
+            ];
+            let (systems_state, fleets, strategic) = restore_manager_owned(&world, &order, faction);
+            let snapshot = strategic.begin_frame();
+            let first = fleets.window_id(systems[0]).unwrap();
+            let hidden_fleet = saved_window_manager_id(&world, &order[3], &snapshot).unwrap();
+            let third = fleets.window_id(systems[2]).unwrap();
+            assert_eq!(fleets.window_logical_position(systems[0]), Some((130, 60)));
+            assert_eq!(fleets.window_logical_position(systems[2]), Some((155, 85)));
+            assert!(snapshot.is_visible(first), "{faction:?}");
+            assert!(!snapshot.is_visible(hidden_fleet), "{faction:?}");
+            assert!(snapshot.is_visible(third), "{faction:?}");
+
+            let saved = saved_interface(
+                &world,
+                &rebellion_render::CockpitState::new(faction),
+                &SectorWindowState::default(),
+                &systems_state,
+                &fleets,
+                &DefensesWindowState::default(),
+                &MissionsWindowState::default(),
+                &snapshot,
+                &strategic.saved_galaxy_order(),
+            );
+            let hidden_windows: Vec<_> = saved
+                .windows
+                .iter()
+                .filter(|window| !window.shown)
+                .collect();
+            assert_eq!(hidden_windows.len(), 3, "{faction:?}");
+            assert_eq!(
+                hidden_windows
+                    .iter()
+                    .map(|window| window.kind)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                &[
+                    SavedWindowKind::Defenses {
+                        system: DatId::new(0x9000_0002),
+                    },
+                    SavedWindowKind::Fleet {
+                        system: DatId::new(0x9000_0004),
+                        tab: 0x67,
+                    },
+                    SavedWindowKind::Missions {
+                        system: DatId::new(0x9000_0001),
+                    },
+                ],
+                "{faction:?}"
+            );
+            let hidden_manager_order: Vec<_> = snapshot
+                .presentation_history()
+                .iter()
+                .map(|id| snapshot.key(*id).unwrap().kind)
+                .collect();
+            assert_eq!(
+                hidden_manager_order,
+                [
+                    WindowKind::Defenses,
+                    WindowKind::Fleet,
+                    WindowKind::Missions,
+                ]
+                .as_slice(),
+                "{faction:?}: minimized rail slots follow manager history"
+            );
+            assert_eq!(
+                hidden_windows
+                    .iter()
+                    .map(|window| window.position)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                &[(140, 90), (175, 105), (160, 100)],
+                "{faction:?}"
             );
         }
     }

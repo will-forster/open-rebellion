@@ -211,8 +211,6 @@ struct OpenDefensesWindow {
     id: Option<WindowId>,
     subject: Option<SubjectId>,
     system: SystemKey,
-    /// When this window last took focus (`window_focus`).
-    focus_serial: u64,
     logical_position: (i16, i16),
     page: DefensesPage,
     /// port: one selected row; the list's own selection rules
@@ -388,7 +386,6 @@ impl DefensesWindowState {
                     id: Some(id),
                     subject: Some(subject),
                     system: prepared.system,
-                    focus_serial: 0,
                     logical_position: prepared.logical_position,
                     page: DefensesPage::Personnel,
                     selected: None,
@@ -438,7 +435,6 @@ impl DefensesWindowState {
             id: None,
             subject: None,
             system,
-            focus_serial: 0,
             logical_position: clamp_window_to_galaxy(
                 logical_position,
                 layout,
@@ -891,39 +887,26 @@ impl DefensesWindowState {
         }
     }
 
-    /// When the window in front took focus (`window_focus`); 0 with none
-    /// open. Each window keeps its own, so after a close the window behind
-    /// ranks where it took focus, as the original's z-order does.
-    #[must_use]
-    pub fn focus_serial(&self) -> u64 {
-        self.windows.last().map_or(0, |window| window.focus_serial)
-    }
-
-    /// The open windows as galaxy children, with their z serials; a
-    /// minimized window is on the rail, not among them.
-    pub fn children(&self) -> impl Iterator<Item = (u64, GalaxyChild)> + '_ {
+    /// The open Defenses children; z-order and focus come from the manager.
+    pub fn children(&self) -> impl Iterator<Item = GalaxyChild> + '_ {
         self.windows
             .iter()
-            .map(|window| (window.focus_serial, GalaxyChild::Defenses(window.system)))
+            .map(|window| GalaxyChild::Defenses(window.system))
     }
 
-    /// The open windows as a save keeps them, each with its z serial: the
-    /// system by its DAT id (`FUN_004aa6d0`) and the window's top-left.
+    /// The open Defenses content; saved order is supplied by WindowManager.
     #[must_use]
-    pub fn saved_windows(&self, world: &GameWorld) -> Vec<(u64, SavedWindow)> {
+    pub fn saved_windows(&self, world: &GameWorld) -> Vec<SavedWindow> {
         self.windows
             .iter()
             .filter_map(|window| {
-                Some((
-                    window.focus_serial,
-                    SavedWindow {
-                        kind: SavedWindowKind::Defenses {
-                            system: world.systems.get(window.system)?.dat_id,
-                        },
-                        position: window.logical_position,
-                        shown: true,
+                Some(SavedWindow {
+                    kind: SavedWindowKind::Defenses {
+                        system: world.systems.get(window.system)?.dat_id,
                     },
-                ))
+                    position: window.logical_position,
+                    shown: true,
+                })
             })
             .collect()
     }
@@ -952,7 +935,6 @@ impl DefensesWindowState {
             id: None,
             subject: None,
             system,
-            focus_serial: 0,
             logical_position: saved.position,
             page: DefensesPage::Personnel,
             selected: None,
@@ -987,8 +969,7 @@ impl DefensesWindowState {
         else {
             return false;
         };
-        let mut window = self.windows.remove(index);
-        window.focus_serial = 0;
+        let window = self.windows.remove(index);
         self.windows.push(window);
         true
     }
@@ -1062,8 +1043,6 @@ pub enum DefensesWindowAction {
     Minimize {
         system: SystemKey,
         logical_position: (i16, i16),
-        /// The window's place in the z-order, which it keeps while hidden.
-        serial: u64,
     },
     /// Production minimize intent for manager-owned Defenses content. The
     /// rail adapter observes it only after the manager accepts the command.
@@ -1597,7 +1576,6 @@ fn draw_defenses_windows_with_snapshot(
                 actions.push(DefensesWindowAction::Minimize {
                     system,
                     logical_position: closed.logical_position,
-                    serial: closed.focus_serial,
                 });
             }
             continue;
@@ -3168,14 +3146,12 @@ mod tests {
             ]
         );
 
-        let serial = state.focus_serial();
         let minimized = run(&world, &missions, &mut state, click(at(210.0, 9.0)));
         assert_eq!(
             minimized.actions,
             [DefensesWindowAction::Minimize {
                 system,
                 logical_position: ORIGIN,
-                serial,
             }]
         );
         assert_eq!(state.window_count(), 0);
@@ -3636,12 +3612,11 @@ mod tests {
             assert!(state.open(&world, first, (40, 50), faction, scaled()));
             assert!(state.open(&world, second, ORIGIN, faction, scaled()));
             state.windows[0].page = DefensesPage::Regiments;
-            let mut saved = state.saved_windows(&world);
-            saved.sort_by_key(|(z, _)| *z);
-            assert!(saved.iter().all(|(_, window)| window.shown));
+            let saved = state.saved_windows(&world);
+            assert!(saved.iter().all(|window| window.shown));
 
             let mut restored = DefensesWindowState::default();
-            for (_, window) in &saved {
+            for window in &saved {
                 assert!(
                     restored.restore_saved(&world, faction, window),
                     "{faction:?}"
@@ -3663,7 +3638,7 @@ mod tests {
             );
             let hidden = SavedWindow {
                 shown: false,
-                ..saved[0].1
+                ..saved[0]
             };
             let mut none = DefensesWindowState::default();
             assert!(!none.restore_saved(&world, faction, &hidden));

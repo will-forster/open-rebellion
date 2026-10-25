@@ -258,8 +258,6 @@ struct OpenSystemWindow {
     id: Option<WindowId>,
     subject: Option<SubjectId>,
     system: SystemKey,
-    /// When this window last took focus (`window_focus`).
-    focus_serial: u64,
     logical_position: (i16, i16),
     tab: SystemWindowTab,
     /// A facility page's selected item.
@@ -293,15 +291,11 @@ enum RailEntry {
     Defenses {
         system: SystemKey,
         logical_position: (i16, i16),
-        /// Its place in the z-order, kept while hidden.
-        serial: u64,
     },
     /// A Missions window (type 11); its icon comes from `FUN_004a21c0`.
     Missions {
         system: SystemKey,
         logical_position: (i16, i16),
-        /// Its place in the z-order, kept while hidden.
-        serial: u64,
     },
 }
 
@@ -467,7 +461,6 @@ impl SystemWindowState {
                     id: Some(id),
                     subject: Some(subject),
                     system: prepared.system,
-                    focus_serial: 0,
                     logical_position: prepared.logical_position,
                     tab: SystemWindowTab::Overview,
                     selected_item: None,
@@ -516,7 +509,6 @@ impl SystemWindowState {
             id: None,
             subject: None,
             system,
-            focus_serial: 0,
             logical_position,
             tab: SystemWindowTab::Overview,
             selected_item: None,
@@ -834,20 +826,11 @@ impl SystemWindowState {
         }
     }
 
-    /// When the window in front took focus (`window_focus`); 0 with none
-    /// open. Each window keeps its own, so after a close the window behind
-    /// ranks where it took focus, as the original's z-order does.
-    #[must_use]
-    pub fn focus_serial(&self) -> u64 {
-        self.windows.last().map_or(0, |window| window.focus_serial)
-    }
-
-    /// The open windows as galaxy children, with their z serials; a
-    /// minimized window is on the rail, not among them.
-    pub fn children(&self) -> impl Iterator<Item = (u64, GalaxyChild)> + '_ {
+    /// The open System children; z-order and focus come from the manager.
+    pub fn children(&self) -> impl Iterator<Item = GalaxyChild> + '_ {
         self.windows
             .iter()
-            .map(|window| (window.focus_serial, GalaxyChild::System(window.system)))
+            .map(|window| GalaxyChild::System(window.system))
     }
 
     /// Bring `system`'s window to the top of the galaxy view's z-order, as
@@ -865,24 +848,19 @@ impl SystemWindowState {
         open
     }
 
-    /// The shown System windows as a save keeps them, each with its z
-    /// serial: the system by its DAT id (`FUN_00458ea0`) and the window's
-    /// top-left. Minimized windows are in [`Self::saved_rail`].
+    /// The shown System content; saved order is supplied by WindowManager.
     #[must_use]
-    pub fn saved_windows(&self, world: &GameWorld) -> Vec<(u64, SavedWindow)> {
+    pub fn saved_windows(&self, world: &GameWorld) -> Vec<SavedWindow> {
         self.windows
             .iter()
             .filter_map(|window| {
-                Some((
-                    window.focus_serial,
-                    SavedWindow {
-                        kind: SavedWindowKind::System {
-                            system: world.systems.get(window.system)?.dat_id,
-                        },
-                        position: window.logical_position,
-                        shown: true,
+                Some(SavedWindow {
+                    kind: SavedWindowKind::System {
+                        system: world.systems.get(window.system)?.dat_id,
                     },
-                ))
+                    position: window.logical_position,
+                    shown: true,
+                })
             })
             .collect()
     }
@@ -895,66 +873,42 @@ impl SystemWindowState {
             .any(|entry| matches!(entry, RailEntry::Fleet { id: held, .. } if *held == id))
     }
 
-    /// The rail's windows as a save keeps them, each hidden (`+0x110` is 0
-    /// on the rail, `FUN_00607d30`) with its place in the z-order: a hidden
-    /// window stays in the view's child list, which the save walks bottom to
-    /// top (`FUN_00440ea0.c:19-24`). A Fleet window's tab and place come
-    /// from `fleet`.
+    /// The rail's hidden content. Save ordering comes from the manager's
+    /// presentation history, while this state supplies kind and position.
     #[must_use]
     pub fn saved_rail(
         &self,
         world: &GameWorld,
-        fleet: impl Fn(WindowId) -> Option<(u32, u64)>,
-    ) -> Vec<(u64, SavedWindow)> {
+        fleet: impl Fn(WindowId) -> Option<u32>,
+    ) -> Vec<SavedWindow> {
         self.rail
             .iter()
             .filter_map(|entry| {
                 let system = world.systems.get(entry.system())?.dat_id;
-                let (serial, kind, position) = match *entry {
-                    RailEntry::System(window) => (
-                        window.focus_serial,
-                        SavedWindowKind::System { system },
-                        window.logical_position,
-                    ),
+                let (kind, position) = match *entry {
+                    RailEntry::System(window) => {
+                        (SavedWindowKind::System { system }, window.logical_position)
+                    }
                     RailEntry::Fleet {
                         id,
                         logical_position,
                         ..
                     } => {
-                        let (tab, serial) = fleet(id)?;
-                        (
-                            serial,
-                            SavedWindowKind::Fleet { system, tab },
-                            logical_position,
-                        )
+                        let tab = fleet(id)?;
+                        (SavedWindowKind::Fleet { system, tab }, logical_position)
                     }
                     RailEntry::Defenses {
-                        logical_position,
-                        serial,
-                        ..
-                    } => (
-                        serial,
-                        SavedWindowKind::Defenses { system },
-                        logical_position,
-                    ),
+                        logical_position, ..
+                    } => (SavedWindowKind::Defenses { system }, logical_position),
                     RailEntry::Missions {
-                        logical_position,
-                        serial,
-                        ..
-                    } => (
-                        serial,
-                        SavedWindowKind::Missions { system },
-                        logical_position,
-                    ),
+                        logical_position, ..
+                    } => (SavedWindowKind::Missions { system }, logical_position),
                 };
-                Some((
-                    serial,
-                    SavedWindow {
-                        kind,
-                        position,
-                        shown: false,
-                    },
-                ))
+                Some(SavedWindow {
+                    kind,
+                    position,
+                    shown: false,
+                })
             })
             .collect()
     }
@@ -994,7 +948,6 @@ impl SystemWindowState {
                     id: None,
                     subject: None,
                     system,
-                    focus_serial: 0,
                     logical_position: position,
                     tab: SystemWindowTab::Overview,
                     selected_item: None,
@@ -1011,7 +964,6 @@ impl SystemWindowState {
                 self.push_rail(RailEntry::Defenses {
                     system,
                     logical_position: position,
-                    serial: 0,
                 });
                 true
             }
@@ -1019,7 +971,6 @@ impl SystemWindowState {
                 self.push_rail(RailEntry::Missions {
                     system,
                     logical_position: position,
-                    serial: 0,
                 });
                 true
             }
@@ -1035,8 +986,7 @@ impl SystemWindowState {
         else {
             return false;
         };
-        let mut window = self.windows.remove(index);
-        window.focus_serial = 0;
+        let window = self.windows.remove(index);
         self.windows.push(window);
         true
     }
@@ -1135,22 +1085,18 @@ impl SystemWindowState {
         system: SystemKey,
         logical_position: (i16, i16),
     ) -> Option<WindowId> {
-        self.minimize_defenses_window_at(system, logical_position, 0)
+        self.minimize_defenses_window_at(system, logical_position)
     }
 
-    /// Put a minimized Defenses window on the rail (`0x466`), keeping its
-    /// place `serial` in the z-order: a hidden window stays where it was in
-    /// the view's child list, which a save walks (`FUN_00440ea0.c:19-24`).
+    /// Put a minimized Defenses window on the rail (`0x466`).
     pub fn minimize_defenses_window_at(
         &mut self,
         system: SystemKey,
         logical_position: (i16, i16),
-        serial: u64,
     ) -> Option<WindowId> {
         Self::evicted_fleet(self.push_rail(RailEntry::Defenses {
             system,
             logical_position,
-            serial,
         }))
     }
 
@@ -1161,48 +1107,19 @@ impl SystemWindowState {
         system: SystemKey,
         logical_position: (i16, i16),
     ) -> Option<WindowId> {
-        self.minimize_missions_window_at(system, logical_position, 0)
+        self.minimize_missions_window_at(system, logical_position)
     }
 
-    /// Put a minimized Missions window on the rail (`0x466`), keeping its
-    /// place `serial` in the z-order (`FUN_00440ea0.c:19-24`).
+    /// Put a minimized Missions window on the rail (`0x466`).
     pub fn minimize_missions_window_at(
         &mut self,
         system: SystemKey,
         logical_position: (i16, i16),
-        serial: u64,
     ) -> Option<WindowId> {
         Self::evicted_fleet(self.push_rail(RailEntry::Missions {
             system,
             logical_position,
-            serial,
         }))
-    }
-
-    /// Give `child`'s rail entry, a minimized System, Defenses or Missions
-    /// window, the next place at the top of the z-order: a load's hidden
-    /// window keeps its place among the windows rebuilt around it. False
-    /// when `child` has no such entry.
-    pub fn lift_hidden(&mut self, child: GalaxyChild) -> bool {
-        let serial = 0;
-        let entry = self.rail.iter_mut().find(|entry| match (child, &**entry) {
-            (GalaxyChild::System(system), RailEntry::System(window)) => window.system == system,
-            (GalaxyChild::Defenses(system), RailEntry::Defenses { system: held, .. })
-            | (GalaxyChild::Missions(system), RailEntry::Missions { system: held, .. }) => {
-                *held == system
-            }
-            _ => false,
-        });
-        match entry {
-            Some(RailEntry::System(window)) => window.focus_serial = serial,
-            Some(
-                RailEntry::Defenses { serial: held, .. } | RailEntry::Missions { serial: held, .. },
-            ) => {
-                *held = serial;
-            }
-            Some(RailEntry::Fleet { .. }) | None => return false,
-        }
-        true
     }
 
     /// Put a load's hidden Fleet window on the rail at `index`, its place
@@ -1248,8 +1165,7 @@ impl SystemWindowState {
         else {
             return false;
         };
-        if let RailEntry::System(mut window) = self.rail.remove(index) {
-            window.focus_serial = 0;
+        if let RailEntry::System(window) = self.rail.remove(index) {
             self.windows.push(window);
         }
         true
@@ -4328,8 +4244,7 @@ mod tests {
                 layout,
             );
             state.open(&world, systems[1], (150, 80), faction, layout);
-            let mut saved = state.saved_windows(&world);
-            saved.sort_by_key(|(z, _)| *z);
+            let saved = state.saved_windows(&world);
             let placed: Vec<_> = state
                 .windows
                 .iter()
@@ -4337,7 +4252,7 @@ mod tests {
                 .collect();
 
             let mut restored = SystemWindowState::default();
-            for (_, window) in &saved {
+            for window in &saved {
                 assert!(
                     restored.restore_saved(&world, faction, window),
                     "{faction:?}"
@@ -4359,13 +4274,7 @@ mod tests {
     }
 
     #[test]
-    fn a_saved_minimized_window_comes_back_on_the_rail_in_order() {
-        // Each rail window saves hidden (+0x110 is 0 there) at its place in
-        // the z-order (FUN_00440ea0.c:19-24), which it keeps from before it
-        // was minimized; FUN_00441190 appends each hidden window back to the
-        // rail as it meets it (FUN_00428b40). Under Wine a minimized System
-        // window came back on the rail (Empire day-2 start, played on to
-        // day 6).
+    fn saved_minimized_content_round_trips_without_renderer_z_serials() {
         let (world, systems) = fixture_world(3);
         for faction in [CockpitFaction::Alliance, CockpitFaction::Empire] {
             let mut state = SystemWindowState::default();
@@ -4374,16 +4283,28 @@ mod tests {
             assert!(state.minimize(systems[0]));
             let opened_first = state.windows.is_empty();
             assert!(opened_first);
-            state.minimize_defenses_window_at(systems[1], (130, 75), 7);
-            state.minimize_missions_window_at(systems[2], (140, 85), 3);
-            let mut saved = state.saved_rail(&world, |_| None);
-            assert!(saved.iter().all(|(_, window)| !window.shown));
-            let serials: Vec<u64> = saved.iter().map(|(serial, _)| *serial).collect();
-            assert_eq!(serials[1..], [7, 3], "{faction:?}");
-            saved.sort_by_key(|(serial, _)| *serial);
+            state.minimize_defenses_window_at(systems[1], (130, 75));
+            state.minimize_missions_window_at(systems[2], (140, 85));
+            let saved = state.saved_rail(&world, |_| None);
+            assert!(saved.iter().all(|window| !window.shown));
+            assert_eq!(
+                saved.iter().map(|window| window.kind).collect::<Vec<_>>(),
+                [
+                    SavedWindowKind::System {
+                        system: DatId::new(100)
+                    },
+                    SavedWindowKind::Defenses {
+                        system: DatId::new(101)
+                    },
+                    SavedWindowKind::Missions {
+                        system: DatId::new(102)
+                    },
+                ],
+                "{faction:?}"
+            );
 
             let mut restored = SystemWindowState::default();
-            for (_, window) in &saved {
+            for window in &saved {
                 assert!(
                     restored.restore_saved(&world, faction, window),
                     "{faction:?}"
@@ -4391,13 +4312,8 @@ mod tests {
             }
 
             assert!(restored.windows.is_empty(), "{faction:?}");
-            let back: Vec<_> = restored
-                .saved_rail(&world, |_| None)
-                .into_iter()
-                .map(|(_, window)| window)
-                .collect();
-            let order: Vec<_> = saved.iter().map(|(_, window)| *window).collect();
-            assert_eq!(back, order, "{faction:?}");
+            let back: Vec<_> = restored.saved_rail(&world, |_| None).into_iter().collect();
+            assert_eq!(back, saved, "{faction:?}");
         }
     }
 
@@ -4417,7 +4333,7 @@ mod tests {
             layout,
         );
         assert!(state.minimize(systems[0]));
-        state.minimize_defenses_window_at(systems[1], (130, 75), 7);
+        state.minimize_defenses_window_at(systems[1], (130, 75));
         let fleets = fleet_window_ids(&[301]);
         state.insert_fleet_rail(1, fleets[0], systems[2], (150, 90));
         assert_eq!(
@@ -4453,7 +4369,7 @@ mod tests {
             layout,
         );
         assert_eq!(
-            state.saved_windows(&world)[0].1,
+            state.saved_windows(&world)[0],
             SavedWindow {
                 kind: SavedWindowKind::System {
                     system: DatId::new(100),
@@ -4466,18 +4382,15 @@ mod tests {
         state.minimize_fleet_window(fleet, systems[0], (160, 90));
         assert_eq!(state.saved_rail(&world, |_| None), []);
         assert_eq!(
-            state.saved_rail(&world, |id| (id == fleet).then_some((0x68, 5))),
-            [(
-                5,
-                SavedWindow {
-                    kind: SavedWindowKind::Fleet {
-                        system: DatId::new(100),
-                        tab: 0x68,
-                    },
-                    position: (160, 90),
-                    shown: false,
-                }
-            )]
+            state.saved_rail(&world, |id| (id == fleet).then_some(0x68)),
+            [SavedWindow {
+                kind: SavedWindowKind::Fleet {
+                    system: DatId::new(100),
+                    tab: 0x68,
+                },
+                position: (160, 90),
+                shown: false,
+            }]
         );
         let elsewhere = SavedWindow {
             kind: SavedWindowKind::System {
@@ -4542,7 +4455,7 @@ mod tests {
         let rail: Vec<_> = state
             .saved_rail(&world, |_| None)
             .into_iter()
-            .map(|(_, window)| window.kind)
+            .map(|window| window.kind)
             .collect();
         assert_eq!(
             rail,
@@ -5250,7 +5163,7 @@ mod tests {
             );
             let dragged = state.windows[0].logical_position;
             let mut restored = SystemWindowState::default();
-            for (_, window) in state.saved_windows(&world) {
+            for window in state.saved_windows(&world) {
                 assert!(restored.restore_saved(&world, faction, &window));
             }
             assert_eq!(restored.windows[0].logical_position, dragged, "{faction:?}");

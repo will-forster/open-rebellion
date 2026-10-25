@@ -173,8 +173,6 @@ struct OpenMissionsWindow {
     id: Option<WindowId>,
     subject: Option<SubjectId>,
     system: SystemKey,
-    /// When this window last took focus (`window_focus`).
-    focus_serial: u64,
     logical_position: (i16, i16),
     /// The selected mission row `+0x1c4`, by mission id.
     selected: Option<u64>,
@@ -351,7 +349,6 @@ impl MissionsWindowState {
                     id: Some(id),
                     subject: Some(subject),
                     system: prepared.system,
-                    focus_serial: 0,
                     logical_position: prepared.logical_position,
                     selected: prepared.selected,
                     tab: prepared.tab,
@@ -411,7 +408,6 @@ impl MissionsWindowState {
             id: None,
             subject: None,
             system,
-            focus_serial: 0,
             logical_position: clamp_window_to_galaxy(
                 logical_position,
                 layout,
@@ -751,39 +747,26 @@ impl MissionsWindowState {
         true
     }
 
-    /// When the window in front took focus (`window_focus`); 0 with none
-    /// open. Each window keeps its own, so after a close the window behind
-    /// ranks where it took focus, as the original's z-order does.
-    #[must_use]
-    pub fn focus_serial(&self) -> u64 {
-        self.windows.last().map_or(0, |window| window.focus_serial)
-    }
-
-    /// The open windows as galaxy children, with their z serials; a
-    /// minimized window is on the rail, not among them.
-    pub fn children(&self) -> impl Iterator<Item = (u64, GalaxyChild)> + '_ {
+    /// The open Missions children; z-order and focus come from the manager.
+    pub fn children(&self) -> impl Iterator<Item = GalaxyChild> + '_ {
         self.windows
             .iter()
-            .map(|window| (window.focus_serial, GalaxyChild::Missions(window.system)))
+            .map(|window| GalaxyChild::Missions(window.system))
     }
 
-    /// The open windows as a save keeps them, each with its z serial: the
-    /// system by its DAT id (`FUN_004a0b00`) and the window's top-left.
+    /// The open Missions content; saved order is supplied by WindowManager.
     #[must_use]
-    pub fn saved_windows(&self, world: &GameWorld) -> Vec<(u64, SavedWindow)> {
+    pub fn saved_windows(&self, world: &GameWorld) -> Vec<SavedWindow> {
         self.windows
             .iter()
             .filter_map(|window| {
-                Some((
-                    window.focus_serial,
-                    SavedWindow {
-                        kind: SavedWindowKind::Missions {
-                            system: world.systems.get(window.system)?.dat_id,
-                        },
-                        position: window.logical_position,
-                        shown: true,
+                Some(SavedWindow {
+                    kind: SavedWindowKind::Missions {
+                        system: world.systems.get(window.system)?.dat_id,
                     },
-                ))
+                    position: window.logical_position,
+                    shown: true,
+                })
             })
             .collect()
     }
@@ -818,7 +801,6 @@ impl MissionsWindowState {
             id: None,
             subject: None,
             system,
-            focus_serial: 0,
             logical_position: saved.position,
             selected,
             tab: MissionsTab::Agents,
@@ -850,8 +832,7 @@ impl MissionsWindowState {
         else {
             return false;
         };
-        let mut window = self.windows.remove(index);
-        window.focus_serial = 0;
+        let window = self.windows.remove(index);
         self.windows.push(window);
         true
     }
@@ -923,8 +904,6 @@ pub enum MissionsWindowAction {
     Minimize {
         system: SystemKey,
         logical_position: (i16, i16),
-        /// The window's place in the z-order, which it keeps while hidden.
-        serial: u64,
     },
     /// Production minimize intent for manager-owned Missions content. The
     /// rail adapter observes it only after the manager accepts the command.
@@ -1558,7 +1537,6 @@ fn draw_missions_windows_with_snapshot(
                 actions.push(MissionsWindowAction::Minimize {
                     system,
                     logical_position: closed.logical_position,
-                    serial: closed.focus_serial,
                 });
             }
             continue;
@@ -2314,7 +2292,7 @@ mod tests {
             let fresh = state.windows[0].clone();
 
             let mut restored = MissionsWindowState::default();
-            assert!(restored.restore_saved(&world, &fog, &missions, faction, &saved[0].1));
+            assert!(restored.restore_saved(&world, &fog, &missions, faction, &saved[0]));
 
             let mut opened = MissionsWindowState::default();
             assert!(opened.open(&world, &fog, &missions, system, (20, 30), faction, scaled()));
@@ -2336,7 +2314,7 @@ mod tests {
             );
             let hidden = SavedWindow {
                 shown: false,
-                ..saved[0].1
+                ..saved[0]
             };
             let mut none = MissionsWindowState::default();
             assert!(!none.restore_saved(&world, &fog, &missions, faction, &hidden));
@@ -2755,7 +2733,6 @@ mod tests {
                 logical_position: ORIGIN,
                 selected: None,
                 tab: MissionsTab::Agents,
-                focus_serial: 0,
                 release_target_visible: false,
             }],
         };
@@ -4024,14 +4001,12 @@ mod tests {
             ]
         );
 
-        let serial = state.focus_serial();
         let minimized = run(&world, &missions, &mut state, click(at(210.0, 9.0)));
         assert_eq!(
             minimized.actions,
             [MissionsWindowAction::Minimize {
                 system,
                 logical_position: ORIGIN,
-                serial,
             }]
         );
         assert_eq!(state.window_count(), 0);
