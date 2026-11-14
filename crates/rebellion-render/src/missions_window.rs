@@ -1230,21 +1230,17 @@ fn draw_missions_window(
                     0.0,
                 );
             }
-            strategic_window_common::paint_grid_cell_label(
-                &list_painter,
-                cell,
+            let response = crate::list_control::LabeledCell {
+                rect: cell,
+                clip_rect: list,
                 scale,
-                row.label,
-                &list_font,
-                white,
-                MISSION_ROW.0 - TEXT_RIGHT_TRIM,
-                TEXT_OFFSET,
-            );
-            let response = ui.interact(
-                cell.intersect(list),
-                ui.id().with((window.system, "mission", index)),
-                egui::Sense::click(),
-            );
+                text: row.label,
+                font: &list_font,
+                color: white,
+                logical_width: MISSION_ROW.0 - TEXT_RIGHT_TRIM,
+                text_offset: TEXT_OFFSET,
+            }
+            .show(ui, &list_painter, (window.system, "mission", index));
             if exact_clicked(&response, cell) {
                 result.select = Some(row.mission);
                 result.interaction.focus = true;

@@ -1335,21 +1335,17 @@ fn draw_defenses_window(
             } else {
                 egui::Color32::WHITE
             };
-            strategic_window_common::paint_grid_cell_label(
-                &list_painter,
-                cell,
+            let response = crate::list_control::LabeledCell {
+                rect: cell,
+                clip_rect: list,
                 scale,
-                &row.label,
-                &font,
+                text: &row.label,
+                font: &font,
                 color,
-                CELL - TEXT_RIGHT_TRIM,
-                TEXT_OFFSET,
-            );
-            let response = ui.interact(
-                cell.intersect(list),
-                ui.id().with((window.system, "row", index)),
-                egui::Sense::click(),
-            );
+                logical_width: CELL - TEXT_RIGHT_TRIM,
+                text_offset: TEXT_OFFSET,
+            }
+            .show(ui, &list_painter, (window.system, "row", index));
             if exact_clicked(&response, cell) {
                 result.select = Some(row.item);
                 result.interaction.focus = true;
